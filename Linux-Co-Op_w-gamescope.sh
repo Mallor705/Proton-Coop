@@ -24,6 +24,7 @@ if [ ! -f "$EXE_PATH" ]; then
   exit 1
 fi
 
+echo "test"
 # Extrair o nome do executável sem o caminho para usar como identificador
 EXE_NAME=$(basename "$EXE_PATH")
 
