@@ -89,7 +89,7 @@ echo "Usando Proton em: $PROTON_PATH"
 echo "Executando jogo: $EXE_PATH"
 
 # Definir o diretório de configuração de controladores
-DIR_CO_OP_CONT="$HOME/Documentos/Linux_Coop/release_0.1.7/controller_config/"
+DIR_CO_OP_CONT="./controller_config/"
 mkdir -p "$DIR_CO_OP_CONT"
 
 
@@ -97,7 +97,10 @@ mkdir -p "$DIR_CO_OP_CONT"
 # Função para executar uma instância do jogo
 launch_game_instance() {
   local instance_num=$1
-  local joy_device=$2
+  local joy_device_file=$2
+
+  # Ler o conteúdo do arquivo e atribuí-lo ao joy_device
+  local joy_device=$(cat "$joy_device_file")
 
   echo "$(date '+%Y-%m-%d %H:%M:%S') - Iniciando instância $instance_num de $EXE_NAME com Proton $PROTON_VERSION no monitor $monitor..."
 
@@ -111,15 +114,17 @@ launch_game_instance() {
   export WINEPREFIX="$prefix_dir/pfx"
   export DXVK_ASYNC=1 # Habilita a compilação assíncrona de shaders no DXVK
   export SDL_JOYSTICK_DEVICE="$joy_device" # Forçar o SDL a usar apenas o dispositivo virtual correspondente
-  
+  # export SDL_GAMECONTROLLERCONFIG="$joy_device"
+  echo "Dispositivo de joystick configurado: $SDL_JOYSTICK_DEVICE"
   # Executar com gamescope e redirecionar a saída para um arquivo de log
   gamescope \
     -w $WIDTH \
     -h $HEIGHT \
     -f \
+    -e \
     -- \
+    steam -steamos -pipewire-dmabuf -gamepadui \
     "$PROTON_PATH" run "$EXE_PATH" \
-    --fullscreen \
     -W $WIDTH \
     -H $HEIGHT > "$HOME/.proton_prefixes/${EXE_NAME}_instance_${instance_num}.log" 2>&1 &
     
@@ -130,7 +135,7 @@ launch_game_instance() {
 }
 
 # Limpar possíveis instâncias anteriores
-pkill -f "gamescope.*-- $PROTON_PATH run $EXE_PATH" || true
+pkill -f "gamescope.*-- '$PROTON_PATH' run '$EXE_PATH'" || true
 
 echo "Iniciando a primeira instância..."
 PID1=$(launch_game_instance 1 "$DIR_CO_OP_CONT/Player1_Controller")
