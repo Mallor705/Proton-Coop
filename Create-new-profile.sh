@@ -78,6 +78,10 @@ else
   # Criar arquivos de blacklist para os controladores
   ls -l /dev/input/by-id/ | grep joystick | grep -wv "$CONTROLLER_1" | awk '{print "--blacklist=/dev/input/by-id/" $9;}' > "$DIR_CO_OP_CONT/Player1_Controller_Blacklist"
   ls -l /dev/input/by-id/ | grep joystick | grep -wv "$CONTROLLER_2" | awk '{print "--blacklist=/dev/input/by-id/" $9;}' > "$DIR_CO_OP_CONT/Player2_Controller_Blacklist"
+
+  # Criar arquivos de configuração de controladores
+  ls -l /dev/input/by-id/ | grep joystick | grep -wv "$CONTROLLER_1" | awk '{print "/dev/input/by-id/" $9;}' > "$DIR_CO_OP_CONT/Player1_Controller"
+  ls -l /dev/input/by-id/ | grep joystick | grep -wv "$CONTROLLER_2" | awk '{print "/dev/input/by-id/" $9;}' > "$DIR_CO_OP_CONT/Player2_Controller"
 fi
 
 # Salvar as configurações no arquivo profile

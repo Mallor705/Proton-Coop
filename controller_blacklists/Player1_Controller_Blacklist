@@ -1,1 +1,0 @@
---blacklist=/dev/input/by-id/usb-Microsoft_Inc._Controller_188A6F4-event-joystick --blacklist=/dev/input/by-id/usb-Microsoft_Inc._Controller_188A6F4-joystick

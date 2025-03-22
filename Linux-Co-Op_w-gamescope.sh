@@ -88,9 +88,16 @@ fi
 echo "Usando Proton em: $PROTON_PATH"
 echo "Executando jogo: $EXE_PATH"
 
+# Definir o diretório de configuração de controladores
+DIR_CO_OP_CONT="$HOME/Documentos/Linux_Coop/release_0.1.7/controller_config/"
+mkdir -p "$DIR_CO_OP_CONT"
+
+
+
 # Função para executar uma instância do jogo
 launch_game_instance() {
   local instance_num=$1
+  local joy_device=$2
 
   echo "$(date '+%Y-%m-%d %H:%M:%S') - Iniciando instância $instance_num de $EXE_NAME com Proton $PROTON_VERSION no monitor $monitor..."
 
@@ -103,7 +110,8 @@ launch_game_instance() {
   export STEAM_COMPAT_DATA_PATH="$prefix_dir"
   export WINEPREFIX="$prefix_dir/pfx"
   export DXVK_ASYNC=1 # Habilita a compilação assíncrona de shaders no DXVK
-
+  export SDL_JOYSTICK_DEVICE="$joy_device" # Forçar o SDL a usar apenas o dispositivo virtual correspondente
+  
   # Executar com gamescope e redirecionar a saída para um arquivo de log
   gamescope \
     -w $WIDTH \
@@ -125,11 +133,11 @@ launch_game_instance() {
 pkill -f "gamescope.*-- $PROTON_PATH run $EXE_PATH" || true
 
 echo "Iniciando a primeira instância..."
-PID1=$(launch_game_instance 1)
+PID1=$(launch_game_instance 1 "$DIR_CO_OP_CONT/Player1_Controller")
 sleep 2  # Pequeno atraso para evitar problemas de inicialização simultânea
 
 echo "Iniciando a segunda instância..."
-PID2=$(launch_game_instance 2)
+PID2=$(launch_game_instance 2 "$DIR_CO_OP_CONT/Player2_Controller")
 
 echo "Ambas as instâncias foram iniciadas."
 echo "Instância 1 PID: $PID1"
