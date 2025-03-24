@@ -16,7 +16,7 @@ Este projeto permite executar jogos Windows em modo cooperativo local no Linux u
 
 1. Clone este repositório ou baixe os scripts:
    ```bash
-   git clone https://github.com/seu-usuario/linux-coop.git
+   git clone https://github.com/Mallor705/linux-coop.git
    cd linux-coop
    ```
 
