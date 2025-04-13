@@ -13,10 +13,13 @@ fi
 source "$PROFILE_FILE"
 
 # Verificar se as variáveis obrigatórias foram definidas
-if [ -z "$EXE_PATH" ] || [ -z "$PROTON_VERSION" ] || [ -z "$WIDTH" ] || [ -z "$HEIGHT" ]; then
-  echo "Erro: As configurações obrigatórias não foram definidas corretamente no arquivo de perfil."
-  exit 1
-fi
+required_vars=("EXE_PATH" "PROTON_VERSION" "WIDTH" "HEIGHT")
+for var in "${required_vars[@]}"; do
+  if [ -z "${!var}" ]; then
+    echo "Erro: A variável $var não está definida no arquivo de perfil."
+    exit 1
+  fi
+done
 
 # Verificar se o arquivo executável existe
 if [ ! -f "$EXE_PATH" ]; then
@@ -24,133 +27,143 @@ if [ ! -f "$EXE_PATH" ]; then
   exit 1
 fi
 
-# Extrair o nome do executável sem o caminho para usar como identificador
+# Extrair o nome do executável sem o caminho
 EXE_NAME=$(basename "$EXE_PATH")
 
 # Verificar se o gamescope está instalado
 if ! command -v gamescope &> /dev/null; then
-  echo "Erro: Gamescope não está instalado. Por favor, instale-o primeiro."
+  echo "Erro: Gamescope não está instalado. Instale com: sudo apt install gamescope"
   exit 1
 fi
 
-# Verificar se o Steam está em execução (necessário para usar o Proton)
-if ! pgrep -x "steam" > /dev/null; then
-  echo "Aviso: Steam não parece estar em execução. Iniciando o Steam..."
-  steam &
-  sleep 5
-fi
+# Verificar se o Steam está em execução
+start_steam_if_needed() {
+  if ! pgrep -x "steam" > /dev/null; then
+    echo "Aviso: Steam não está em execução. Iniciando..."
+    steam -silent &
+    local attempts=0
+    while [ $attempts -lt 5 ] && ! pgrep -x "steam" > /dev/null; do
+      sleep 2
+      ((attempts++))
+    done
+    if [ $attempts -eq 5 ]; then
+      echo "Erro: Falha ao iniciar o Steam."
+      exit 1
+    fi
+  fi
+}
+start_steam_if_needed
 
-# Descobrir o caminho do Proton
+# Função aprimorada para encontrar o Proton
 find_proton_path() {
   local version=$1
-  local proton_path=""
+  local steam_paths=(
+    "$HOME/.steam/steam"
+    "$HOME/.local/share/Steam"
+    "$HOME/.steam/debian-installation"
+    "/var/mnt/games/messi/Games/Steam"
+  )
 
-  # Verificar nas possíveis localizações do Steam
-  for steam_path in "$HOME/.steam/steam" "$HOME/.local/share/Steam" "$HOME/.steam/debian-installation" "/var/mnt/games/messi/Games/Steam"; do
+  for steam_path in "${steam_paths[@]}"; do
     if [ -d "$steam_path" ]; then
-      # Primeiro, tenta encontrar o Proton Experimental
+      # Procurar Proton Experimental
       if [[ "$version" == "Experimental" ]]; then
-        potential_path=$(find "$steam_path/steamapps/common/" -maxdepth 1 -type d -name "Proton - Experimental" 2>/dev/null | head -n 1)
-        if [ -n "$potential_path" ]; then
-          proton_path="$potential_path/proton"
-          break
-        fi
+        local experimental_path="$steam_path/steamapps/common/Proton - Experimental/proton"
+        [ -f "$experimental_path" ] && echo "$experimental_path" && return
       fi
 
-      # Procurar por versões específicas do Proton
-      potential_path=$(find "$steam_path/steamapps/common/" -maxdepth 1 -type d -name "Proton $version" 2>/dev/null | head -n 1)
-      if [ -n "$potential_path" ]; then
-        proton_path="$potential_path/proton"
-        break
-      fi
+      # Procurar versões numeradas
+      local proton_path="$steam_path/steamapps/common/Proton $version/proton"
+      [ -f "$proton_path" ] && echo "$proton_path" && return
 
-      # Procurar por versões do GE-Proton
+      # Procurar GE-Proton
       if [[ "$version" == GE-Proton* ]]; then
-        potential_path=$(find "$steam_path/compatibilitytools.d/" -maxdepth 1 -type d -name "$version" 2>/dev/null | head -n 1)
-        if [ -n "$potential_path" ]; then
-          proton_path="$potential_path/proton"
-          break
-        fi
+        local ge_path="$steam_path/compatibilitytools.d/$version/proton"
+        [ -f "$ge_path" ] && echo "$ge_path" && return
       fi
     fi
   done
 
-  echo "$proton_path"
+  echo "Erro: Proton $version não encontrado." >&2
+  exit 1
 }
 
 PROTON_PATH=$(find_proton_path "$PROTON_VERSION")
 
-if [ -z "$PROTON_PATH" ]; then
-  echo "Erro: Não foi possível encontrar o Proton $PROTON_VERSION. Verifique se ele está instalado pela Steam."
-  exit 1
-fi
+# Configurações de controle
+CONTROLLER_DIR="./controller_config/"
+mkdir -p "$CONTROLLER_DIR"
 
-echo "Usando Proton em: $PROTON_PATH"
-echo "Executando jogo: $EXE_PATH"
+# Verificar arquivos de controle e mapeamento
+for player in 1 2; do
+  # Verificar dispositivo físico
+  controller_file="${CONTROLLER_DIR}/Player${player}_Controller"
+  if [ ! -f "$controller_file" ]; then
+    echo "Erro: Arquivo de controle não encontrado: $controller_file"
+    echo "Crie com: sudo evdev-joystick --evdev /dev/input/eventX --name Player${player}_Controller --device /dev/input/js$((player-1))"
+    exit 1
+  fi
 
-# Definir o diretório de configuração de controladores
-DIR_CO_OP_CONT="./controller_config/"
-mkdir -p "$DIR_CO_OP_CONT"
+  # Verificar mapeamento SDL
+  mapping_file="${CONTROLLER_DIR}/Player${player}_mapping.cfg"
+  if [ ! -f "$mapping_file" ]; then
+    echo "Erro: Arquivo de mapeamento não encontrado: $mapping_file"
+    echo "Crie um arquivo com o layout do seu controle usando o formato SDL_GAMECONTROLLERCONFIG"
+    exit 1
+  fi
+done
 
-
-
-# Função para executar uma instância do jogo
+# Função de inicialização do jogo com isolamento de controles
 launch_game_instance() {
   local instance_num=$1
-  local joy_device_file=$2
-
-  # Ler o conteúdo do arquivo e atribuí-lo ao joy_device
-  local joy_device=$(cat "$joy_device_file")
-
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - Iniciando instância $instance_num de $EXE_NAME com Proton $PROTON_VERSION no monitor $monitor..."
-
-  # Criar um prefixo Wine único para cada instância
+  local controller_file=$2
+  local joy_device=$(<"$controller_file")
   local prefix_dir="$HOME/.proton_prefixes/${EXE_NAME}_instance_${instance_num}"
-  mkdir -p "$prefix_dir" || { echo "Erro ao criar o diretório do prefixo: $prefix_dir"; exit 1; }
 
-  # Configurar variáveis de ambiente para Proton
+  mkdir -p "$prefix_dir" || {
+    echo "Erro ao criar prefixo em: $prefix_dir"
+    exit 1
+  }
+
+  # Variáveis de ambiente para isolamento de controles
+  export SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1
+  export SDL_JOYSTICK_DEVICE="/dev/input/by-id/${joy_device}"
+  export SDL_GAMECONTROLLERCONFIG_FILE="${CONTROLLER_DIR}/Player${instance_num}_mapping.cfg"
+  export UDEV_INPUT="/dev/input/by-id/${joy_device}"
+
+  # Configurações do Proton
   export STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.steam/steam"
   export STEAM_COMPAT_DATA_PATH="$prefix_dir"
   export WINEPREFIX="$prefix_dir/pfx"
-  export DXVK_ASYNC=1 # Habilita a compilação assíncrona de shaders no DXVK
-  export SDL_JOYSTICK_DEVICE="$joy_device" # Forçar o SDL a usar apenas o dispositivo virtual correspondente
-  export PROTON_LOG=1 # Habilitar logs do Proton
+  export DXVK_ASYNC=1
+  export PROTON_LOG=1
 
-  echo "DEBUG: Caminho do Proton: $PROTON_PATH"
-  echo "DEBUG: STEAM_COMPAT_CLIENT_INSTALL_PATH=$STEAM_COMPAT_CLIENT_INSTALL_PATH"
-  echo "DEBUG: STEAM_COMPAT_DATA_PATH=$STEAM_COMPAT_DATA_PATH"
-  echo "DEBUG: WINEPREFIX=$WINEPREFIX"
-  # export SDL_GAMECONTROLLERCONFIG="$joy_device"
-  echo "Dispositivo de joystick configurado: $SDL_JOYSTICK_DEVICE"
-  # Executar com gamescope e redirecionar a saída para um arquivo de log
-  gamescope \
-    -w $WIDTH \
-    -h $HEIGHT \
-    -f \
-    -e \
-    -- \
-    "$PROTON_PATH" run "$EXE_PATH" > "$HOME/.proton_prefixes/${EXE_NAME}_instance_${instance_num}.log" 2>&1 &
-  
-  # ID do processo para rastreamento
-  local pid=$!
-  echo "Processo da instância $instance_num: $pid"
-  echo $pid
+  # Executar com gamescope
+  gamescope -W $WIDTH -H $HEIGHT -f -- \
+    "$PROTON_PATH" run "$EXE_PATH" > "${prefix_dir}.log" 2>&1 &
+
+  echo $!
 }
 
-# Limpar possíveis instâncias anteriores
-pkill -f "gamescope.*-- '$PROTON_PATH' run '$EXE_PATH'" || true
+# Iniciar instâncias
+echo "Iniciando instâncias com gamescope (${WIDTH}x${HEIGHT})..."
+PID1=$(launch_game_instance 1 "${CONTROLLER_DIR}/Player1_Controller")
+sleep 2
+PID2=$(launch_game_instance 2 "${CONTROLLER_DIR}/Player2_Controller")
 
-echo "Iniciando a primeira instância..."
-PID1=$(launch_game_instance 1 "$DIR_CO_OP_CONT/Player1_Controller")
-sleep 2  # Pequeno atraso para evitar problemas de inicialização simultânea
+# Monitoramento
+echo -e "\nInstâncias iniciadas:"
+echo "Player 1 PID: $PID1 | Dispositivo: $(cat "${CONTROLLER_DIR}/Player1_Controller")"
+echo "Player 2 PID: $PID2 | Dispositivo: $(cat "${CONTROLLER_DIR}/Player2_Controller")"
+echo "Logs disponíveis em: $HOME/.proton_prefixes/"
 
-echo "Iniciando a segunda instância..."
-PID2=$(launch_game_instance 2 "$DIR_CO_OP_CONT/Player2_Controller")
+# Finalização limpa
+cleanup() {
+  echo "Encerrando processos..."
+  kill -SIGTERM $PID1 $PID2
+  wait
+  exit 0
+}
 
-echo "Ambas as instâncias foram iniciadas."
-echo "Instância 1 PID: $PID1"
-echo "Instância 2 PID: $PID2"
-echo "Pressione CTRL+C neste terminal para tentar encerrar as instâncias."
-
-# Aguarda a conclusão dos processos
+trap cleanup SIGINT SIGTERM
 wait
