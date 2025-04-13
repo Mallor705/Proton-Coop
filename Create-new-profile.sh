@@ -22,7 +22,7 @@ fi
 # Solicitar a versão do Proton se não estiver definida
 if [ -z "$PROTON_VERSION" ]; then
   PROTON_VERSION=$(zenity --list --title="Versão do Proton" --text="Selecione a versão do Proton:" \
-    --column="Versão" "Experimental" "Hotfix" "9.0 (Beta)" "8.0" "7.0" "6.0" "GE-Proton9-26" "GE-Proton8-15")
+    --column="Versão" "Experimental" "Hotfix" "9.0 (Beta)" "8.0" "7.0" "6.0" "GE-Proton9-27")
   if [ -z "$PROTON_VERSION" ]; then
     echo "Erro: Versão do Proton não fornecida."
     exit 1

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Edite esse caminho para o arquivo de perfil do seu jogo
-PROFILE_FILE="/home/mallor/Documentos/Linux_Coop/release_0.1.7/profiles/Palworld"
+PROFILE_FILE="/home/mallor/Documentos/GitHub/Linux-Coop/profiles/Palworld"
 
 # Verificar se o arquivo de perfil existe
 if [ ! -f "$PROFILE_FILE" ]; then
