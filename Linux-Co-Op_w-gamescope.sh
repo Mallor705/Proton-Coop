@@ -114,6 +114,12 @@ launch_game_instance() {
   export WINEPREFIX="$prefix_dir/pfx"
   export DXVK_ASYNC=1 # Habilita a compilação assíncrona de shaders no DXVK
   export SDL_JOYSTICK_DEVICE="$joy_device" # Forçar o SDL a usar apenas o dispositivo virtual correspondente
+  export PROTON_LOG=1 # Habilitar logs do Proton
+
+  echo "DEBUG: Caminho do Proton: $PROTON_PATH"
+  echo "DEBUG: STEAM_COMPAT_CLIENT_INSTALL_PATH=$STEAM_COMPAT_CLIENT_INSTALL_PATH"
+  echo "DEBUG: STEAM_COMPAT_DATA_PATH=$STEAM_COMPAT_DATA_PATH"
+  echo "DEBUG: WINEPREFIX=$WINEPREFIX"
   # export SDL_GAMECONTROLLERCONFIG="$joy_device"
   echo "Dispositivo de joystick configurado: $SDL_JOYSTICK_DEVICE"
   # Executar com gamescope e redirecionar a saída para um arquivo de log
@@ -123,11 +129,8 @@ launch_game_instance() {
     -f \
     -e \
     -- \
-    steam -steamos -pipewire-dmabuf -gamepadui \
-    "$PROTON_PATH" run "$EXE_PATH" \
-    -W $WIDTH \
-    -H $HEIGHT > "$HOME/.proton_prefixes/${EXE_NAME}_instance_${instance_num}.log" 2>&1 &
-    
+    "$PROTON_PATH" run "$EXE_PATH" > "$HOME/.proton_prefixes/${EXE_NAME}_instance_${instance_num}.log" 2>&1 &
+  
   # ID do processo para rastreamento
   local pid=$!
   echo "Processo da instância $instance_num: $pid"
