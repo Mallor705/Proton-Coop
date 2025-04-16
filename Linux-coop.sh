@@ -41,7 +41,7 @@ find_proton_path() {
     if [[ "$version_string" == "Experimental" ]]; then
       potential_path=$(find "$steam_path/steamapps/common/" -maxdepth 1 -type d -name "Proton - Experimental" 2>/dev/null | head -n 1)
       if [ -n "$potential_path" ]; then
-        proton_run_script="$potential_path/proton"
+        proton_run_script="$potential_path/proton" 
         break
       fi
     fi
@@ -300,7 +300,7 @@ log_message "Pressione CTRL+C neste terminal para encerrar todas as instâncias.
 while true; do
     all_dead=true
     for pid in "${PIDS[@]}"; do
-        if ps -p $pid > /dev/null; then
+        if ps -p $pid > /dev/null; then 
             all_dead=false
             break
         fi
