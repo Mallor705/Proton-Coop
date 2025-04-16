@@ -1,10 +1,6 @@
 #!/bin/bash
 
 # --- Configuração Inicial ---
-mkdir -p profiles
-mkdir -p "$HOME/.local/share/linux-coop/logs"
-mkdir -p "$HOME/.local/share/linux-coop/prefixes"
-
 SCRIPT_NAME=$(basename "$0") # Nome do script
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")") # Diretório onde o script está localizado
 PROFILE_DIR="${SCRIPT_DIR}/profiles"       # Diretório para guardar os perfis
@@ -131,12 +127,12 @@ source "$PROFILE_FILE"
 
 # Validar variáveis obrigatórias do perfil
 missing_vars=()
-[[ -z "$GAME_NAME" ]] && missing_vars+=("GAME_NAME")
-[[ -z "$EXE_PATH" ]] && missing_vars+=("EXE_PATH")
-[[ -z "$PROTON_VERSION" ]] && missing_vars+=("PROTON_VERSION")
-[[ -z "$NUM_PLAYERS" ]] && missing_vars+=("NUM_PLAYERS")
-[[ -z "$INSTANCE_WIDTH" ]] && missing_vars+=("INSTANCE_WIDTH")
-[[ -z "$INSTANCE_HEIGHT" ]] && missing_vars+=("INSTANCE_HEIGHT")
+[[ -z "$GAME_NAME" ]] && missing_vars+=("GAME_NAME") # Nome do jogo
+[[ -z "$EXE_PATH" ]] && missing_vars+=("EXE_PATH") # Caminho do executável
+[[ -z "$PROTON_VERSION" ]] && missing_vars+=("PROTON_VERSION") # Versão do Proton
+[[ -z "$NUM_PLAYERS" ]] && missing_vars+=("NUM_PLAYERS") # Número de instâncias
+[[ -z "$INSTANCE_WIDTH" ]] && missing_vars+=("INSTANCE_WIDTH") # Largura da instância
+[[ -z "$INSTANCE_HEIGHT" ]] && missing_vars+=("INSTANCE_HEIGHT") # Altura da instância
 
 if [ ${#missing_vars[@]} -gt 0 ]; then
   echo "Erro: As seguintes variáveis obrigatórias não estão definidas no perfil '$PROFILE_FILE':"
