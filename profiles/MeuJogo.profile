@@ -22,4 +22,4 @@ CONTROLLER_PATHS=(
 )
 
 # (Opcional) Argumentos adicionais para passar para o executável do jogo
-# GAME_ARGS="-nologin -windowed"
+GAME_ARGS="-dx12"

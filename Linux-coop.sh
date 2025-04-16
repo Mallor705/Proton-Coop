@@ -169,9 +169,10 @@ fi
 
 # --- Preparação ---
 
-mkdir -p "$LOG_DIR"
-mkdir -p "$PREFIX_BASE_DIR"
+mkdir -p "$LOG_DIR" # Cria o diretório de logs se não existir
+mkdir -p "$PREFIX_BASE_DIR" # Cria o diretório de prefixos se não existir
 
+# Verifica se o Proton está instalado e obtém o caminho
 PROTON_CMD_PATH=$(find_proton_path "$PROTON_VERSION")
 if [ $? -ne 0 ]; then
   exit 1
@@ -202,9 +203,9 @@ trap terminate_instances SIGINT SIGTERM
 
 log_message "Iniciando $NUM_PLAYERS instância(s) de '$GAME_NAME'..."
 
-for (( i=1; i<=NUM_PLAYERS; i++ )); do
-  instance_num=$i
-  log_message "Preparando instância $instance_num..."
+for (( i=1; i<=NUM_PLAYERS; i++ )); do 
+  instance_num=$i 
+  log_message "Preparando instância $instance_num..." 
 
   # Define o diretório do prefixo Wine para esta instância
   prefix_dir="$PREFIX_BASE_DIR/${PROFILE_NAME}_instance_${instance_num}"
@@ -216,13 +217,13 @@ for (( i=1; i<=NUM_PLAYERS; i++ )); do
   export WINEPREFIX="$prefix_dir/pfx"
 
   # --- Configuração de Input (A parte mais complexa) ---
-  current_controller_path=""
+  current_controller_path="" # Caminho do controle atual
   sdl_env_vars=() # Array para guardar variáveis de ambiente SDL
 
-  if [[ $NUM_PLAYERS -gt 0 && $i -le ${#CONTROLLER_PATHS[@]} ]]; then
-    controller_index=$((i-1))
-    current_controller_path="${CONTROLLER_PATHS[$controller_index]}"
-    if [ -e "$current_controller_path" ]; then
+  if [[ $NUM_PLAYERS -gt 0 && $i -le ${#CONTROLLER_PATHS[@]} ]]; then # Verifica se há controles disponíveis
+    controller_index=$((i-1)) # Índice do array (começa em 0)
+    current_controller_path="${CONTROLLER_PATHS[$controller_index]}" # Caminho do controle para esta instância
+    if [ -e "$current_controller_path" ]; then # Verifica se o caminho do controle existe
       log_message "Instância $instance_num usará o controle: $current_controller_path"
       # Tenta forçar o SDL a usar este dispositivo. A eficácia varia!
       # Usar o caminho completo pode ser mais robusto que apenas o nome.
@@ -244,7 +245,6 @@ for (( i=1; i<=NUM_PLAYERS; i++ )); do
     gamescope
     -W "$INSTANCE_WIDTH" -H "$INSTANCE_HEIGHT" # Define resolução interna
     #-w "$INSTANCE_WIDTH" -h "$INSTANCE_HEIGHT" # Define tamanho da janela (se não for fullscreen)
-    -o "$gamescope_pos_x","$gamescope_pos_y" # Define a posição da janela na tela principal
     -f # Modo fullscreen (dentro do gamescope, não necessariamente da tela inteira)
     # Opções de Input do Gamescope (EXPERIMENTAIS - verifique a documentação do seu gamescope):
     # --map-device "$current_controller_path=virt-0" # Mapeia dispositivo físico para virtual (se suportado)
@@ -264,9 +264,9 @@ for (( i=1; i<=NUM_PLAYERS; i++ )); do
   export PROTON_LOG=1 # Gera log do proton em $STEAM_COMPAT_DATA_PATH/proton-$PID.log
   export PROTON_LOG_DIR="$LOG_DIR" # Tenta direcionar logs para nosso diretório
 
-  log_file="$LOG_DIR/${PROFILE_NAME}_instance_${instance_num}.log"
+  log_file="$LOG_DIR/${PROFILE_NAME}_instance_${instance_num}.log" 
 
-  log_message "Comando Gamescope: ${gamescope_cmd[@]}"
+  log_message "Comando Gamescope: ${gamescope_cmd[@]}" 
   log_message "Comando Proton: ${proton_cmd[@]}"
   log_message "Variáveis SDL: ${sdl_env_vars[@]}"
   log_message "Lançando instância $instance_num (Log: $log_file)..."
