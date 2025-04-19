@@ -1,316 +1,351 @@
 #!/bin/bash
 
 # --- Configuração Inicial ---
-SCRIPT_NAME=$(basename "$0") # Nome do script
-SCRIPT_DIR=$(dirname "$(readlink -f "$0")") # Diretório onde o script está localizado
-PROFILE_DIR="${SCRIPT_DIR}/profiles"       # Diretório para guardar os perfis
-LOG_DIR="$HOME/.local/share/linux-coop/logs" # Diretório para logs
-PREFIX_BASE_DIR="$HOME/.local/share/linux-coop/prefixes" # Base para WINEPREFIXes
+SCRIPT_NAME=$(basename "$0")
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+PROFILE_DIR="${SCRIPT_DIR}/profiles"
+LOG_DIR="$HOME/.local/share/linux-coop/logs"
+PREFIX_BASE_DIR="$HOME/.local/share/linux-coop/prefixes"
+# Diretório temporário para configs do InputPlumber geradas por este script
+INPUTPLUMBER_TEMP_CONFIG_DIR="/tmp/linux-coop-inputplumber-configs"
+INPUTPLUMBER_SERVICE_NAME="input-plumber.service" # Nome hipotético do serviço systemd
+INPUTPLUMBER_CTL_CMD="inputplumberctl" # Comando hipotético de controle
 
 # --- Funções Auxiliares ---
-
-# Função para exibir mensagens de log com timestamp
 log_message() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
 }
 
-# Função para encontrar o caminho de instalação do Proton
 find_proton_path() {
   local version_string="$1"
   local proton_run_script=""
   local steam_root
   local search_paths=(
-    "$HOME/.steam/root"
-    "$HOME/.local/share/Steam"
-    "$HOME/.steam/steam"
-    "$HOME/.steam/debian-installation"
-    # Adicione outros caminhos comuns se necessário
-    "/var/mnt/games/messi/Games/Steam" # Exemplo do seu script original
+    "$HOME/.steam/root" "$HOME/.local/share/Steam" "$HOME/.steam/steam"
+    "$HOME/.steam/debian-installation" "/var/mnt/games/messi/Games/Steam"
   )
-
   log_message "Procurando por Proton: $version_string"
-
   for steam_path in "${search_paths[@]}"; do
-    if [ ! -d "$steam_path" ]; then continue; fi
-
+    [ ! -d "$steam_path" ] && continue
     log_message "Verificando diretório Steam: $steam_path"
-    steam_root="$steam_path" # Guarda o caminho raiz encontrado
-
+    steam_root="$steam_path"
     local potential_path=""
-    # Tratamento especial para Experimental
     if [[ "$version_string" == "Experimental" ]]; then
       potential_path=$(find "$steam_path/steamapps/common/" -maxdepth 1 -type d -name "Proton - Experimental" 2>/dev/null | head -n 1)
-      if [ -n "$potential_path" ]; then
-        proton_run_script="$potential_path/proton" 
-        break
-      fi
+    else
+      potential_path=$(find "$steam_path/steamapps/common/" "$steam_path/compatibilitytools.d/" -maxdepth 1 -type d \( -name "Proton $version_string" -o -name "$version_string" \) 2>/dev/null | head -n 1)
     fi
+    if [ -n "$potential_path" ] && [ -f "$potential_path/proton" ]; then
+      proton_run_script="$potential_path/proton"
+      break
+    fi
+  done
+  if [ -z "$proton_run_script" ]; then
+    log_message "ERRO: Proton '$version_string' não encontrado."
+    return 1
+  fi
+  log_message "Proton encontrado: $proton_run_script"
+  export STEAM_COMPAT_CLIENT_INSTALL_PATH="$steam_root"
+  echo "$proton_run_script"
+  return 0
+}
 
-    # Tenta encontrar versões oficiais ou GE
-    potential_path=$(find "$steam_path/steamapps/common/" "$steam_path/compatibilitytools.d/" -maxdepth 1 -type d \( -name "Proton $version_string" -o -name "$version_string" \) 2>/dev/null | head -n 1)
-     if [ -n "$potential_path" ]; then
-        # Verifica se o script 'proton' existe dentro do diretório encontrado
-        if [ -f "$potential_path/proton" ]; then
-          proton_run_script="$potential_path/proton"
-          break
-        fi
-     fi
+# --- Funções InputPlumber (Hipotéticas) ---
+
+# Garante que o serviço InputPlumber esteja rodando
+ensure_inputplumber_running() {
+  log_message "Verificando status do serviço ${INPUTPLUMBER_SERVICE_NAME}..."
+  if ! systemctl is-active --quiet "$INPUTPLUMBER_SERVICE_NAME"; then
+    log_message "Serviço não está ativo. Tentando iniciar..."
+    sudo systemctl start "$INPUTPLUMBER_SERVICE_NAME" || {
+      log_message "ERRO: Falha ao iniciar ${INPUTPLUMBER_SERVICE_NAME}. Verifique se está instalado e configurado."
+      exit 1
+    }
+    log_message "Serviço iniciado."
+    sleep 2 # Dar um tempo para o serviço inicializar
+  else
+    log_message "Serviço já está ativo."
+  fi
+}
+
+# Gera um arquivo de configuração temporário para o InputPlumber
+# NOTA: A sintaxe do arquivo é COMPLETAMENTE HIPOTÉTICA!
+generate_inputplumber_config() {
+  local profile_name="$1"
+  local config_file="$2"
+  local num_players="$3"
+  local base_name="$4"
+  # A var @P transforma o argumento (o array do profile) em elementos separados
+  local -n physical_ids=$5 # Passa o array por referência
+
+  log_message "Gerando configuração InputPlumber em: $config_file"
+  # Limpa o arquivo se existir
+  > "$config_file"
+
+  echo "# Configuração InputPlumber gerada por $SCRIPT_NAME para o perfil $profile_name" >> "$config_file"
+  echo "" >> "$config_file"
+
+  for (( p=0; p<num_players; p++ )); do
+    local player_num=$((p+1))
+    local physical_id="${physical_ids[$p]}"
+    local virtual_name="${base_name}${player_num}" # Ex: virtual-gamepad-p1
+
+    # Define o dispositivo físico
+    echo "[device \"physical_p${player_num}\"]" >> "$config_file"
+    # Assumindo que InputPlumber pode identificar por /dev/input/by-id/* path
+    echo "  match_type = \"path\"" >> "$config_file"
+    echo "  match_string = \"${physical_id}\"" >> "$config_file"
+    echo "  grab = true  # Captura exclusiva" >> "$config_file"
+    echo "  driver = \"evdev\"" >> "$config_file"
+    echo "" >> "$config_file"
+
+    # Define o dispositivo virtual de saída
+    echo "[output \"virtual_p${player_num}\"]" >> "$config_file"
+    echo "  driver = \"uinput\"" >> "$config_file"
+    echo "  name = \"${virtual_name}\" # Nome usado para /dev/input/${virtual_name}" >> "$config_file"
+    # TODO: Idealmente, copiar capacidades (ABS, KEY, REL) do físico
+    echo "" >> "$config_file"
+
+    # Define a rota
+    echo "[route \"route_p${player_num}\"]" >> "$config_file"
+    echo "  input = \"physical_p${player_num}\"" >> "$config_file"
+    echo "  output = \"virtual_p${player_num}\"" >> "$config_file"
+    echo "" >> "$config_file"
   done
 
-  if [ -z "$proton_run_script" ]; then
-    log_message "ERRO: Proton '$version_string' não encontrado nos caminhos verificados."
-    return 1
-  else
-    log_message "Proton encontrado: $proton_run_script"
-    # Exporta o caminho raiz do Steam para uso no Proton
-    export STEAM_COMPAT_CLIENT_INSTALL_PATH="$steam_root"
-    echo "$proton_run_script" # Retorna o caminho do script 'proton'
-    return 0
-  fi
+  log_message "Configuração InputPlumber gerada."
 }
 
-# Função para limpar processos gamescope/proton relacionados a este jogo
+# Recarrega a configuração do InputPlumber
+reload_inputplumber() {
+  log_message "Solicitando recarregamento da configuração do InputPlumber..."
+  # Comando hipotético - pode variar muito!
+  if ! "$INPUTPLUMBER_CTL_CMD" reload --config-dir "$INPUTPLUMBER_TEMP_CONFIG_DIR"; then
+     log_message "ERRO: Falha ao recarregar configuração do InputPlumber. Verifique os logs do serviço."
+     # Poderia tentar parar/iniciar o serviço como alternativa, mas é mais drástico
+     exit 1
+  fi
+  log_message "Configuração InputPlumber recarregada. Aguardando criação dos dispositivos..."
+  sleep 3 # Dar tempo para udev/uinput criarem os nós de dispositivo
+}
+
+# Remove a configuração temporária e recarrega InputPlumber para liberar devices
+cleanup_inputplumber_config() {
+  log_message "Limpando configuração temporária do InputPlumber..."
+  if [ -d "$INPUTPLUMBER_TEMP_CONFIG_DIR" ]; then
+    # Apaga todos os arquivos .conf gerados neste diretório
+    rm -f "$INPUTPLUMBER_TEMP_CONFIG_DIR"/*.conf
+    # Talvez InputPlumber precise de um arquivo vazio ou recarregar sem o diretório
+    # Recarrega para que ele pare de usar a config removida
+    if command -v "$INPUTPLUMBER_CTL_CMD" &> /dev/null; then
+       log_message "Solicitando recarregamento do InputPlumber para liberar dispositivos..."
+       "$INPUTPLUMBER_CTL_CMD" reload --config-dir "$INPUTPLUMBER_TEMP_CONFIG_DIR" || log_message "Aviso: Falha ao recarregar InputPlumber durante limpeza."
+    fi
+  fi
+  log_message "Limpeza da configuração InputPlumber concluída."
+}
+
+# --- Função de Limpeza Geral ---
 cleanup_previous_instances() {
   local proton_cmd_path="$1"
-  local exe_path_pattern="$2" # Usar o caminho do executável para ser mais específico
-
-  log_message "Tentando encerrar instâncias anteriores de '$exe_path_pattern' com '$proton_cmd_path'..."
-  # Tenta encontrar e matar processos gamescope que lançaram este jogo específico com este Proton
-  # É uma heurística, pode não ser 100% precisa
+  local exe_path_pattern="$2"
+  log_message "Tentando encerrar instâncias anteriores de '$exe_path_pattern'..."
   pkill -f "gamescope.*-- '$proton_cmd_path' run '$exe_path_pattern'" && sleep 1 || true
-  pkill -f "'$proton_cmd_path' run '$exe_path_pattern'" && sleep 1 || true # Mata processos Proton órfãos
+  pkill -f "'$proton_cmd_path' run '$exe_path_pattern'" && sleep 1 || true
 }
 
-# Função para encerrar as instâncias lançadas por este script
 terminate_instances() {
   log_message "Recebido sinal de interrupção. Encerrando instâncias..."
+  # 1. Matar processos dos jogos/gamescope
   if [ ${#PIDS[@]} -gt 0 ]; then
-    for pid in "${PIDS[@]}"; do
-      if ps -p $pid > /dev/null; then
-        log_message "Encerrando PID: $pid"
-        kill $pid 2>/dev/null
-      fi
-    done
-    sleep 2 # Dá um tempo para os processos fecharem
-    for pid in "${PIDS[@]}"; do
-       if ps -p $pid > /dev/null; then
-         log_message "Forçando encerramento do PID: $pid"
-         kill -9 $pid 2>/dev/null
-       fi
-    done
+    log_message "Encerrando PIDs das instâncias: ${PIDS[@]}"
+    # Tenta terminar graciosamente primeiro
+    kill "${PIDS[@]}" 2>/dev/null && sleep 2
+    # Força o encerramento se ainda estiverem vivos
+    kill -9 "${PIDS[@]}" 2>/dev/null
   fi
+  # 2. Limpar configuração do InputPlumber para liberar os controles
+  cleanup_inputplumber_config
   log_message "Limpeza concluída."
   exit 0
 }
 
-# --- Verificação de Argumentos e Carregamento do Perfil ---
+# --- Script Principal ---
 
-if [ -z "$1" ]; then
-  echo "Uso: $SCRIPT_NAME <nome_do_perfil>"
-  echo "Perfis disponíveis em $PROFILE_DIR:"
-  ls "$PROFILE_DIR" | sed 's/\.profile$//'
-  exit 1
-fi
-
+# Verificação de Argumentos e Carregamento do Perfil
+if [ -z "$1" ]; { echo "Uso: $SCRIPT_NAME <nome_do_perfil>"; exit 1; }
 PROFILE_NAME="$1"
 PROFILE_FILE="$PROFILE_DIR/$PROFILE_NAME.profile"
-
-if [ ! -f "$PROFILE_FILE" ]; then
-  echo "Erro: Arquivo de perfil não encontrado: $PROFILE_FILE"
-  echo "Certifique-se de que o perfil '$PROFILE_NAME' existe em $PROFILE_DIR."
-  exit 1
-fi
+if [ ! -f "$PROFILE_FILE" ]; { echo "Erro: Perfil não encontrado: $PROFILE_FILE"; exit 1; }
 
 log_message "Carregando perfil: $PROFILE_NAME"
-# Carrega as variáveis do arquivo de perfil
 source "$PROFILE_FILE"
 
-# Validar variáveis obrigatórias do perfil
+# Validar variáveis obrigatórias
 missing_vars=()
-[[ -z "$GAME_NAME" ]] && missing_vars+=("GAME_NAME") # Nome do jogo
-[[ -z "$EXE_PATH" ]] && missing_vars+=("EXE_PATH") # Caminho do executável
-[[ -z "$PROTON_VERSION" ]] && missing_vars+=("PROTON_VERSION") # Versão do Proton
-[[ -z "$NUM_PLAYERS" ]] && missing_vars+=("NUM_PLAYERS") # Número de instâncias
-[[ -z "$INSTANCE_WIDTH" ]] && missing_vars+=("INSTANCE_WIDTH") # Largura da instância
-[[ -z "$INSTANCE_HEIGHT" ]] && missing_vars+=("INSTANCE_HEIGHT") # Altura da instância
+[[ -z "$GAME_NAME" ]] && missing_vars+=("GAME_NAME")
+[[ -z "$EXE_PATH" ]] && missing_vars+=("EXE_PATH")
+[[ -z "$PROTON_VERSION" ]] && missing_vars+=("PROTON_VERSION")
+[[ -z "$NUM_PLAYERS" ]] && missing_vars+=("NUM_PLAYERS")
+[[ -z "$INSTANCE_WIDTH" ]] && missing_vars+=("INSTANCE_WIDTH")
+[[ -z "$INSTANCE_HEIGHT" ]] && missing_vars+=("INSTANCE_HEIGHT")
+[[ -z "$VIRTUAL_DEVICE_BASENAME" ]] && missing_vars+=("VIRTUAL_DEVICE_BASENAME")
+[[ ${#PLAYER_PHYSICAL_DEVICE_IDS[@]} -eq 0 && "$NUM_PLAYERS" -gt 0 ]] && missing_vars+=("PLAYER_PHYSICAL_DEVICE_IDS (array não pode ser vazio para NUM_PLAYERS > 0)")
+[[ ${#PLAYER_PHYSICAL_DEVICE_IDS[@]} -ne "$NUM_PLAYERS" && "$NUM_PLAYERS" -gt 0 ]] && missing_vars+=("Número de elementos em PLAYER_PHYSICAL_DEVICE_IDS (${#PLAYER_PHYSICAL_DEVICE_IDS[@]}) diferente de NUM_PLAYERS ($NUM_PLAYERS)")
 
-if [ ${#missing_vars[@]} -gt 0 ]; then
-  echo "Erro: As seguintes variáveis obrigatórias não estão definidas no perfil '$PROFILE_FILE':"
-  printf " - %s\n" "${missing_vars[@]}"
-  exit 1
-fi
+if [ ${#missing_vars[@]} -gt 0 ]; { echo "Erro: Variáveis obrigatórias faltando no perfil:"; printf " - %s\n" "${missing_vars[@]}"; exit 1; }
 
-# Validar array de controles (obrigatório se NUM_PLAYERS > 0)
-if [[ "$NUM_PLAYERS" -gt 0 && ${#CONTROLLER_PATHS[@]} -eq 0 ]]; then
-  echo "Erro: A variável 'CONTROLLER_PATHS' (array) é obrigatória no perfil quando NUM_PLAYERS > 0."
-  echo "Exemplo: CONTROLLER_PATHS=('/dev/input/by-id/usb-Controller_Vendor_Model_1-event-joystick' '/dev/input/by-id/usb-Controller_Vendor_Model_2-event-joystick')"
-  exit 1
-fi
-if [[ "$NUM_PLAYERS" -gt 0 && ${#CONTROLLER_PATHS[@]} -ne "$NUM_PLAYERS" ]]; then
-  echo "Erro: O número de caminhos em 'CONTROLLER_PATHS' (${#CONTROLLER_PATHS[@]}) não corresponde a NUM_PLAYERS ($NUM_PLAYERS)."
-  exit 1
-fi
-
-# --- Verificações de Dependências ---
-
+# Verificações de Dependências
 log_message "Verificando dependências..."
-if ! command -v gamescope &> /dev/null; then
-  echo "Erro: 'gamescope' não encontrado. Instale-o (geralmente via gerenciador de pacotes)."
-  exit 1
-fi
+command -v gamescope &> /dev/null || { echo "Erro: 'gamescope' não encontrado."; exit 1; }
+command -v bwrap &> /dev/null || { echo "Erro: 'bwrap' (bubblewrap) não encontrado."; exit 1; }
+command -v "$INPUTPLUMBER_CTL_CMD" &> /dev/null || { echo "Erro: Comando de controle '$INPUTPLUMBER_CTL_CMD' não encontrado."; exit 1; }
+# (Opcional) Verificar se o serviço systemd existe, se for usar
+# systemctl list-unit-files | grep -q "$INPUTPLUMBER_SERVICE_NAME" || { echo "Aviso: Serviço '$INPUTPLUMBER_SERVICE_NAME' não encontrado."; }
 
-if ! pgrep -x "steam" > /dev/null && ! pgrep -x "steamwebhelper" > /dev/null; then
-  log_message "Aviso: Steam não parece estar em execução. Proton pode não funcionar corretamente sem o Steam Runtime."
-  # Descomente para iniciar o Steam automaticamente, se desejar
-  # log_message "Iniciando Steam..."
-  # steam &
-  # sleep 10 # Espera um pouco mais para o Steam iniciar completamente
-fi
+# Preparação
+mkdir -p "$LOG_DIR"
+mkdir -p "$PREFIX_BASE_DIR"
+mkdir -p "$INPUTPLUMBER_TEMP_CONFIG_DIR" || { echo "ERRO: Não foi possível criar diretório temporário para InputPlumber: $INPUTPLUMBER_TEMP_CONFIG_DIR"; exit 1; }
 
-# --- Preparação ---
-
-mkdir -p "$LOG_DIR" # Cria o diretório de logs se não existir
-mkdir -p "$PREFIX_BASE_DIR" # Cria o diretório de prefixos se não existir
-
-# Verifica se o Proton está instalado e obtém o caminho
-PROTON_CMD_PATH=$(find_proton_path "$PROTON_VERSION")
-if [ $? -ne 0 ]; then
-  exit 1
-fi
-
-if [ ! -x "$PROTON_CMD_PATH" ]; then
-    log_message "ERRO: O caminho do Proton encontrado não é executável: $PROTON_CMD_PATH"
-    exit 1
-fi
-
-
-if [ ! -f "$EXE_PATH" ]; then
-  echo "Erro: O arquivo executável do jogo não existe: $EXE_PATH"
-  exit 1
-fi
-
-# Define o EXE_NAME para logs e nomes de prefixo
+PROTON_CMD_PATH=$(find_proton_path "$PROTON_VERSION") || exit 1
+[ ! -x "$PROTON_CMD_PATH" ] && { log_message "ERRO: Caminho do Proton não executável: $PROTON_CMD_PATH"; exit 1; }
+[ ! -f "$EXE_PATH" ] && { echo "Erro: Executável do jogo não existe: $EXE_PATH"; exit 1; }
 EXE_NAME=$(basename "$EXE_PATH")
 
-# Limpa instâncias anteriores deste jogo/proton ANTES de iniciar novas
+# Preparar e Ativar Configuração InputPlumber
+ensure_inputplumber_running
+INPUTPLUMBER_CONF_FILE="$INPUTPLUMBER_TEMP_CONFIG_DIR/${PROFILE_NAME}.conf"
+# Passando o array PLAYER_PHYSICAL_DEVICE_IDS por referência para a função
+generate_inputplumber_config "$PROFILE_NAME" "$INPUTPLUMBER_CONF_FILE" "$NUM_PLAYERS" "$VIRTUAL_DEVICE_BASENAME" PLAYER_PHYSICAL_DEVICE_IDS
+reload_inputplumber
+
+# Descobrir caminhos dos dispositivos virtuais criados (supõe nome previsível)
+declare -a VIRTUAL_DEVICE_PATHS=()
+log_message "Procurando por dispositivos virtuais criados..."
+for (( p=1; p<=NUM_PLAYERS; p++ )); do
+    virt_name="${VIRTUAL_DEVICE_BASENAME}${p}"
+    # Procura em /dev/input/ por um device com o nome esperado
+    # Isso pode precisar de ajuste dependendo de como InputPlumber nomeia os nós
+    found_path=$(find /dev/input/ -name "$virt_name" -print -quit)
+    if [ -z "$found_path" ]; then
+        log_message "ERRO: Dispositivo virtual '$virt_name' não encontrado em /dev/input/ após recarregar InputPlumber."
+        cleanup_inputplumber_config # Tenta limpar antes de sair
+        exit 1
+    fi
+    log_message "Encontrado dispositivo virtual para Jogador $p: $found_path"
+    VIRTUAL_DEVICE_PATHS+=("$found_path")
+done
+if [ ${#VIRTUAL_DEVICE_PATHS[@]} -ne "$NUM_PLAYERS" ]; then
+   log_message "ERRO: Número de dispositivos virtuais encontrados (${#VIRTUAL_DEVICE_PATHS[@]}) não bate com NUM_PLAYERS ($NUM_PLAYERS)."
+   cleanup_inputplumber_config
+   exit 1
+fi
+
+
+# Limpar instâncias anteriores (depois de configurar InputPlumber)
 cleanup_previous_instances "$PROTON_CMD_PATH" "$EXE_PATH"
 
-# Configura o trap para lidar com Ctrl+C e outros sinais de término
-declare -a PIDS=() # Array para armazenar PIDs das instâncias
+# Configurar Trap para Limpeza
+declare -a PIDS=()
 trap terminate_instances SIGINT SIGTERM
 
 # --- Lançamento das Instâncias ---
+log_message "Iniciando $NUM_PLAYERS instância(s) de '$GAME_NAME' usando InputPlumber e Bubblewrap..."
 
-log_message "Iniciando $NUM_PLAYERS instância(s) de '$GAME_NAME'..."
+for (( i=1; i<=NUM_PLAYERS; i++ )); do
+  instance_num=$i
+  player_index=$((i-1))
+  log_message "Preparando instância $instance_num..."
 
-for (( i=1; i<=NUM_PLAYERS; i++ )); do 
-  instance_num=$i 
-  log_message "Preparando instância $instance_num..." 
-
-  # Define o diretório do prefixo Wine para esta instância
   prefix_dir="$PREFIX_BASE_DIR/${PROFILE_NAME}_instance_${instance_num}"
   mkdir -p "$prefix_dir/pfx" || { log_message "Erro ao criar diretório do prefixo: $prefix_dir"; terminate_instances; exit 1; }
   log_message "WINEPREFIX para instância $instance_num: $prefix_dir/pfx"
 
-  # Prepara variáveis de ambiente específicas da instância
-  export STEAM_COMPAT_DATA_PATH="$prefix_dir"
-  export WINEPREFIX="$prefix_dir/pfx"
-
-  # --- Configuração de Input (A parte mais complexa) ---
-  current_controller_path="" # Caminho do controle atual
-  sdl_env_vars=() # Array para guardar variáveis de ambiente SDL
-
-  if [[ $NUM_PLAYERS -gt 0 && $i -le ${#CONTROLLER_PATHS[@]} ]]; then # Verifica se há controles disponíveis
-    controller_index=$((i-1)) # Índice do array (começa em 0)
-    current_controller_path="${CONTROLLER_PATHS[$controller_index]}" # Caminho do controle para esta instância
-    if [ -e "$current_controller_path" ]; then # Verifica se o caminho do controle existe
-      log_message "Instância $instance_num usará o controle: $current_controller_path"
-      # Tenta forçar o SDL a usar este dispositivo. A eficácia varia!
-      # Usar o caminho completo pode ser mais robusto que apenas o nome.
-      sdl_env_vars+=("SDL_JOYSTICK_DEVICE=$current_controller_path")
-      # Você também pode tentar configurar o mapeamento diretamente se souber o GUID do SDL
-      # sdl_env_vars+=("SDL_GAMECONTROLLERCONFIG=...")
-    else
-      log_message "Aviso: O caminho do controle '$current_controller_path' para instância $instance_num não existe. Input pode não funcionar como esperado."
-    fi
+  # Obter o caminho do dispositivo virtual para este jogador
+  current_virtual_device_path="${VIRTUAL_DEVICE_PATHS[$player_index]}"
+  if [ ! -e "$current_virtual_device_path" ]; then
+      log_message "ERRO: O dispositivo virtual '$current_virtual_device_path' para jogador $instance_num desapareceu!"
+      terminate_instances
+      exit 1
   fi
+  log_message "Instância $instance_num usará o dispositivo virtual: $current_virtual_device_path"
 
-  # Configuração do Gamescope
-  # TODO: Adicionar lógica para posicionar as janelas (ex: lado a lado)
-  # Por enquanto, todas iniciam no mesmo lugar (sobrepostas)
-  gamescope_pos_x=0
-  gamescope_pos_y=$(( (i-1) * INSTANCE_HEIGHT )) # Empilha verticalmente como exemplo simples
+  # --- Montar Comando Bubblewrap ---
+  bwrap_cmd=(
+    bwrap
+    --unshare-all --share-net
+    --proc /proc --dev /dev
+    # Binds essenciais (ajuste conforme necessidade)
+    --dev-bind /dev/dri /dev/dri
+    --dev-bind /dev/snd /dev/snd
+    --ro-bind /dev/shm /dev/shm # Necessário por alguns jogos/Proton
+    --ro-bind /etc/machine-id /etc/machine-id # Necessário por D-Bus/Systemd
+    --ro-bind /var/lib/dbus /var/lib/dbus # Necessário por D-Bus
+    --bind /tmp/.X11-unix /tmp/.X11-unix # Para X11
+    # Bind socket Pulse/Pipewire (caminho pode variar)
+    --bind "$XDG_RUNTIME_DIR/pulse" "$XDG_RUNTIME_DIR/pulse"
+    # --- Bind do Dispositivo Virtual InputPlumber ---
+    "--dev-bind" "$current_virtual_device_path" "/dev/input/event0" # Mapeia como event0 DENTRO do sandbox
+    # (Opcional) Mapear também como js0 se jogos antigos precisarem
+    # "--dev-bind" "$current_virtual_device_path" "/dev/input/js0"
+    # --- Binds do Sistema e Jogo ---
+    --ro-bind /usr /usr # ou binds mais seletivos de /lib, /lib64 se preferir
+    --bind "$prefix_dir" "$prefix_dir" # Diretório do prefixo (leitura/escrita)
+    --bind "$HOME" "$HOME" # Home do usuário (necessário p/ Steam, Proton, saves) - ou mais seletivo
+    # O bind da home pode ser um risco de segurança; idealmente, bind apenas subdiretórios necessários
+    # Ex: --bind "$HOME/.steam" "$HOME/.steam" --bind "$HOME/.local/share/Steam" "$HOME/.local/share/Steam" etc.
+    --bind "$(dirname "$EXE_PATH")" "$(dirname "$EXE_PATH")" # Diretório do jogo
+    --bind "$(dirname "$PROTON_CMD_PATH")/../../.." "$(dirname "$PROTON_CMD_PATH")/../../.." # Diretório raiz do Proton
+    # Variáveis de Ambiente para Proton/Jogo DENTRO do sandbox
+    --setenv STEAM_COMPAT_DATA_PATH "$prefix_dir"
+    --setenv WINEPREFIX "$prefix_dir/pfx"
+    --setenv DXVK_ASYNC "1"
+    --setenv PROTON_LOG "1"
+    --setenv PROTON_LOG_DIR "$LOG_DIR"
+    # Adicionar outras variáveis como DISPLAY=:0 se necessário
+  )
 
+  # Comando Gamescope (será executado por bwrap)
+  gamescope_pos_x=0 # Simplificado: todas na mesma posição
+  gamescope_pos_y=0
   gamescope_cmd=(
     gamescope
-    -W "$INSTANCE_WIDTH" -H "$INSTANCE_HEIGHT" # Define resolução interna
-    #-w "$INSTANCE_WIDTH" -h "$INSTANCE_HEIGHT" # Define tamanho da janela (se não for fullscreen)
-    -f # Modo fullscreen (dentro do gamescope, não necessariamente da tela inteira)
-    # Opções de Input do Gamescope (EXPERIMENTAIS - verifique a documentação do seu gamescope):
-    # --map-device "$current_controller_path=virt-0" # Mapeia dispositivo físico para virtual (se suportado)
-    # --filter-device /dev/input/eventX # Filtra outros dispositivos (precisaria listar todos os outros)
-    -- # Separador antes do comando a ser executado
+    -W "$INSTANCE_WIDTH" -H "$INSTANCE_HEIGHT" -f
+    # Adicionar -o X,Y aqui para posicionamento real
+    -- # Separador
   )
 
-  # Prepara o comando Proton
+  # Comando Proton (será executado por gamescope)
   proton_cmd=(
-     "$PROTON_CMD_PATH" run "$EXE_PATH"
-     # Adicione aqui quaisquer argumentos de linha de comando específicos do jogo do perfil:
-     # $GAME_ARGS
+    "$PROTON_CMD_PATH" run "$EXE_PATH"
+    # $GAME_ARGS # Adicionar argumentos do perfil aqui, se houver
   )
 
-  # Define variáveis de ambiente adicionais para o Proton/Jogo
-  export DXVK_ASYNC=1
-  export PROTON_LOG=1 # Gera log do proton em $STEAM_COMPAT_DATA_PATH/proton-$PID.log
-  export PROTON_LOG_DIR="$LOG_DIR" # Tenta direcionar logs para nosso diretório
-
-  log_file="$LOG_DIR/${PROFILE_NAME}_instance_${instance_num}.log" 
-
-  log_message "Comando Gamescope: ${gamescope_cmd[@]}" 
-  log_message "Comando Proton: ${proton_cmd[@]}"
-  log_message "Variáveis SDL: ${sdl_env_vars[@]}"
+  log_file="$LOG_DIR/${PROFILE_NAME}_instance_${instance_num}.log"
   log_message "Lançando instância $instance_num (Log: $log_file)..."
 
-  # Executa o comando combinando variáveis de ambiente, gamescope e proton
-  # A execução é feita em um subshell para que as variáveis SDL afetem apenas este comando
-  (
-    # Exporta as variáveis SDL apenas para este subshell/processo
-    export "${sdl_env_vars[@]}"
-    "${gamescope_cmd[@]}" "${proton_cmd[@]}" > "$log_file" 2>&1
-  ) &
-
-  # Captura o PID do processo gamescope (que é o pai direto)
+  # Combina tudo e executa em background
+  "${bwrap_cmd[@]}" "${gamescope_cmd[@]}" "${proton_cmd[@]}" > "$log_file" 2>&1 &
   pid=$!
   PIDS+=($pid)
   log_message "Instância $instance_num iniciada com PID: $pid"
-
-  # Pequeno atraso para estabilidade, especialmente se houver mutexes
   sleep 5
 done
 
 # --- Conclusão e Espera ---
-
 log_message "Todas as $NUM_PLAYERS instâncias foram lançadas."
 log_message "PIDs: ${PIDS[@]}"
-log_message "Pressione CTRL+C neste terminal para encerrar todas as instâncias."
+log_message "Pressione CTRL+C neste terminal para encerrar todas as instâncias e liberar os controles."
 
-# Mantém o script principal rodando enquanto as instâncias estiverem ativas
-# A função 'wait' espera por processos filhos específicos, mas aqui esperamos qualquer um
-# O trap cuidará do encerramento. Poderíamos usar 'wait' nos PIDs, mas o trap é mais geral.
 while true; do
     all_dead=true
-    for pid in "${PIDS[@]}"; do
-        if ps -p $pid > /dev/null; then 
-            all_dead=false
-            break
-        fi
-    done
-    if $all_dead; then
-        log_message "Todas as instâncias parecem ter sido encerradas."
-        break
-    fi
-    sleep 5 # Verifica a cada 5 segundos
+    for pid in "${PIDS[@]}"; do [ -e "/proc/$pid" ] && all_dead=false && break; done
+    if $all_dead; then log_message "Todas as instâncias parecem ter sido encerradas."; break; fi
+    sleep 5
 done
 
+# Limpeza final (se o loop terminar sem Ctrl+C)
+cleanup_inputplumber_config
 log_message "Script concluído."
 exit 0
