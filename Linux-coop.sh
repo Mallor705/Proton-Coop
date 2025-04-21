@@ -100,7 +100,7 @@ get_evdev_property() {
     echo "$value"
 }
 
-# --- Funções InputPlumber (Hipotéticas) ---
+# --- Funções InputPlumber ---
 # Função que garante que o serviço InputPlumber esteja ativo.
 ensure_inputplumber_running() {
   log_message "Verificando status do serviço ${INPUTPLUMBER_SERVICE_NAME}..."
