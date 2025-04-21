@@ -3,11 +3,15 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
-#include <libevdev/libevdev.h>
+#include <libevdev-1.0/libevdev/libevdev.h>
 #include <linux/uinput.h>
 #include <string.h>
 #include <dirent.h>
 #include <limits.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096 // Define a reasonable default value for PATH_MAX
+#endif
 
 // Nome do dispositivo virtual que será criado
 #define VIRTUAL_DEVICE_NAME "InputPlumber Virtual Device"
@@ -89,12 +93,21 @@ void handle_physical_device(const char *device_path, int virtual_fd)
     while (1)
     {
         int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
-        if (rc == 0)
+        if (rc == LIBEVDEV_READ_STATUS_SUCCESS)
         {
             // Envia o evento capturado para o dispositivo virtual
             if (write(virtual_fd, &ev, sizeof(ev)) < 0)
             {
                 perror("Erro ao enviar evento para dispositivo virtual");
+                break;
+            }
+            // Adiciona evento de sincronização
+            ev.type = EV_SYN;
+            ev.code = SYN_REPORT;
+            ev.value = 0;
+            if (write(virtual_fd, &ev, sizeof(ev)) < 0)
+            {
+                perror("Erro ao enviar evento de sincronia para dispositivo virtual");
                 break;
             }
         }
@@ -147,8 +160,9 @@ int main(int argc, char *argv[])
     }
     else
     {
-        // Se o argumento for fornecido, utiliza o caminho informado
-        strncpy(device_path, argv[1], sizeof(device_path));
+        // Utiliza o caminho informado com terminação nula garantida
+        strncpy(device_path, argv[1], sizeof(device_path) - 1);
+        device_path[sizeof(device_path) - 1] = '\0';
     }
 
     // Cria o dispositivo virtual e verifica se ocorreu algum erro

@@ -9,7 +9,7 @@ PREFIX_BASE_DIR="$HOME/.local/share/linux-coop/prefixes"
 # Diretório temporário para configs do InputPlumber geradas por este script
 INPUTPLUMBER_TEMP_CONFIG_DIR="/tmp/linux-coop-inputplumber-configs"
 INPUTPLUMBER_SERVICE_NAME="inputplumber.service" # Nome correto do serviço systemd
-INPUTPLUMBER_CTL_CMD="inputplumberctl" # Comando hipotético de controle
+INPUTPLUMBER_CTL_CMD="inputplumberctl" # Comando hipotético de controle do InputPlumber, ajustar conforme necessário.
 
 # --- Funções Auxiliares ---
 log_message() {
@@ -57,6 +57,7 @@ ensure_inputplumber_running() {
   log_message "Verificando status do serviço ${INPUTPLUMBER_SERVICE_NAME}..."
   if ! systemctl is-active --quiet "$INPUTPLUMBER_SERVICE_NAME"; then
     log_message "Serviço não está ativo. Tentando iniciar..."
+    # Removido a opção -S para evitar problema com senha
     sudo systemctl start "$INPUTPLUMBER_SERVICE_NAME" || {
       log_message "ERRO: Falha ao iniciar ${INPUTPLUMBER_SERVICE_NAME}. Verifique se está instalado e configurado."
       exit 1
@@ -117,9 +118,12 @@ generate_inputplumber_config() {
 }
 
 # Recarrega a configuração do InputPlumber
+# filepath: /home/mallor/Documentos/GitHub/Linux-Coop/Linux-coop.sh
 reload_inputplumber() {
   log_message "Iniciando daemon InputPlumber..."
+  # Removido -S para permitir que o sudo utilize o terminal
   sudo ./inputplumber /dev/input/by-id/usb-Microsoft_Inc._Controller_188A6F4-event-joystick &
+  sleep 3  # Aumenta o tempo de espera para criação do dispositivo
 }
 
 # Remove a configuração temporária e recarrega InputPlumber para liberar devices
@@ -161,6 +165,12 @@ terminate_instances() {
   cleanup_inputplumber_config
   log_message "Limpeza concluída."
   exit 0
+}
+
+# Nova função para aguardar a senha do sudo
+prompt_sudo_password() {
+  echo "Por favor, insira sua senha de sudo (será solicitada se necessário):"
+  sudo -v
 }
 
 # --- Script Principal ---
@@ -205,6 +215,9 @@ command -v bwrap &> /dev/null || { echo "Erro: 'bwrap' (bubblewrap) não encontr
 # Removido check obrigatório de "$INPUTPLUMBER_CTL_CMD"
 # command -v "$INPUTPLUMBER_CTL_CMD" &> /dev/null || { echo "Erro: Comando de controle '$INPUTPLUMBER_CTL_CMD' não encontrado."; exit 1; }
 log_message "Dependências verificadas com sucesso."  # Nova mensagem de log
+
+# Solicita a senha do sudo antes de operações que exijam ele
+prompt_sudo_password
 
 # Preparação
 mkdir -p "$LOG_DIR"
