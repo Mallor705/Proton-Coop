@@ -1,4 +1,5 @@
 #!/bin/bash
+# filepath: /home/mallor/Documentos/GitHub/Linux-Coop/Linux-coop.sh
 
 # --- Configuração Inicial ---
 SCRIPT_NAME=$(basename "$0")
@@ -57,7 +58,6 @@ ensure_inputplumber_running() {
   log_message "Verificando status do serviço ${INPUTPLUMBER_SERVICE_NAME}..."
   if ! systemctl is-active --quiet "$INPUTPLUMBER_SERVICE_NAME"; then
     log_message "Serviço não está ativo. Tentando iniciar..."
-    # Removido a opção -S para evitar problema com senha
     sudo systemctl start "$INPUTPLUMBER_SERVICE_NAME" || {
       log_message "ERRO: Falha ao iniciar ${INPUTPLUMBER_SERVICE_NAME}. Verifique se está instalado e configurado."
       exit 1
@@ -93,10 +93,10 @@ generate_inputplumber_config() {
 
     # Define o dispositivo físico
     echo "[device \"physical_p${player_num}\"]" >> "$config_file"
-    # Assumindo que InputPlumber pode identificar por /dev/input/by-id/* path
     echo "  match_type = \"path\"" >> "$config_file"
     echo "  match_string = \"${physical_id}\"" >> "$config_file"
     echo "  grab = true  # Captura exclusiva" >> "$config_file"
+    echo "  optional = true" >> "$config_file"   # Nova linha para não falhar se o dispositivo físico estiver ausente
     echo "  driver = \"evdev\"" >> "$config_file"
     echo "" >> "$config_file"
 
@@ -118,22 +118,18 @@ generate_inputplumber_config() {
 }
 
 # Recarrega a configuração do InputPlumber
-# filepath: /home/mallor/Documentos/GitHub/Linux-Coop/Linux-coop.sh
 reload_inputplumber() {
-  log_message "Iniciando daemon InputPlumber..."
-  # Removido -S para permitir que o sudo utilize o terminal
-  sudo ./inputplumber /dev/input/by-id/usb-Microsoft_Inc._Controller_188A6F4-event-joystick &
-  sleep 3  # Aumenta o tempo de espera para criação do dispositivo
+  local config_file="$1"
+  log_message "Iniciando daemon InputPlumber com a configuração: $config_file..."
+  sudo ./inputplumber --config "$config_file" &
+  sleep 5  # Aumentado para garantir a criação do dispositivo virtual
 }
 
 # Remove a configuração temporária e recarrega InputPlumber para liberar devices
 cleanup_inputplumber_config() {
   log_message "Limpando configuração temporária do InputPlumber..."
   if [ -d "$INPUTPLUMBER_TEMP_CONFIG_DIR" ]; then
-    # Apaga todos os arquivos .conf gerados neste diretório
     rm -f "$INPUTPLUMBER_TEMP_CONFIG_DIR"/*.conf
-    # Talvez InputPlumber precise de um arquivo vazio ou recarregar sem o diretório
-    # Recarrega para que ele pare de usar a config removida
     if command -v "$INPUTPLUMBER_CTL_CMD" &> /dev/null; then
        log_message "Solicitando recarregamento do InputPlumber para liberar dispositivos..."
        "$INPUTPLUMBER_CTL_CMD" reload --config-dir "$INPUTPLUMBER_TEMP_CONFIG_DIR" || log_message "Aviso: Falha ao recarregar InputPlumber durante limpeza."
@@ -153,15 +149,11 @@ cleanup_previous_instances() {
 
 terminate_instances() {
   log_message "Recebido sinal de interrupção. Encerrando instâncias..."
-  # 1. Matar processos dos jogos/gamescope
   if [ ${#PIDS[@]} -gt 0 ]; then
     log_message "Encerrando PIDs das instâncias: ${PIDS[@]}"
-    # Tenta terminar graciosamente primeiro
     kill "${PIDS[@]}" 2>/dev/null && sleep 2
-    # Força o encerramento se ainda estiverem vivos
     kill -9 "${PIDS[@]}" 2>/dev/null
   fi
-  # 2. Limpar configuração do InputPlumber para liberar os controles
   cleanup_inputplumber_config
   log_message "Limpeza concluída."
   exit 0
@@ -175,7 +167,6 @@ prompt_sudo_password() {
 
 # --- Script Principal ---
 
-# Verificação de Argumentos e Carregamento do Perfil
 if [ -z "$1" ]; then
   echo "Uso: $SCRIPT_NAME <nome_do_perfil>"
   exit 1
@@ -208,52 +199,39 @@ if [ ${#missing_vars[@]} -gt 0 ]; then
   exit 1
 fi
 
-# Verificações de Dependências
 log_message "Verificando dependências..."
 command -v gamescope &> /dev/null || { echo "Erro: 'gamescope' não encontrado."; exit 1; }
 command -v bwrap &> /dev/null || { echo "Erro: 'bwrap' (bubblewrap) não encontrado."; exit 1; }
-# Removido check obrigatório de "$INPUTPLUMBER_CTL_CMD"
-# command -v "$INPUTPLUMBER_CTL_CMD" &> /dev/null || { echo "Erro: Comando de controle '$INPUTPLUMBER_CTL_CMD' não encontrado."; exit 1; }
-log_message "Dependências verificadas com sucesso."  # Nova mensagem de log
+log_message "Dependências verificadas com sucesso."
 
-# Solicita a senha do sudo antes de operações que exijam ele
 prompt_sudo_password
 
-# Preparação
 mkdir -p "$LOG_DIR"
 mkdir -p "$PREFIX_BASE_DIR"
 mkdir -p "$INPUTPLUMBER_TEMP_CONFIG_DIR" || { echo "ERRO: Não foi possível criar diretório temporário para InputPlumber: $INPUTPLUMBER_TEMP_CONFIG_DIR"; exit 1; }
 
-# Verificar se o Proton está instalado
 PROTON_CMD_PATH=$(find_proton_path "$PROTON_VERSION") || exit 1 
-# [ ! -x "$PROTON_CMD_PATH" ] && { log_message "ERRO: Caminho do Proton não executável: $PROTON_CMD_PATH"; exit 1; } 
-[ ! -f "$EXE_PATH" ] && { echo "Erro: Executável do jogo não existe: $EXE_PATH"; exit 1; } 
+[ ! -f "$EXE_PATH" ] && { echo "Erro: Executável do jogo não existe: $EXE_PATH"; exit 1; }
 EXE_NAME=$(basename "$EXE_PATH") 
-
 
 if [ ! -f "$EXE_PATH" ]; then
     echo "Erro: Executável do jogo não encontrado em: $EXE_PATH"
     exit 1
 fi
 
-# Preparar e Ativar Configuração InputPlumber
 ensure_inputplumber_running
 INPUTPLUMBER_CONF_FILE="$INPUTPLUMBER_TEMP_CONFIG_DIR/${PROFILE_NAME}.conf"
-# Passando o array PLAYER_PHYSICAL_DEVICE_IDS por referência para a função
 generate_inputplumber_config "$PROFILE_NAME" "$INPUTPLUMBER_CONF_FILE" "$NUM_PLAYERS" "$VIRTUAL_DEVICE_BASENAME" PLAYER_PHYSICAL_DEVICE_IDS
-reload_inputplumber
+reload_inputplumber "$INPUTPLUMBER_CONF_FILE"
 
-# Descobrir caminhos dos dispositivos virtuais criados (supõe nome previsível)
 declare -a VIRTUAL_DEVICE_PATHS=()
 log_message "Procurando por dispositivos virtuais criados..."
 for (( p=1; p<=NUM_PLAYERS; p++ )); do
     virt_name="${VIRTUAL_DEVICE_BASENAME}${p}"
-    # Procura em /dev/input/ por um device com o nome esperado
-    # Isso pode precisar de ajuste dependendo de como InputPlumber nomeia os nós
-    found_path=$(find /dev/input/ -name "$virt_name" -print -quit)
+    found_path=$(find /dev/input/by-id/ -name "$virt_name" -print -quit)
     if [ -z "$found_path" ]; then
-        log_message "ERRO: Dispositivo virtual '$virt_name' não encontrado em /dev/input/ após recarregar InputPlumber."
-        cleanup_inputplumber_config # Tenta limpar antes de sair
+        log_message "ERRO: Dispositivo virtual '$virt_name' não encontrado em /dev/input/by-id/ após recarregar InputPlumber."
+        cleanup_inputplumber_config
         exit 1
     fi
     log_message "Encontrado dispositivo virtual para Jogador $p: $found_path"
@@ -265,15 +243,11 @@ if [ ${#VIRTUAL_DEVICE_PATHS[@]} -ne "$NUM_PLAYERS" ]; then
    exit 1
 fi
 
-
-# Limpar instâncias anteriores (depois de configurar InputPlumber)
 cleanup_previous_instances "$PROTON_CMD_PATH" "$EXE_PATH"
 
-# Configurar Trap para Limpeza
 declare -a PIDS=()
 trap terminate_instances SIGINT SIGTERM
 
-# --- Lançamento das Instâncias ---
 log_message "Iniciando $NUM_PLAYERS instância(s) de '$GAME_NAME' usando InputPlumber e Bubblewrap..."
 
 for (( i=1; i<=NUM_PLAYERS; i++ )); do
@@ -285,70 +259,53 @@ for (( i=1; i<=NUM_PLAYERS; i++ )); do
   mkdir -p "$prefix_dir/pfx" || { log_message "Erro ao criar diretório do prefixo: $prefix_dir"; terminate_instances; exit 1; }
   log_message "WINEPREFIX para instância $instance_num: $prefix_dir/pfx"
 
-  # Obter o caminho do dispositivo virtual para este jogador
   current_virtual_device_path="${VIRTUAL_DEVICE_PATHS[$player_index]}"
   if [ ! -e "$current_virtual_device_path" ]; then
       log_message "ERRO: O dispositivo virtual '$current_virtual_device_path' para jogador $instance_num desapareceu!"
       terminate_instances
       exit 1
   fi
+  # Utilize o mesmo nome virtual gerado anteriormente
+  virt_name="${VIRTUAL_DEVICE_BASENAME}${instance_num}"
   log_message "Instância $instance_num usará o dispositivo virtual: $current_virtual_device_path"
 
-  # --- Montar Comando Bubblewrap ---
   bwrap_cmd=(
     bwrap
     --unshare-all --share-net
     --proc /proc --dev /dev
-    # Binds essenciais (ajuste conforme necessidade)
     --dev-bind /dev/dri /dev/dri
     --dev-bind /dev/snd /dev/snd
-    --ro-bind /dev/shm /dev/shm # Necessário por alguns jogos/Proton
-    --ro-bind /etc/machine-id /etc/machine-id # Necessário por D-Bus/Systemd
-    --ro-bind /var/lib/dbus /var/lib/dbus # Necessário por D-Bus
-    --bind /tmp/.X11-unix /tmp/.X11-unix # Para X11
-    # Bind socket Pulse/Pipewire (caminho pode variar)
+    --ro-bind /dev/shm /dev/shm
+    --ro-bind /etc/machine-id /etc/machine-id
+    --ro-bind /var/lib/dbus /var/lib/dbus
+    --bind /tmp/.X11-unix /tmp/.X11-unix
     --bind "$XDG_RUNTIME_DIR/pulse" "$XDG_RUNTIME_DIR/pulse"
-    # --- Bind do Dispositivo Virtual InputPlumber ---
-    "--dev-bind" "$current_virtual_device_path" "/dev/input/event0" # Mapeia como event0 DENTRO do sandbox
-    # (Opcional) Mapear também como js0 se jogos antigos precisarem
-    # "--dev-bind" "$current_virtual_device_path" "/dev/input/js0"
-    # --- Binds do Sistema e Jogo ---
-    --ro-bind /usr /usr # ou binds mais seletivos de /lib, /lib64 se preferir
-    --bind "$prefix_dir" "$prefix_dir" # Diretório do prefixo (leitura/escrita)
-    --bind "$HOME" "$HOME" # Home do usuário (necessário p/ Steam, Proton, saves) - ou mais seletivo
-    # O bind da home pode ser um risco de segurança; idealmente, bind apenas subdiretórios necessários
-    # Ex: --bind "$HOME/.steam" "$HOME/.steam" --bind "$HOME/.local/share/Steam" "$HOME/.local/share/Steam" etc.
-    --bind "$(dirname "$EXE_PATH")" "$(dirname "$EXE_PATH")" # Diretório do jogo
-    --bind "$(dirname "$PROTON_CMD_PATH")/../../.." "$(dirname "$PROTON_CMD_PATH")/../../.." # Diretório raiz do Proton
-    # Variáveis de Ambiente para Proton/Jogo DENTRO do sandbox
+    "--dev-bind" "$current_virtual_device_path" "/dev/input/${virt_name}"  # Corrigido: mapeamento dinâmico para cada virtual device
+    --ro-bind /usr /usr
+    --bind "$prefix_dir" "$prefix_dir"
+    --bind "$HOME" "$HOME"
+    --bind "$(dirname "$EXE_PATH")" "$(dirname "$EXE_PATH")"
+    --bind "$(dirname "$PROTON_CMD_PATH")/../../.." "$(dirname "$PROTON_CMD_PATH")/../../.."
     --setenv STEAM_COMPAT_DATA_PATH "$prefix_dir"
     --setenv WINEPREFIX "$prefix_dir/pfx"
     --setenv DXVK_ASYNC "1"
     --setenv PROTON_LOG "1"
     --setenv PROTON_LOG_DIR "$LOG_DIR"
-    # Adicionar outras variáveis como DISPLAY=:0 se necessário
   )
 
-  # Comando Gamescope (será executado por bwrap)
-  gamescope_pos_x=0 # Simplificado: todas na mesma posição
-  gamescope_pos_y=0
   gamescope_cmd=(
     gamescope
     -W "$INSTANCE_WIDTH" -H "$INSTANCE_HEIGHT" -f
-    # Adicionar -o X,Y aqui para posicionamento real
-    -- # Separador
+    -- 
   )
 
-  # Comando Proton (será executado por gamescope)
   proton_cmd=(
     "$PROTON_CMD_PATH" run "$EXE_PATH"
-    # $GAME_ARGS # Adicionar argumentos do perfil aqui, se houver
   )
 
   log_file="$LOG_DIR/${PROFILE_NAME}_instance_${instance_num}.log"
   log_message "Lançando instância $instance_num (Log: $log_file)..."
 
-  # Combina tudo e executa em background
   "${bwrap_cmd[@]}" "${gamescope_cmd[@]}" "${proton_cmd[@]}" > "$log_file" 2>&1 &
   pid=$!
   PIDS+=($pid)
@@ -356,7 +313,6 @@ for (( i=1; i<=NUM_PLAYERS; i++ )); do
   sleep 5
 done
 
-# --- Conclusão e Espera ---
 log_message "Todas as $NUM_PLAYERS instâncias foram lançadas."
 log_message "PIDs: ${PIDS[@]}"
 log_message "Pressione CTRL+C neste terminal para encerrar todas as instâncias e liberar os controles."
@@ -368,7 +324,6 @@ while true; do
     sleep 5
 done
 
-# Limpeza final (se o loop terminar sem Ctrl+C)
 cleanup_inputplumber_config
 log_message "Script concluído."
 exit 0
