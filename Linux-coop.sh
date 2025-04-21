@@ -88,7 +88,7 @@ generate_inputplumber_config() {
 
   for (( p=0; p<num_players; p++ )); do
     local player_num=$((p+1))
-    local physical_id="${physical_ids[$p]}"
+    local physical_id="${physical_ids[$(( p % ${#physical_ids[@]} ))]}" # Pega o ID físico correspondente ao jogador
     local virtual_name="${base_name}${player_num}" # Ex: virtual-gamepad-p1
 
     # Define o dispositivo físico
@@ -96,7 +96,8 @@ generate_inputplumber_config() {
     echo "  match_type = \"path\"" >> "$config_file"
     echo "  match_string = \"${physical_id}\"" >> "$config_file"
     echo "  grab = true  # Captura exclusiva" >> "$config_file"
-    echo "  optional = true" >> "$config_file"   # Nova linha para não falhar se o dispositivo físico estiver ausente
+    echo "  optional = true" >> "$config_file"   # Não falha se o dispositivo físico estiver ausente
+    echo "  ignore_missing = true" >> "$config_file"  # Nova linha para ignorar ausência do dispositivo físico
     echo "  driver = \"evdev\"" >> "$config_file"
     echo "" >> "$config_file"
 
@@ -104,7 +105,7 @@ generate_inputplumber_config() {
     echo "[output \"virtual_p${player_num}\"]" >> "$config_file"
     echo "  driver = \"uinput\"" >> "$config_file"
     echo "  name = \"${virtual_name}\" # Nome usado para /dev/input/${virtual_name}" >> "$config_file"
-    # TODO: Idealmente, copiar capacidades (ABS, KEY, REL) do físico
+    echo "  capabilities = \"ABS, KEY, REL\"" >> "$config_file" # Definindo capacidades padrão
     echo "" >> "$config_file"
 
     # Define a rota
