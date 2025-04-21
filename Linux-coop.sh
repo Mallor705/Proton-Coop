@@ -94,7 +94,7 @@ get_evdev_property() {
     local event_node="$1"
     local property_name="$2"
     local value
-    value=$(udevadm info --query=property --name="$event_node" | grep "^E: $property_name=" | cut -d'=' -f2)
+    value=$(udevadm info --query=property --name="$event_node" | grep "^$property_name=" | cut -d'=' -f2)
     value="${value%\"}"
     value="${value#\"}"
     echo "$value"
@@ -122,7 +122,7 @@ generate_composite_yaml() {
     local player_num="$1"
     local yaml_file="$2"
     local event_node="$3"
-    local match_prop_name="NAME"
+    local match_prop_name="ID_MODEL"
     local match_prop_value
     match_prop_value=$(get_evdev_property "$event_node" "$match_prop_name")
     local virtual_device_name="VirtualCoop_P${player_num}"
