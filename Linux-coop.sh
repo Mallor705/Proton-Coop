@@ -166,7 +166,7 @@ load_composite_device_via_dbus() {
 # Função que busca o nó do dispositivo virtual criado pelo InputPlumber.
 find_virtual_device_node() {
     local player_num="$1"
-    local expected_name="VirtualCoop_P${player_num}"
+    local expected_name="LinuxCoop_Player_${player_num}_Composite"
     local found_path=""
     local attempt=0
     log_message "Procurando por nó de dispositivo virtual com nome contendo '$expected_name'..."
