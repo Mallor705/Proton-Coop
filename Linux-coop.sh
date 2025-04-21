@@ -144,17 +144,30 @@ EOF
 # Função que envia a definição do dispositivo composto via D-Bus para o InputPlumber.
 load_composite_device_via_dbus() {
     local yaml_file="$1"
-    log_message "Carregando perfil via LoadProfilePath..."
-    busctl call "$INPUTPLUMBER_DBUS_SERVICE" \
-      "/org/shadowblip/InputPlumber/CompositeDevice0" \
-      "org.shadowblip.Input.CompositeDevice" \
-      LoadProfilePath "s" "$yaml_file"
-    if [ $? -ne 0 ]; then
-        log_message "ERRO: Comando busctl para carregar Composite Device falhou para $yaml_file."
-        return 1
+    log_message "Carregando definição de Composite Device via D-Bus..."
+
+    # Lista todos os dispositivos compostos existentes e obtém o caminho do primeiro
+    local composite_device_path
+    composite_device_path=$(busctl tree "$INPUTPLUMBER_DBUS_SERVICE" | grep "CompositeDevice" | head -n 1)
+
+    if [ -z "$composite_device_path" ]; then
+        log_message "ERRO: Nenhum CompositeDevice encontrado. Criando um novo..."
+        composite_device_path="/org/shadowblip/InputPlumber/CompositeDevice0"
     fi
-    log_message "Solicitação para carregar $yaml_file enviada. Aguarde a criação do dispositivo virtual..."
-    sleep 4
+
+    log_message "Usando caminho do dispositivo composto: $composite_device_path"
+    
+    # Carrega o perfil no dispositivo composto
+    busctl call "$INPUTPLUMBER_DBUS_SERVICE" \
+        "$composite_device_path" \
+        "org.shadowblip.Input.CompositeDevice" \
+        LoadProfilePath "s" "$yaml_file" || {
+        log_message "ERRO: Falha ao carregar o perfil."
+        return 1
+    }
+    
+    sleep 2
+    log_message "Perfil carregado com sucesso."
     return 0
 }
 
