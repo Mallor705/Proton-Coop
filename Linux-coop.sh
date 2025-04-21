@@ -80,7 +80,8 @@ find_joystick_event_nodes() {
         else
             break
         fi
-    done < <(find /dev/input/by-id/ -lname '*event-joystick' -o -lname '*event-gamepad' 2>/dev/null | sort)
+    done < <(find /dev/input/by-id/ \( -name '*event-joystick*' -o -name '*joystick*' -o -name '*gamepad*' \) -type l 2>/dev/null | sort)
+    log_message "Total de joysticks identificados: ${#_out_array[@]} - ${_out_array[*]}"
     if [[ ${#_out_array[@]} -lt 2 ]]; then
         log_message "ERRO: Menos de 2 joysticks encontrados em /dev/input/by-id/. Verifique se estão conectados."
         return 1
