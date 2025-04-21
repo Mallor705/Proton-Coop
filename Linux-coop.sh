@@ -173,10 +173,16 @@ terminate_instances() {
 # --- Script Principal ---
 
 # Verificação de Argumentos e Carregamento do Perfil
-if [ -z "$1" ]; { echo "Uso: $SCRIPT_NAME <nome_do_perfil>"; exit 1; }
+if [ -z "$1" ]; then
+  echo "Uso: $SCRIPT_NAME <nome_do_perfil>"
+  exit 1
+fi
 PROFILE_NAME="$1"
 PROFILE_FILE="$PROFILE_DIR/$PROFILE_NAME.profile"
-if [ ! -f "$PROFILE_FILE" ]; { echo "Erro: Perfil não encontrado: $PROFILE_FILE"; exit 1; }
+if [ ! -f "$PROFILE_FILE" ]; then
+  echo "Erro: Perfil não encontrado: $PROFILE_FILE"
+  exit 1
+fi
 
 log_message "Carregando perfil: $PROFILE_NAME"
 source "$PROFILE_FILE"
@@ -193,7 +199,11 @@ missing_vars=()
 [[ ${#PLAYER_PHYSICAL_DEVICE_IDS[@]} -eq 0 && "$NUM_PLAYERS" -gt 0 ]] && missing_vars+=("PLAYER_PHYSICAL_DEVICE_IDS (array não pode ser vazio para NUM_PLAYERS > 0)")
 [[ ${#PLAYER_PHYSICAL_DEVICE_IDS[@]} -ne "$NUM_PLAYERS" && "$NUM_PLAYERS" -gt 0 ]] && missing_vars+=("Número de elementos em PLAYER_PHYSICAL_DEVICE_IDS (${#PLAYER_PHYSICAL_DEVICE_IDS[@]}) diferente de NUM_PLAYERS ($NUM_PLAYERS)")
 
-if [ ${#missing_vars[@]} -gt 0 ]; { echo "Erro: Variáveis obrigatórias faltando no perfil:"; printf " - %s\n" "${missing_vars[@]}"; exit 1; }
+if [ ${#missing_vars[@]} -gt 0 ]; then
+  echo "Erro: Variáveis obrigatórias faltando no perfil:"
+  printf " - %s\n" "${missing_vars[@]}"
+  exit 1
+fi
 
 # Verificações de Dependências
 log_message "Verificando dependências..."
