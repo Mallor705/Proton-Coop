@@ -16,8 +16,8 @@ PREFIX_BASE_DIR="$HOME/.local/share/linux-coop/prefixes" # Diretório base para 
 INPUTPLUMBER_TEMP_CONFIG_DIR="/tmp/linux-coop-inputplumber-configs"
 INPUTPLUMBER_SERVICE_NAME="inputplumber.service" # Nome correto do serviço systemd
 INPUTPLUMBER_CTL_CMD="inputplumberctl" # Comando hipotético de controle do InputPlumber, ajustar conforme necessário.
-INPUTPLUMBER_DBUS_SERVICE="org.shadowblip.InputPlumber"
-INPUTPLUMBER_DBUS_PATH="/org/shadowblip/InputPlumber"
+INPUTPLUMBER_DBUS_SERVICE="org.shadowblip.InputPlumber"  # Usa a interface padrão do D-Bus
+INPUTPLUMBER_DBUS_PATH="/org/shadowblip/InputPlumber"          # Caminho do objeto
 # Diretório para configs YAML temporárias do InputPlumber
 INPUTPLUMBER_TEMP_YAML_DIR="/tmp/linux-coop-ip-yamls"
 
@@ -153,7 +153,7 @@ EOF
 load_composite_device_via_dbus() {
     local yaml_file="$1"
     log_message "Tentando carregar definição de Composite Device via D-Bus: $yaml_file"
-    busctl call $INPUTPLUMBER_DBUS_SERVICE $INPUTPLUMBER_DBUS_PATH org.shadowblip.InputPlumber LoadCompositeDeviceDefinition "s" "$yaml_file"
+    busctl call $INPUTPLUMBER_DBUS_SERVICE $INPUTPLUMBER_DBUS_PATH org.freedesktop.DBus.ObjectManager AddDevice s "$yaml_file"
     if [ $? -ne 0 ]; then
         log_message "ERRO: Comando busctl para carregar Composite Device falhou para $yaml_file."
         return 1
