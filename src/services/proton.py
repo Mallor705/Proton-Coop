@@ -4,11 +4,13 @@ from ..core.config import Config
 from ..core.exceptions import ProtonNotFoundError
 
 class ProtonService:
+    """Serviço responsável por localizar e validar o Proton e diretórios do Steam."""
     def __init__(self, logger):
+        """Inicializa o serviço de Proton com logger."""
         self.logger = logger
     
     def find_proton_path(self, version: str) -> Tuple[Path, Path]:
-        """Find Proton executable and Steam root path"""
+        """Procura o executável do Proton e o diretório raiz do Steam para a versão informada."""
         self.logger.info(f"Searching for Proton: {version}")
         
         for steam_path in Config.STEAM_PATHS:
@@ -25,7 +27,7 @@ class ProtonService:
         raise ProtonNotFoundError(f"Proton '{version}' not found")
     
     def _search_proton_in_steam(self, steam_path: Path, version: str) -> Optional[Path]:
-        """Search for Proton in Steam directories"""
+        """Procura o Proton nos diretórios do Steam."""
         search_dirs = [
             steam_path / "steamapps/common",
             steam_path / "compatibilitytools.d"

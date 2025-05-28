@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import List
 
 class Config:
+    """Configurações globais do Linux-Coop, incluindo diretórios, comandos e caminhos do Steam."""
     SCRIPT_DIR = Path(__file__).parent.parent.parent
     PROFILE_DIR = SCRIPT_DIR / "profiles"
     LOG_DIR = Path.home() / ".local/share/linux-coop/logs"
@@ -19,4 +20,5 @@ class Config:
     
     @classmethod
     def get_profile_path(cls, profile_name: str) -> Path:
+        """Retorna o caminho do arquivo de perfil a partir do nome informado."""
         return cls.PROFILE_DIR / f"{profile_name}.profile"

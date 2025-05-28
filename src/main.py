@@ -6,4 +6,5 @@ Linux-Coop: Launch multiple game instances using Proton and Gamescope
 from cli.commands import main
 
 if __name__ == "__main__":
-    main()
+    import sys
+    main(sys.argv[1:])
