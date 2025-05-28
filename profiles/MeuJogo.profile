@@ -2,7 +2,7 @@
 GAME_NAME="Palworld"
 
 # Caminho do Executável
-EXE_PATH="/mnt/games/messi/Games/Steam/steamapps/common/Palworld/Pal/Binaries/Win64/Palworld-Win64-Shipping.exe"
+EXE_PATH="/mnt/games/messi/Games/Steam/steamapps/common/Palworld/Palworld.exe"
 
 # Versão do Proton
 PROTON_VERSION="GE-Proton10-3"
