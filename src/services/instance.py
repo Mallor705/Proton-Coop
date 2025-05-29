@@ -28,9 +28,16 @@ class InstanceService:
     
     def launch_instances(self, profile: GameProfile, profile_name: str):
         """Lança todas as instâncias do jogo conforme o perfil fornecido."""
-        proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version)
+        if profile.is_native:
+            proton_path = None
+            steam_root = None
+        else:
+            proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version)
         
-        self.process_service.cleanup_previous_instances(proton_path, profile.exe_path)
+        if profile.is_native:
+            self.process_service.cleanup_previous_instances(None, profile.exe_path)
+        else:
+            self.process_service.cleanup_previous_instances(proton_path, profile.exe_path)
         
         Config.LOG_DIR.mkdir(parents=True, exist_ok=True)
         Config.PREFIX_BASE_DIR.mkdir(parents=True, exist_ok=True)
@@ -68,42 +75,61 @@ class InstanceService:
                               proton_path: Path, steam_root: Path):
         """Lança uma única instância do jogo."""
         self.logger.info(f"Preparing instance {instance.instance_num}...")
-        
-        env = self._prepare_environment(instance, steam_root)
+        env = self._prepare_environment(instance, steam_root, profile)
         cmd = self._build_command(profile, proton_path)
-        
         self.logger.info(f"Launching instance {instance.instance_num} (Log: {instance.log_file})")
-        
         pid = self.process_service.launch_instance(cmd, instance.log_file, env)
         instance.pid = pid
-        
         self.logger.info(f"Instance {instance.instance_num} started with PID: {pid}")
     
-    def _prepare_environment(self, instance: GameInstance, steam_root: Path) -> dict:
-        """Prepara as variáveis de ambiente para a instância do jogo."""
+    def _prepare_environment(self, instance: GameInstance, steam_root: Path, profile: GameProfile = None) -> dict:
+        """Prepara as variáveis de ambiente para a instância do jogo, incluindo isolamento de controles."""
         env = os.environ.copy()
-        env.update({
-            'STEAM_COMPAT_CLIENT_INSTALL_PATH': str(steam_root),
-            'STEAM_COMPAT_DATA_PATH': str(instance.prefix_dir),
-            'WINEPREFIX': str(instance.prefix_dir / 'pfx'),
-            'DXVK_ASYNC': '1',
-            'PROTON_LOG': '1',
-            'PROTON_LOG_DIR': str(Config.LOG_DIR)
-        })
+        if not profile.is_native:
+            env.update({
+                'STEAM_COMPAT_CLIENT_INSTALL_PATH': str(steam_root),
+                'STEAM_COMPAT_DATA_PATH': str(instance.prefix_dir),
+                'WINEPREFIX': str(instance.prefix_dir / 'pfx'),
+                'DXVK_ASYNC': '1',
+                'PROTON_LOG': '1',
+                'PROTON_LOG_DIR': str(Config.LOG_DIR)
+            })
+        # Isolamento de controles SDL
+        if profile and profile.player_physical_device_ids:
+            idx = instance.instance_num - 1
+            if idx < len(profile.player_physical_device_ids):
+                device = profile.player_physical_device_ids[idx]
+                if device:
+                    env['SDL_JOYSTICK_DEVICE'] = device
+                else:
+                    outros = [d for d in profile.player_physical_device_ids if d]
+                    if outros:
+                        env['SDL_GAMECONTROLLER_IGNORE_DEVICES'] = ';'.join(outros)
+        print(f"[DEBUG] Ambiente da instância {instance.instance_num}: {env}")
         return env
     
     def _build_command(self, profile: GameProfile, proton_path: Path) -> List[str]:
-        """Monta o comando para executar o gamescope e o Proton."""
-        return [
-            'gamescope',
-            '-W', str(profile.instance_width),
-            '-H', str(profile.instance_height),
-            '-f',
-            '--',
-            str(proton_path),
-            'run',
-            str(profile.exe_path)
-        ]
+        """Monta o comando para executar o gamescope e o jogo (nativo ou via Proton)."""
+        if profile.is_native:
+            return [
+                'gamescope',
+                '-W', str(profile.instance_width),
+                '-H', str(profile.instance_height),
+                '-f',
+                '--',
+                str(profile.exe_path)
+            ]
+        else:
+            return [
+                'gamescope',
+                '-W', str(profile.instance_width),
+                '-H', str(profile.instance_height),
+                '-f',
+                '--',
+                str(proton_path),
+                'run',
+                str(profile.exe_path)
+            ]
     
     def monitor_and_wait(self):
         """Monitora as instâncias até que todas sejam finalizadas."""

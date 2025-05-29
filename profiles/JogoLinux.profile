@@ -5,7 +5,7 @@ GAME_NAME="Palworld"
 EXE_PATH="/mnt/games/messi/Games/Steam/steamapps/common/Palworld/Palworld.exe"
 
 # Versão do Proton
-PROTON_VERSION="GE-Proton10-3"
+# PROTON_VERSION="GE-Proton10-3"
 
 # Número de jogadores/instâncias
 NUM_PLAYERS=2
@@ -28,4 +28,4 @@ PLAYER_PHYSICAL_DEVICE_IDS=(
 # Garantir que a ordem aqui corresponda à ordem dos jogadores
 
 # (Opcional) Argumentos do jogo
-GAME_ARGS="-dx12"
+# GAME_ARGS="-dx12"

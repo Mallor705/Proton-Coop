@@ -50,7 +50,7 @@ Permite jogar títulos Windows em modo cooperativo local no Linux, rodando múlt
 Para evitar erros de importação relativa, execute o comando principal da seguinte forma, a partir da raiz do projeto:
 
 ```bash
-python -m src.cli.commands <nome_do_perfil>
+python ./linuxcoop.py <nome_do_perfil>
 ```
 
 Certifique-se de que o diretório `src` está presente e que o Python está na versão correta.
