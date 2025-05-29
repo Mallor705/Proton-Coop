@@ -84,16 +84,16 @@ class InstanceService:
     
     def _prepare_environment(self, instance: GameInstance, steam_root: Path, profile: GameProfile = None) -> dict:
         """Prepara as variáveis de ambiente para a instância do jogo, incluindo isolamento de controles."""
+        # Começa com uma cópia completa do ambiente do usuário
         env = os.environ.copy()
         if not profile.is_native:
-            env.update({
-                'STEAM_COMPAT_CLIENT_INSTALL_PATH': str(steam_root),
-                'STEAM_COMPAT_DATA_PATH': str(instance.prefix_dir),
-                'WINEPREFIX': str(instance.prefix_dir / 'pfx'),
-                'DXVK_ASYNC': '1',
-                'PROTON_LOG': '1',
-                'PROTON_LOG_DIR': str(Config.LOG_DIR)
-            })
+            # Apenas atualiza/adiciona as variáveis do Proton
+            env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
+            env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
+            env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
+            env['DXVK_ASYNC'] = '1'
+            env['PROTON_LOG'] = '1'
+            env['PROTON_LOG_DIR'] = str(Config.LOG_DIR)
         # Isolamento de controles SDL
         if profile and profile.player_physical_device_ids:
             idx = instance.instance_num - 1
@@ -102,9 +102,7 @@ class InstanceService:
                 if device:
                     env['SDL_JOYSTICK_DEVICE'] = device
                 else:
-                    outros = [d for d in profile.player_physical_device_ids if d]
-                    if outros:
-                        env['SDL_GAMECONTROLLER_IGNORE_DEVICES'] = ';'.join(outros)
+                    env['SDL_GAMECONTROLLER_IGNORE_DEVICES'] = '045e:028e'
         print(f"[DEBUG] Ambiente da instância {instance.instance_num}: {env}")
         return env
     
