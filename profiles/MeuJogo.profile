@@ -22,8 +22,8 @@ VIRTUAL_DEVICE_BASENAME="virtual-gamepad-p"
 # Array com identificadores PERSISTENTES dos controles FÍSICOS
 # Use caminhos de /dev/input/by-id/* ou nomes/IDs únicos
 PLAYER_PHYSICAL_DEVICE_IDS=(
-  "/dev/input/by-id/usb-045e_Gamesir-T4w_1.39-event-joystick" # Jogador 1
-  "" # Jogador 2
+  "/dev/input/by-id/usb-045e_Gamesir-T4w_1.39-event-joystick" # Jogador 1 
+  "/dev/input/by-id/usb-8BitDo_8BitDo_Ultimate_wireless_Controller_for_PC_4057CAD817E4-event-joystick" # Jogador 2
 )
 # Garantir que a ordem aqui corresponda à ordem dos jogadores
 

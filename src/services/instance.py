@@ -85,9 +85,8 @@ class InstanceService:
     
     def _prepare_environment(self, instance: GameInstance, steam_root: Path, profile: GameProfile = None) -> dict:
         """Prepara as variáveis de ambiente para a instância do jogo, incluindo isolamento de controles."""
-        # Começa com uma cópia completa do ambiente do usuário
         env = os.environ.copy()
-        env['PATH'] = os.environ['PATH']  # Garante que o PATH seja passado corretamente
+        env['PATH'] = os.environ['PATH']
         if not profile.is_native:
             env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
             env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
@@ -95,23 +94,37 @@ class InstanceService:
             env['DXVK_ASYNC'] = '1'
             env['PROTON_LOG'] = '1'
             env['PROTON_LOG_DIR'] = str(Config.LOG_DIR)
-        # Isolamento de controles SDL
+
+        assigned_device_path = None
         if profile and profile.player_physical_device_ids:
             idx = instance.instance_num - 1
-            if idx < len(profile.player_physical_device_ids):
-                device = profile.player_physical_device_ids[idx]
-                if device:
-                    env['SDL_JOYSTICK_DEVICE'] = device
+            if 0 <= idx < len(profile.player_physical_device_ids):
+                device_from_profile = profile.player_physical_device_ids[idx]
+                # Tratar string vazia explicitamente como "sem dispositivo"
+                if device_from_profile and device_from_profile.strip(): 
+                    if Path(device_from_profile).exists():
+                        self.logger.info(f"Instance {instance.instance_num}: Valid device '{device_from_profile}' found in profile and host. Assigning for SDL.")
+                        assigned_device_path = device_from_profile
+                    else:
+                        self.logger.warning(f"Instance {instance.instance_num}: Device '{device_from_profile}' from profile not found on host.")
                 else:
-                    env['SDL_GAMECONTROLLER_IGNORE_DEVICES'] = '045e:028e'
-        print(f"[DEBUG] Ambiente da instância {instance.instance_num}: {env}")
+                    self.logger.info(f"Instance {instance.instance_num}: No device configured in profile for this instance (empty string).")
+            # else: Instance number out of bounds for device list or list is shorter than num_players
+
+        if assigned_device_path:
+            env['SDL_JOYSTICK_DEVICE'] = assigned_device_path
+            self.logger.info(f"Instance {instance.instance_num}: SDL_JOYSTICK_DEVICE set to '{assigned_device_path}'")
+        else:
+            env['SDL_JOYSTICK_DEVICE'] = "/dev/null"
+            self.logger.info(f"Instance {instance.instance_num}: SDL_JOYSTICK_DEVICE set to '/dev/null'.")
+        
+        # print(f"[DEBUG] Ambiente da instância {instance.instance_num}: {env}")
         return env
     
     def _build_command(self, profile: GameProfile, proton_path: Path, instance: GameInstance = None) -> List[str]:
         """Monta o comando para executar o gamescope e o jogo (nativo ou via Proton), usando bwrap para isolar o controle."""
         base_cmd = []
         gamescope_path = '/usr/bin/gamescope'
-        # Se for jogo nativo, não usa Proton
         if profile.is_native:
             base_cmd = [
                 gamescope_path,
@@ -132,32 +145,44 @@ class InstanceService:
                 'run',
                 str(profile.exe_path)
             ]
-         # Comando bwrap com isolamento mínimo
+        
         bwrap_cmd = [
             'bwrap',
-            # Isolamento essencial
             '--dev-bind', '/', '/',
             '--proc', '/proc',
             '--tmpfs', '/tmp',
-            
-            # Permissões especiais para dispositivos
+            '--tmpfs', '/dev/input',
             '--chdir', '/',
         ]
         
-        # Isolamento específico de dispositivos de controle
+        assigned_device_path_for_bwrap = None
         if profile and profile.player_physical_device_ids and instance:
             idx = instance.instance_num - 1
-            if idx < len(profile.player_physical_device_ids):
-                device = profile.player_physical_device_ids[idx]
-                if device:
-                    # Permitir apenas o dispositivo específico
-                    bwrap_cmd += [
-                        '--dev-bind', device, device,
-                        '--ro-bind', '/dev/input', '/dev/input'
-                    ]
-        
+            if 0 <= idx < len(profile.player_physical_device_ids):
+                device_from_profile = profile.player_physical_device_ids[idx]
+                # Tratar string vazia explicitamente como "sem dispositivo"
+                if device_from_profile and device_from_profile.strip(): 
+                    device_path_obj = Path(device_from_profile)
+                    if device_path_obj.exists() and device_path_obj.is_char_device():
+                        self.logger.info(f"Instance {instance.instance_num}: Binding device '{device_from_profile}' with bwrap.")
+                        assigned_device_path_for_bwrap = device_from_profile
+                    elif not device_path_obj.exists():
+                        self.logger.warning(f"Instance {instance.instance_num}: Device '{device_from_profile}' from profile not found on host. Not binding with bwrap.")
+                    else: # Exists but not a char device
+                        self.logger.warning(f"Instance {instance.instance_num}: Device '{device_from_profile}' from profile is not a character device. Not binding with bwrap.")
+                else:
+                    self.logger.info(f"Instance {instance.instance_num}: No device configured in profile for this instance (empty string). Not binding any specific device with bwrap.")
+                        
+        if assigned_device_path_for_bwrap:
+            bwrap_cmd += ['--dev-bind', assigned_device_path_for_bwrap, assigned_device_path_for_bwrap]
+            self.logger.info(f"Instance {instance.instance_num}: bwrap will bind '{assigned_device_path_for_bwrap}'.")
+        else:
+            self.logger.info(f"Instance {instance.instance_num}: No specific device to bind with bwrap. /dev/input will be isolated and likely empty of joysticks.")
+
+        final_bwrap_cmd_str = ' '.join(bwrap_cmd + base_cmd)
+        self.logger.info(f"Instance {instance.instance_num}: Full bwrap command: {final_bwrap_cmd_str}")
+
         return bwrap_cmd + base_cmd
-        # return base_cmd
 
     
     def monitor_and_wait(self):
