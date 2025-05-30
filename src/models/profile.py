@@ -14,6 +14,8 @@ class GameProfile(BaseModel):
     player_physical_device_ids: List[str] = Field(default_factory=list, alias="PLAYER_PHYSICAL_DEVICE_IDS")
     player_mouse_event_paths: List[str] = Field(default_factory=list, alias="PLAYER_MOUSE_EVENT_PATHS")
     player_keyboard_event_paths: List[str] = Field(default_factory=list, alias="PLAYER_KEYBOARD_EVENT_PATHS")
+    app_id: Optional[str] = Field(default=None, alias="APP_ID")
+    game_args: Optional[str] = Field(default=None, alias="GAME_ARGS")
     is_native: bool = False
     
     @validator('num_players')
@@ -70,6 +72,7 @@ class GameProfile(BaseModel):
                         value = int(value)
                     elif key == 'EXE_PATH':
                         value = Path(value)
+                    # Para GAME_ARGS e outros campos string, o valor já está correto
                     profile_vars[key] = value
         
         # Detecta se é nativo

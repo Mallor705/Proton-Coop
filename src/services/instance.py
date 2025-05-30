@@ -87,6 +87,11 @@ class InstanceService:
         """Prepara as variáveis de ambiente para a instância do jogo, incluindo isolamento de controles e configuração XKB."""
         env = os.environ.copy()
         env['PATH'] = os.environ['PATH']
+
+        # Limpar variáveis Python potencialmente conflitantes
+        env.pop('PYTHONHOME', None)
+        env.pop('PYTHONPATH', None)
+
         if not profile.is_native:
             env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
             env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
@@ -94,6 +99,14 @@ class InstanceService:
             env['DXVK_ASYNC'] = '1'
             env['PROTON_LOG'] = '1'
             env['PROTON_LOG_DIR'] = str(Config.LOG_DIR)
+            env['PROTON_VERB'] = 'waitforexitandrun'
+            env['DISABLE_PROTONFIXES_TEST_CHECK'] = '1'
+            env['PROTON_DUMP_DEBUG_COMMANDS'] = '1'
+            env['PROTONFIXES_LOGLEVEL'] = 'DEBUG'
+            if profile.app_id:
+                env['SteamAppId'] = profile.app_id
+                env['SteamGameId'] = profile.app_id
+                self.logger.info(f"Instance {instance.instance_num}: Setting SteamAppId={profile.app_id} and SteamGameId={profile.app_id}")
 
         # Configuração XKB para layout de teclado
         xkb_vars = [
@@ -186,6 +199,12 @@ class InstanceService:
             self.logger.info(f"Instance {instance.instance_num}: Using dedicated mouse and keyboard. Adding --grab and --force-grab-cursor to Gamescope.")
             gamescope_cli_options.extend(['--grab', '--force-grab-cursor'])
         
+        # Adiciona os argumentos do jogo definidos no perfil, se houver
+        game_specific_args = []
+        if profile.game_args:
+            game_specific_args = profile.game_args.split()
+            self.logger.info(f"Instance {instance.instance_num}: Adding game arguments: {game_specific_args}")
+            
         base_cmd_prefix = gamescope_cli_options + ['--'] # Separador para o comando a ser executado
 
         base_cmd = []
@@ -193,18 +212,27 @@ class InstanceService:
             base_cmd = list(base_cmd_prefix) 
             if profile.exe_path:
                 base_cmd.append(str(profile.exe_path))
+                base_cmd.extend(game_specific_args)
         else:
             base_cmd = list(base_cmd_prefix)
             if proton_path and profile.exe_path:
                 base_cmd.extend([str(proton_path), 'run', str(profile.exe_path)])
+                base_cmd.extend(game_specific_args)
         
         bwrap_cmd = [
             'bwrap',
             '--dev-bind', '/', '/',
             '--proc', '/proc',
             '--tmpfs', '/tmp',
-            '--chdir', '/',
+            '--cap-add', 'all',
         ]
+        
+        # Ensure ProtonFixes config directory is accessible inside bwrap
+        protonfixes_config_dir = Path.home() / '.config' / 'protonfixes'
+        # This directory is created in launch_instances, so it should exist on the host.
+        # We bind it to the same path inside the sandbox.
+        bwrap_cmd.extend(['--bind', str(protonfixes_config_dir), str(protonfixes_config_dir)])
+        self.logger.info(f"Instance {instance.instance_num}: Added bwrap bind for ProtonFixes: {protonfixes_config_dir}")
         
         device_paths_to_bind = []
 
