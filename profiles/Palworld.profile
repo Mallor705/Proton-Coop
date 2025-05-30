@@ -40,3 +40,17 @@ GAME_ARGS="-dx12"
 
 # Adicionado AppID do Palworld
 APP_ID="1623730"
+
+PLAYERS=
+      {
+        "account_name": "Jogador1",
+        "language": "brazilian",
+        "listen_port": "47584",
+        "user_steam_id": "76561198000000001"
+      },
+      {
+        "account_name": "Jogador2",
+        "language": "brazilian",
+        "listen_port": "47584",
+        "user_steam_id": "76561198000000002"
+      }

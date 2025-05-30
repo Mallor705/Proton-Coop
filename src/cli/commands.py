@@ -3,7 +3,7 @@ import signal
 import subprocess
 from ..core.config import Config
 from ..core.logger import Logger
-from ..core.exceptions import LinuxCoopError
+from ..core.exceptions import LinuxCoopError, ProfileNotFoundError
 from ..models.profile import GameProfile
 from ..services.instance import InstanceService
 
@@ -41,13 +41,53 @@ class LinuxCoopCLI:
             self._prompt_sudo()
             print("[DEBUG] Chamando validate_dependencies()")
             self.instance_service.validate_dependencies()
-            print("[DEBUG] Chamando get_profile_path()")
-            profile_path = Config.get_profile_path(profile_name)
-            print(f"[DEBUG] profile_path: {profile_path}")
+            
+            # Lógica para determinar o caminho do perfil (JSON ou .profile)
+            profile_path_json = Config.PROFILE_DIR / f"{profile_name}.json"
+            profile_path_profile = Config.get_profile_path(profile_name) # Este já retorna com .profile
+
+            profile_to_load = None
+            if profile_path_json.exists():
+                profile_to_load = profile_path_json
+                self.logger.info(f"Loading JSON profile: {profile_to_load}")
+            elif profile_path_profile.exists():
+                profile_to_load = profile_path_profile
+                self.logger.info(f"Loading .profile: {profile_to_load}")
+            else:
+                self.logger.error(f"Profile not found for '{profile_name}'. Looked for {profile_path_json} and {profile_path_profile}")
+                raise ProfileNotFoundError(f"Profile '{profile_name}' not found as .json or .profile")
+
+            print(f"[DEBUG] profile_path (selected): {profile_to_load}")
             print("[DEBUG] Chamando GameProfile.load_from_file()")
-            profile = GameProfile.load_from_file(profile_path)
+            profile = GameProfile.load_from_file(profile_to_load)
+            
+            # Usa effective_num_players para determinar o número de instâncias
+            # Se profile.player_configs foi carregado, ele será a fonte da verdade para o número de jogadores.
+            # Se não, profile.num_players (do arquivo de perfil) será usado.
+            # Esta lógica assume que se player_configs está presente, seu tamanho define num_players.
+            # A validação de num_players >= 2 ainda ocorre no Pydantic.
+            # Se num_players for definido no JSON e player_configs também, precisamos decidir qual tem precedência
+            # ou garantir que sejam consistentes. O Pydantic validará num_players como um campo obrigatório
+            # se não for inferido de player_configs no load_from_file.
+            # A lógica atual em load_from_file infere num_players de len(players) se num_players não estiver no JSON.
+            # Se ambos estiverem, o num_players do JSON será usado, mas effective_num_players ainda pode ser usado aqui.
+
+            self.logger.info(f"Loading profile: {profile.game_name} for {profile.effective_num_players} players")
+            # Passa profile.effective_num_players se a lógica de lançamento depender disso explicitamente,
+            # ou garante que profile.num_players foi corretamente ajustado/validado no load.
+            # Por enquanto, launch_instances usa profile.num_players diretamente.
+            # Se effective_num_players for diferente de profile.num_players, isso pode ser um problema.
+            # O ideal é que profile.num_players seja a única fonte de verdade após o carregamento.
+            # O validador de num_players já garante que seja >=2.
+            # Se player_configs estiver presente, o load_from_file já ajusta num_players se não estiver no json.
+            # Se num_players ESTIVER no json e for diferente de len(player_configs), Pydantic não vai reclamar por padrão.
+            # Poderíamos adicionar um root_validator em GameProfile para garantir consistência se ambos forem fornecidos.
+
+            # Para simplificar, vamos confiar que profile.num_players é a fonte correta após o carregamento.
+            # O load_from_file tenta preencher num_players se ausente e players está presente.
+
             print("[DEBUG] Chamando launch_instances()")
-            self.logger.info(f"Loading profile: {profile_name}")
+            # A assinatura de launch_instances espera profile.num_players.
             self.instance_service.launch_instances(profile, profile_name)
             print("[DEBUG] Chamando monitor_and_wait()")
             self.instance_service.monitor_and_wait()

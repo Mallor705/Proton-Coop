@@ -47,8 +47,10 @@ class InstanceService:
         
         self.logger.info(f"Launching {profile.num_players} instance(s) of '{profile.game_name}'...")
         
+        original_game_path = profile.exe_path.parent
+        
         for instance in instances:
-            self._launch_single_instance(instance, profile, proton_path, steam_root)
+            self._launch_single_instance(instance, profile, proton_path, steam_root, original_game_path)
             time.sleep(5)
         
         self.logger.info(f"All {profile.num_players} instances launched")
@@ -72,12 +74,96 @@ class InstanceService:
             instances.append(instance)
         return instances
     
+    def _create_game_directory_symlink_structure(self, instance: GameInstance, original_game_path: Path, original_exe_path: Path, profile: GameProfile) -> Path:
+        """Cria uma estrutura de diretórios espelhada com symlinks para a pasta original do jogo.
+        Retorna o caminho para o link simbólico do executável principal.
+        """
+        instance_game_root = instance.prefix_dir / "game_files"
+        instance_game_root.mkdir(parents=True, exist_ok=True)
+        
+        self.logger.info(f"Instance {instance.instance_num}: Creating symlink structure for {original_game_path} at {instance_game_root}")
+        
+        # Determina o caminho relativo do executável original em relação à pasta raiz do jogo.
+        try:
+            relative_exe_path = original_exe_path.relative_to(original_game_path)
+        except ValueError as e:
+            # Isso pode acontecer se original_exe_path não estiver dentro de original_game_path
+            self.logger.error(f"Instance {instance.instance_num}: Executable path {original_exe_path} is not inside game path {original_game_path}. Error: {e}")
+            raise
+
+        # Caminho esperado para o link simbólico do executável
+        symlinked_exe_path_target = instance_game_root / relative_exe_path
+
+        config_files_to_copy = [
+            "account_name.txt", 
+            "language.txt", 
+            "listen_port.txt", 
+            "user_steam_id.txt"
+        ]
+
+        for item in original_game_path.rglob("*"):
+            relative_item_path = item.relative_to(original_game_path)
+            target_path_for_item = instance_game_root / relative_item_path # Renomeado para maior clareza
+            
+            # Garante que o diretório pai do item (seja arquivo ou diretório) exista na estrutura de destino
+            target_path_for_item.parent.mkdir(parents=True, exist_ok=True)
+            
+            if item.is_dir():
+                target_path_for_item.mkdir(parents=True, exist_ok=True)
+            else: # É um arquivo
+                if target_path_for_item.exists() or target_path_for_item.is_symlink():
+                    target_path_for_item.unlink()
+                
+                if item.name in config_files_to_copy:
+                    shutil.copy2(item, target_path_for_item)
+                    self.logger.info(f"Instance {instance.instance_num}: Copied config file: {target_path_for_item} from {item}")
+                    
+                    # Agora, verifica se há configurações específicas da instância para este arquivo
+                    if profile.player_configs and (instance.instance_num -1) < len(profile.player_configs):
+                        instance_config = profile.player_configs[instance.instance_num - 1]
+                        content_to_write = None
+                        if item.name == "account_name.txt" and instance_config.account_name is not None:
+                            content_to_write = instance_config.account_name
+                        elif item.name == "language.txt" and instance_config.language is not None:
+                            content_to_write = instance_config.language
+                        elif item.name == "listen_port.txt" and instance_config.listen_port is not None:
+                            content_to_write = instance_config.listen_port
+                        elif item.name == "user_steam_id.txt" and instance_config.user_steam_id is not None:
+                            content_to_write = instance_config.user_steam_id
+                        
+                        if content_to_write is not None:
+                            with open(target_path_for_item, 'w') as f_config:
+                                f_config.write(str(content_to_write) + '\n') # Adiciona newline para consistência
+                            self.logger.info(f"Instance {instance.instance_num}: Customized config file {target_path_for_item} with value: '{content_to_write}'") 
+                else:
+                    target_path_for_item.symlink_to(item)
+                    self.logger.info(f"Instance {instance.instance_num}: Created symlink: {target_path_for_item} -> {item}")
+
+        # Verifica se o link simbólico para o executável foi criado como esperado.
+        if not symlinked_exe_path_target.exists() or not symlinked_exe_path_target.is_symlink():
+            self.logger.error(f"Instance {instance.instance_num}: Expected symlinked executable at {symlinked_exe_path_target} was not found or is not a symlink.")
+            # Adicionalmente, verificar se o alvo do symlink é o executável original
+            if symlinked_exe_path_target.is_symlink() and Path(os.readlink(str(symlinked_exe_path_target))) != original_exe_path:
+                 self.logger.error(f"Instance {instance.instance_num}: Symlink {symlinked_exe_path_target} points to {os.readlink(str(symlinked_exe_path_target))}, not {original_exe_path}") 
+            raise FileNotFoundError(f"Failed to create or verify symlink for executable {original_exe_path} at {symlinked_exe_path_target}")
+        
+        self.logger.info(f"Instance {instance.instance_num}: Symlinked executable verified at: {symlinked_exe_path_target}")
+        return symlinked_exe_path_target
+
     def _launch_single_instance(self, instance: GameInstance, profile: GameProfile, 
-                              proton_path: Path, steam_root: Path):
+                              proton_path: Path, steam_root: Path, original_game_path: Path):
         """Lança uma única instância do jogo."""
         self.logger.info(f"Preparing instance {instance.instance_num}...")
+        
+        symlinked_executable_path = self._create_game_directory_symlink_structure(
+            instance, 
+            original_game_path, 
+            profile.exe_path,
+            profile # Passando o objeto profile completo
+        )
+
         env = self._prepare_environment(instance, steam_root, profile)
-        cmd = self._build_command(profile, proton_path, instance)
+        cmd = self._build_command(profile, proton_path, instance, symlinked_executable_path)
         self.logger.info(f"Launching instance {instance.instance_num} (Log: {instance.log_file})")
         pid = self.process_service.launch_instance(cmd, instance.log_file, env)
         instance.pid = pid
@@ -147,7 +233,7 @@ class InstanceService:
         
         return env
     
-    def _build_command(self, profile: GameProfile, proton_path: Path, instance: GameInstance = None) -> List[str]:
+    def _build_command(self, profile: GameProfile, proton_path: Path, instance: GameInstance, symlinked_exe_path: Path) -> List[str]:
         """Monta o comando para executar o gamescope e o jogo (nativo ou via Proton), usando bwrap para isolar o controle."""
         instance_idx = instance.instance_num - 1
 
@@ -210,13 +296,13 @@ class InstanceService:
         base_cmd = []
         if profile.is_native:
             base_cmd = list(base_cmd_prefix) 
-            if profile.exe_path:
-                base_cmd.append(str(profile.exe_path))
+            if symlinked_exe_path:
+                base_cmd.append(str(symlinked_exe_path))
                 base_cmd.extend(game_specific_args)
         else:
             base_cmd = list(base_cmd_prefix)
-            if proton_path and profile.exe_path:
-                base_cmd.extend([str(proton_path), 'run', str(profile.exe_path)])
+            if proton_path and symlinked_exe_path:
+                base_cmd.extend([str(proton_path), 'run', str(symlinked_exe_path)])
                 base_cmd.extend(game_specific_args)
         
         bwrap_cmd = [
