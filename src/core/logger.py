@@ -32,3 +32,7 @@ class Logger:
     def error(self, message: str):
         """Loga uma mensagem de erro."""
         self.logger.error(message)
+
+    def warning(self, message: str):
+        """Loga uma mensagem de aviso."""
+        self.logger.warning(message)
