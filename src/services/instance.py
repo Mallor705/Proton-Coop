@@ -183,12 +183,12 @@ class InstanceService:
             env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
             env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
             env['DXVK_ASYNC'] = '1'
-            env['PROTON_LOG'] = '1'
-            env['PROTON_LOG_DIR'] = str(Config.LOG_DIR)
-            env['PROTON_VERB'] = 'waitforexitandrun'
-            env['DISABLE_PROTONFIXES_TEST_CHECK'] = '1'
-            env['PROTON_DUMP_DEBUG_COMMANDS'] = '1'
-            env['PROTONFIXES_LOGLEVEL'] = 'DEBUG'
+            # env['PROTON_LOG'] = '1'
+            # env['PROTON_LOG_DIR'] = str(Config.LOG_DIR)
+            # env['PROTON_VERB'] = 'waitforexitandrun'
+            # env['DISABLE_PROTONFIXES_TEST_CHECK'] = '1'
+            # env['PROTON_DUMP_DEBUG_COMMANDS'] = '1'
+            # env['PROTONFIXES_LOGLEVEL'] = 'DEBUG'
             if profile.app_id:
                 env['SteamAppId'] = profile.app_id
                 env['SteamGameId'] = profile.app_id
@@ -277,7 +277,9 @@ class InstanceService:
             gamescope_path,
             '-W', str(profile.instance_width),
             '-H', str(profile.instance_height),
-            '-f', # Fullscreen
+            '-w', str(profile.instance_width),
+            '-h', str(profile.instance_height),
+            '-f',
             '--adaptive-sync',
         ]
 
