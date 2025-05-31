@@ -25,11 +25,11 @@
     ],
     "player_mouse_event_paths": [
         "/dev/input/by-id/usb-Rapoo_Rapoo_Gaming_Device-event-mouse",
-        "/dev/input/by-id/usb-04d9_USB_Gaming_Mouse-event-mouse"
+        ""
     ],
     "player_keyboard_event_paths": [
         "/dev/input/by-id/usb-0416_NA87-if01-event-kbd",
-        "/dev/input/by-id/usb-Evision_RGB_Keyboard-event-kbd"
+        ""
     ],
     "app_id": "1623730",
     "game_args": "-dx12",

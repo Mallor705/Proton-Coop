@@ -71,4 +71,6 @@ coverage.xml
 
 # Outros arquivos
 *.log
-# *.profile
+
+# Arquivos de configuração
+profiles/*.json

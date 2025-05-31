@@ -57,25 +57,39 @@ Certifique-se de que o diretório `src` está presente e que o Python está na v
 
 ## Como Usar
 
-### 1. Crie um perfil de jogo
+### 1. Configure um perfil de jogo
 
-Crie um arquivo em `profiles/` com o nome desejado e extensão `.profile`. Exemplo: `MeuJogo.profile`.
+Crie um arquivo JSON em `profiles/` com o nome desejado. Exemplo: `MeuJogo.json`.
 
 Exemplo de conteúdo:
-```bash
-GAME_NAME="Palworld"
-EXE_PATH="/caminho/para/Palworld.exe"
-PROTON_VERSION="GE-Proton10-3"
-NUM_PLAYERS=2
-INSTANCE_WIDTH=1920
-INSTANCE_HEIGHT=1080
-# (Opcional) Argumentos do jogo
-GAME_ARGS="-dx12"
-# (Opcional) IDs dos controles físicos
-PLAYER_PHYSICAL_DEVICE_IDS=(
-  "/dev/input/by-id/usb-Controller1-event-joystick"
-  "/dev/input/by-id/usb-Controller2-event-joystick"
-)
+```json
+{
+    "game_name": "Palworld",
+    "exe_path": "/caminho/para/Palworld.exe",
+    "proton_version": "GE-Proton10-3",
+    "num_players": 2,
+    "instance_width": 1920,
+    "instance_height": 1080,
+    "game_args": "-dx12",
+    "player_physical_device_ids": [
+        "/dev/input/by-id/usb-Controller1-event-joystick",
+        "/dev/input/by-id/usb-Controller2-event-joystick"
+    ],
+    "players": [
+      {
+        "account_name": "Jogador1",
+        "language": "brazilian",
+        "listen_port": "47584",
+        "user_steam_id": "76561198280659435"
+      },
+      {
+        "account_name": "Jogador2",
+        "language": "brazilian",
+        "listen_port": "47584",
+        "user_steam_id": "76561199508818215"
+      }
+    ]
+}
 ```
 
 ### 2. Execute o script principal

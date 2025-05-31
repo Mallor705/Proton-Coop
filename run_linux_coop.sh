@@ -19,6 +19,13 @@ if [ ! -f "$PYTHON_SCRIPT_PATH" ]; then
     exit 1
 fi
 
+# Verifica se o perfil JSON existe
+PROFILE_PATH="$SCRIPT_DIR_PATH/profiles/$1.json"
+if [ ! -f "$PROFILE_PATH" ]; then
+    echo "Erro: Perfil '$1.json' não encontrado em $SCRIPT_DIR_PATH/profiles/"
+    exit 1
+fi
+
 # Navega para o diretório do script .sh (raiz do projeto)
 # Isso é importante para que o linuxcoop.py possa resolver seus imports relativos corretamente
 cd "$SCRIPT_DIR_PATH" || exit

@@ -17,8 +17,3 @@ class Config:
     ]
     
     REQUIRED_COMMANDS = ["gamescope", "bwrap"]
-    
-    @classmethod
-    def get_profile_path(cls, profile_name: str) -> Path:
-        """Retorna o caminho do arquivo de perfil a partir do nome informado."""
-        return cls.PROFILE_DIR / f"{profile_name}.profile"
