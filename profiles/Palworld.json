@@ -23,7 +23,7 @@
     "/dev/input/by-id/usb-045e_Gamesir-T4w_1.39-event-joystick"
   ],
   "player_mouse_event_paths": [
-    "/dev/input/by-id/usb-Rapoo_Rapoo_Gaming_Device-event-mouse",
+    "/dev/input/by-id/usb-Rapoo_Rapoo_Gaming_Device_000000000000-event-mouse",
     ""
   ],
   "player_keyboard_event_paths": [
