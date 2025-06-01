@@ -1,4 +1,4 @@
-#!/bin/bash
+    #!/bin/bash
 
 # Verifica se um argumento (nome do perfil) foi fornecido
 if [ -z "$1" ]; then

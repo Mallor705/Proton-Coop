@@ -24,6 +24,12 @@ class Logger:
         console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setFormatter(formatter)
         self.logger.addHandler(console_handler)
+        
+        # File handler
+        log_file = self.log_dir / f"{self.logger.name}.log"
+        file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+        file_handler.setFormatter(formatter)
+        self.logger.addHandler(file_handler)
     
     def info(self, message: str):
         """Loga uma mensagem de informação."""

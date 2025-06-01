@@ -2,9 +2,10 @@ import os
 import time
 import shutil
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from ..core.config import Config
 from ..core.exceptions import DependencyError
+from ..core.logger import Logger
 from ..models.profile import GameProfile
 from ..models.instance import GameInstance
 from .proton import ProtonService
@@ -12,13 +13,13 @@ from .process import ProcessService
 
 class InstanceService:
     """Serviço responsável por gerenciar instâncias do jogo, incluindo validação de dependências, criação, lançamento e monitoramento."""
-    def __init__(self, logger):
+    def __init__(self, logger: Logger):
         """Inicializa o serviço de instâncias com logger, ProtonService e ProcessService."""
         self.logger = logger
         self.proton_service = ProtonService(logger)
         self.process_service = ProcessService(logger)
     
-    def validate_dependencies(self):
+    def validate_dependencies(self) -> None:
         """Valida se todos os comandos necessários estão disponíveis no sistema."""
         self.logger.info("Validating dependencies...")
         for cmd in Config.REQUIRED_COMMANDS:
@@ -26,18 +27,15 @@ class InstanceService:
                 raise DependencyError(f"Required command '{cmd}' not found")
         self.logger.info("Dependencies validated successfully")
     
-    def launch_instances(self, profile: GameProfile, profile_name: str):
+    def launch_instances(self, profile: GameProfile, profile_name: str) -> None:
         """Lança todas as instâncias do jogo conforme o perfil fornecido."""
         if profile.is_native:
             proton_path = None
             steam_root = None
         else:
-            proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version)
+            proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version or "Experimental")
         
-        if profile.is_native:
-            self.process_service.cleanup_previous_instances(None, profile.exe_path)
-        else:
-            self.process_service.cleanup_previous_instances(proton_path, profile.exe_path)
+        self.process_service.cleanup_previous_instances(proton_path, profile.exe_path)
         
         Config.LOG_DIR.mkdir(parents=True, exist_ok=True)
         (Path.home() / '.config/protonfixes').mkdir(parents=True, exist_ok=True)
@@ -151,7 +149,7 @@ class InstanceService:
         return symlinked_exe_path_target
 
     def _launch_single_instance(self, instance: GameInstance, profile: GameProfile, 
-                              proton_path: Path, steam_root: Path, original_game_path: Path):
+                              proton_path: Optional[Path], steam_root: Optional[Path], original_game_path: Path) -> None:
         """Lança uma única instância do jogo."""
         self.logger.info(f"Preparing instance {instance.instance_num}...")
         
@@ -169,7 +167,7 @@ class InstanceService:
         instance.pid = pid
         self.logger.info(f"Instance {instance.instance_num} started with PID: {pid}")
     
-    def _prepare_environment(self, instance: GameInstance, steam_root: Path, profile: GameProfile = None) -> dict:
+    def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], profile: Optional[GameProfile] = None) -> dict:
         """Prepara as variáveis de ambiente para a instância do jogo, incluindo isolamento de controles e configuração XKB."""
         env = os.environ.copy()
         env['PATH'] = os.environ['PATH']
@@ -178,18 +176,13 @@ class InstanceService:
         env.pop('PYTHONHOME', None)
         env.pop('PYTHONPATH', None)
 
-        if not profile.is_native:
-            env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
+        if not profile.is_native if profile else False:
+            if steam_root:
+                env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
             env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
             env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
             env['DXVK_ASYNC'] = '1'
-            # env['PROTON_LOG'] = '1'
-            # env['PROTON_LOG_DIR'] = str(Config.LOG_DIR)
-            # env['PROTON_VERB'] = 'waitforexitandrun'
-            # env['DISABLE_PROTONFIXES_TEST_CHECK'] = '1'
-            # env['PROTON_DUMP_DEBUG_COMMANDS'] = '1'
-            # env['PROTONFIXES_LOGLEVEL'] = 'DEBUG'
-            if profile.app_id:
+            if profile and profile.app_id:
                 env['SteamAppId'] = profile.app_id
                 env['SteamGameId'] = profile.app_id
                 self.logger.info(f"Instance {instance.instance_num}: Setting SteamAppId={profile.app_id} and SteamGameId={profile.app_id}")
@@ -233,17 +226,9 @@ class InstanceService:
         
         return env
     
-    def _build_command(self, profile: GameProfile, proton_path: Path, instance: GameInstance, symlinked_exe_path: Path) -> List[str]:
+    def _build_command(self, profile: GameProfile, proton_path: Optional[Path], instance: GameInstance, symlinked_exe_path: Path) -> List[str]:
         """Monta o comando para executar o gamescope e o jogo (nativo ou via Proton), usando bwrap para isolar o controle."""
         instance_idx = instance.instance_num - 1
-
-        # DEBUG LOGS
-        self.logger.info(f"[DEBUG] Instance {instance.instance_num} (idx {instance_idx}): Profile mouse_paths: {profile.player_mouse_event_paths}")
-        self.logger.info(f"[DEBUG] Instance {instance.instance_num} (idx {instance_idx}): Profile kbd_paths: {profile.player_keyboard_event_paths}")
-        if profile.player_mouse_event_paths and 0 <= instance_idx < len(profile.player_mouse_event_paths):
-            self.logger.info(f"[DEBUG] Instance {instance.instance_num} (idx {instance_idx}): Attempting to get mouse_path: {profile.player_mouse_event_paths[instance_idx]}")
-        if profile.player_keyboard_event_paths and 0 <= instance_idx < len(profile.player_keyboard_event_paths):
-            self.logger.info(f"[DEBUG] Instance {instance.instance_num} (idx {instance_idx}): Attempting to get kbd_path: {profile.player_keyboard_event_paths[instance_idx]}")
 
         # Determinar se esta instância terá mouse e teclado dedicados e válidos
         has_dedicated_mouse = False
@@ -366,13 +351,13 @@ class InstanceService:
         return bwrap_cmd + base_cmd
 
     
-    def monitor_and_wait(self):
+    def monitor_and_wait(self) -> None:
         """Monitora as instâncias até que todas sejam finalizadas."""
         while self.process_service.monitor_processes():
             time.sleep(5)
         
         self.logger.info("All instances have terminated")
     
-    def terminate_all(self):
+    def terminate_all(self) -> None:
         """Finaliza todas as instâncias do jogo gerenciadas pelo serviço."""
         self.process_service.terminate_all()

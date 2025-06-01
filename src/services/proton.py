@@ -2,10 +2,11 @@ from pathlib import Path
 from typing import Tuple, Optional
 from ..core.config import Config
 from ..core.exceptions import ProtonNotFoundError
+from ..core.logger import Logger
 
 class ProtonService:
     """Serviço responsável por localizar e validar o Proton e diretórios do Steam."""
-    def __init__(self, logger):
+    def __init__(self, logger: Logger):
         """Inicializa o serviço de Proton com logger."""
         self.logger = logger
     

@@ -3,24 +3,34 @@ import signal
 import subprocess
 import time
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 import psutil
+from ..core.logger import Logger
 
 class ProcessService:
     """Serviço responsável por gerenciar processos das instâncias do jogo."""
-    def __init__(self, logger):
+    def __init__(self, logger: Logger):
         """Inicializa o serviço de processos com logger e lista de PIDs."""
         self.logger = logger
         self.pids: List[int] = []
     
-    def cleanup_previous_instances(self, proton_path: Path, exe_path: Path):
+    def cleanup_previous_instances(self, proton_path: Optional[Path], exe_path: Path) -> None:
         """Finaliza instâncias anteriores do jogo que estejam em execução."""
         self.logger.info(f"Terminating previous instances of '{exe_path.name}'...")
         
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
                 cmdline = ' '.join(proc.info['cmdline'] or [])
-                if (str(proton_path) in cmdline and str(exe_path) in cmdline):
+                exe_in_cmdline = str(exe_path) in cmdline
+                
+                if proton_path is None:
+                    # Native game - just check for executable
+                    should_terminate = exe_in_cmdline
+                else:
+                    # Proton game - check for both proton and executable
+                    should_terminate = str(proton_path) in cmdline and exe_in_cmdline
+                
+                if should_terminate:
                     proc.terminate()
                     time.sleep(1)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -40,7 +50,7 @@ class ProcessService:
         self.pids.append(process.pid)
         return process.pid
     
-    def terminate_all(self):
+    def terminate_all(self) -> None:
         """Finaliza todos os processos gerenciados."""
         if not self.pids:
             return

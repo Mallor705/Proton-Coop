@@ -14,7 +14,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "linux-coop=main:main",
+            "linux-coop=cli.commands:main",
         ],
     },
     classifiers=[
