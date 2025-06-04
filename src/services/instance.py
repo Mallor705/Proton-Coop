@@ -80,7 +80,8 @@ class InstanceService:
         """Cria os modelos de instância para cada jogador."""
         instances = []
         for i in range(1, profile.num_players + 1):
-            prefix_dir = Config.PREFIX_BASE_DIR / f"{profile_name}_instance_{i}"
+            # Organiza os prefixos por jogo e por instância
+            prefix_dir = Config.get_prefix_base_dir(profile.game_name) / f"instance_{i}"
             log_file = Config.LOG_DIR / f"{profile_name}_instance_{i}.log"
             prefix_dir.mkdir(parents=True, exist_ok=True)
             (prefix_dir / "pfx").mkdir(exist_ok=True)
