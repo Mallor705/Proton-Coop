@@ -34,7 +34,12 @@
     ""
   ],
   
-  "app_id": "1623730",
-  "game_args": "-dx12",
-  "is_native": false
+  "app_id": "12345678",
+  "game_args": "",
+  "is_native": false,
+  "mode": "splitscreen",
+  "splitscreen": {
+    "orientation": "horizontal",
+    "instances": 2
+  }
 }
