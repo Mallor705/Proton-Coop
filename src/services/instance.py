@@ -353,12 +353,6 @@ class InstanceService:
 
         return gamescope_cli_options
 
-        if should_add_grab_flags:
-            self.logger.info(f"Instance {instance_num}: Using dedicated mouse and keyboard. Adding --grab and --force-grab-cursor to Gamescope.")
-            gamescope_cli_options.extend(['--grab', '--force-grab-cursor'])
-
-        return gamescope_cli_options
-
     def _build_base_game_command(self, profile: GameProfile, proton_path: Optional[Path], symlinked_exe_path: Path, gamescope_cmd: List[str], instance_num: int) -> List[str]:
         """Constrói o comando base do jogo."""
         # Adiciona os argumentos do jogo definidos no perfil, se houver
