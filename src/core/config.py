@@ -26,7 +26,6 @@ class Config:
     PROCESS_TERMINATE_TIMEOUT = 10
     SUBPROCESS_TIMEOUT = 15
     FILE_IO_TIMEOUT = 5
-    SUDO_PROMPT_TIMEOUT = 60
 
     @staticmethod
     def get_prefix_base_dir(game_name: str) -> Path:

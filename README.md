@@ -30,7 +30,6 @@ Permite jogar títulos Windows em modo cooperativo local no Linux, rodando múlt
 - **Proton** (ou GE-Proton) instalado via Steam.
 - **Gamescope** instalado ([instruções oficiais](https://github.com/ValveSoftware/gamescope)).
 - **Bubblewrap** (`bwrap`).
-- **Zenity** (opcional, para interface gráfica de senha sudo).
 - Permissões para acessar dispositivos de controle em `/dev/input/by-id/`.
 - Bash, utilitários básicos do Linux.
 
@@ -108,7 +107,6 @@ Exemplo de conteúdo:
 python ./linuxcoop.py MeuJogo
 ```
 - O script irá:
-  - Solicitar senha sudo (interface gráfica se zenity estiver disponível).
   - Validar dependências.
   - Carregar o perfil.
   - Criar prefixos separados para cada instância.
@@ -123,25 +121,11 @@ python ./linuxcoop.py MeuJogo
 
 ## Testando a Instalação
 
-### Teste da Interface Sudo com Zenity
-Para verificar se a interface gráfica de senha está funcionando:
-
-```bash
-python ./test_zenity_sudo.py
-```
-
-Este script testa:
-- Se o zenity está instalado e funcionando
-- Interface gráfica de senha sudo
-- Fallback automático para terminal
-- Validação de credenciais sudo
-
 ### Verificação de Dependências
 ```bash
 # Verificar se todas as dependências estão instaladas
 gamescope --version
 bwrap --version
-zenity --version  # Opcional para interface gráfica
 ```
 
 ## Dicas e Solução de Problemas
@@ -149,7 +133,6 @@ zenity --version  # Opcional para interface gráfica
 - **Controles não reconhecidos:** Verifique permissões em `/dev/input/by-id/` e IDs corretos no perfil.
 - **Proton não encontrado:** Confirme o nome e instalação da versão desejada no Steam.
 - **Instâncias no mesmo monitor:** Mova manualmente cada janela para o monitor desejado.
-- **Interface zenity não aparece:** Certifique-se de estar em ambiente gráfico e zenity instalado.
 - **Logs:** Consulte `~/.local/share/linux-coop/logs/` para depuração.
 
 ## Observações
