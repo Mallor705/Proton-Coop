@@ -18,6 +18,12 @@ class SplitscreenConfig(BaseModel):
     orientation: str = "horizontal"
     instances: int = 2
 
+    @validator('orientation')
+    def validate_orientation(cls, v):
+        if v not in ["horizontal", "vertical"]:
+            raise ValueError("Orientation must be 'horizontal' or 'vertical'.")
+        return v
+
 class GameProfile(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -66,10 +72,17 @@ class GameProfile(BaseModel):
 
     @property
     def effective_instance_width(self) -> int:
-        """Retorna a largura efetiva da instância, dividida se for splitscreen."""
-        if self.is_splitscreen_mode and self.splitscreen:
+        """Retorna a largura efetiva da instância, dividida se for splitscreen horizontal."""
+        if self.is_splitscreen_mode and self.splitscreen and self.splitscreen.orientation == "horizontal":
             return self.instance_width // self.splitscreen.instances
         return self.instance_width
+
+    @property
+    def effective_instance_height(self) -> int:
+        """Retorna a altura efetiva da instância, dividida se for splitscreen vertical."""
+        if self.is_splitscreen_mode and self.splitscreen and self.splitscreen.orientation == "vertical":
+            return self.instance_height // self.splitscreen.instances
+        return self.instance_height
 
     @classmethod
     def load_from_file(cls, profile_path: Path) -> "GameProfile":

@@ -485,16 +485,16 @@ class InstanceService:
         """Constrói o comando do Gamescope."""
         gamescope_path = 'gamescope'
 
-        # Usa largura efetiva (dividida se for splitscreen)
         effective_width = profile.effective_instance_width
+        effective_height = profile.effective_instance_height
 
         gamescope_cli_options = [
             gamescope_path,
             '-v',
             '-W', str(effective_width),
-            '-H', str(profile.instance_height),
+            '-H', str(effective_height),
             '-w', str(effective_width),
-            '-h', str(profile.instance_height),
+            '-h', str(effective_height),
         ]
 
         # Sempre definir um limite de FPS para janelas desfocadas para um valor muito alto
