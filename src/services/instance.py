@@ -156,7 +156,7 @@ class InstanceService:
 
     def _copy_goldberg_files(self, instance_game_root: Path, steam_api_files: dict, profile: GameProfile, instance: GameInstance) -> None:
         """Copia os arquivos do Goldberg Emulator para a pasta da instância."""
-        if not profile.use_goldberg_emulator:
+        if not profile.use_goldberg_emu:
             self.logger.info(f"Instance {instance.instance_num}: Goldberg Emulator is disabled in profile. Skipping file copy.")
             return
 

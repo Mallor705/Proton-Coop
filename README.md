@@ -70,13 +70,13 @@ Exemplo de conteúdo:
     {
       "account_name": "Player1",
       "language": "brazilian",
-      "listen_port": "47584",
+      "listen_port": "",
       "user_steam_id": "76561190000000001"
     },
     {
       "account_name": "Player2",
       "language": "brazilian",
-      "listen_port": "47584",
+      "listen_port": "",
       "user_steam_id": "76561190000000002"
     }
   ],
@@ -101,8 +101,8 @@ Exemplo de conteúdo:
   
   "app_id": "12345678",
   "game_args": "",
-  "USE_GOLDBERG_EMULATOR": false,
-  "ENV_VARS": {
+  "use_goldberg_emu": false,
+  "env_vars": {
     "WINEDLLOVERRIDES": "",
     "MANGOHUD": "1"
   },
@@ -124,13 +124,13 @@ Exemplo de conteúdo:
     {
       "account_name": "Player1",
       "language": "brazilian",
-      "listen_port": "47584",
+      "listen_port": "",
       "user_steam_id": "76561190000000001"
     },
     {
       "account_name": "Player2",
       "language": "brazilian",
-      "listen_port": "47584",
+      "listen_port": "",
       "user_steam_id": "76561190000000002"
     }
   ],
@@ -155,8 +155,8 @@ Exemplo de conteúdo:
   
   "app_id": "12345678",
   "game_args": "",
-  "USE_GOLDBERG_EMULATOR": false,
-  "ENV_VARS": {
+  "use_goldberg_emu": false,
+  "env_vars": {
     "WINEDLLOVERRIDES": "",
     "MANGOHUD": "1"
   },
