@@ -37,6 +37,7 @@ class GameProfile(BaseModel):
     player_physical_device_ids: List[str] = Field(default_factory=list, alias="PLAYER_PHYSICAL_DEVICE_IDS")
     player_mouse_event_paths: List[str] = Field(default_factory=list, alias="PLAYER_MOUSE_EVENT_PATHS")
     player_keyboard_event_paths: List[str] = Field(default_factory=list, alias="PLAYER_KEYBOARD_EVENT_PATHS")
+    player_audio_device_ids: List[str] = Field(default_factory=list, alias="PLAYER_AUDIO_DEVICE_IDS")
     app_id: Optional[str] = Field(default=None, alias="APP_ID")
     game_args: Optional[str] = Field(default=None, alias="GAME_ARGS")
     is_native: bool = False

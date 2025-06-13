@@ -349,7 +349,11 @@ class InstanceService:
             profile # Passando o objeto profile completo
         )
 
-        env = self._prepare_environment(instance, steam_root, profile)
+        # Validate devices for this instance
+        instance_idx = instance.instance_num - 1
+        device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
+
+        env = self._prepare_environment(instance, steam_root, profile, device_info)
         cmd = self._build_command(profile, proton_path, instance, symlinked_executable_path)
 
         self.logger.info(f"Launching instance {instance.instance_num} (Log: {instance.log_file})")
@@ -357,7 +361,7 @@ class InstanceService:
         instance.pid = pid
         self.logger.info(f"Instance {instance.instance_num} started with PID: {pid}")
 
-    def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], profile: Optional[GameProfile] = None) -> dict:
+    def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = None) -> dict:
         """Prepara as variáveis de ambiente para a instância do jogo, incluindo isolamento de controles e configuração XKB."""
         # Use cache for base environment
         base_env_key = f"base_{profile.is_native if profile else False}_{steam_root}_{profile.app_id if profile else None}"
@@ -406,6 +410,15 @@ class InstanceService:
             env['SDL_JOYSTICK_DEVICE'] = assigned_joystick_path
         else:
             env.pop('SDL_JOYSTICK_DEVICE', None)
+
+        # Handle audio device assignment (PULSE_SINK for PulseAudio)
+        if device_info and device_info.get('audio_device_id_for_instance'):
+            audio_device_id = device_info['audio_device_id_for_instance']
+            env['PULSE_SINK'] = audio_device_id
+            self.logger.info(f"Instance {instance.instance_num}: Setting PULSE_SINK to '{audio_device_id}'.")
+        else:
+            env.pop('PULSE_SINK', None)
+            self.logger.info(f"Instance {instance.instance_num}: No specific audio device assigned. PULSE_SINK not set.")
 
         return env
 
@@ -473,11 +486,19 @@ class InstanceService:
                 else:
                     self.logger.warning(f"Instance {instance_num}: Keyboard device '{keyboard_path_str_for_instance}' specified in profile but not found or not a char device.")
 
+        audio_device_id_for_instance = None
+        if profile.player_audio_device_ids and 0 <= instance_idx < len(profile.player_audio_device_ids):
+            audio_device_id = profile.player_audio_device_ids[instance_idx]
+            if audio_device_id and audio_device_id.strip():
+                audio_device_id_for_instance = audio_device_id
+                self.logger.info(f"Instance {instance_num}: Audio device ID '{audio_device_id}' assigned.")
+
         return {
             'has_dedicated_mouse': has_dedicated_mouse,
             'mouse_path_str_for_instance': mouse_path_str_for_instance,
             'has_dedicated_keyboard': has_dedicated_keyboard,
             'keyboard_path_str_for_instance': keyboard_path_str_for_instance,
+            'audio_device_id_for_instance': audio_device_id_for_instance,
             'should_add_grab_flags': has_dedicated_mouse and has_dedicated_keyboard
         }
 

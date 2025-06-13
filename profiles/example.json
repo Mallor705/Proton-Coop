@@ -34,6 +34,11 @@
     ""
   ],
   
+  "player_audio_device_ids": [
+    "",
+    ""
+  ],
+  
   "app_id": "12345678",
   "game_args": "",
   "use_goldberg_emu": false,
