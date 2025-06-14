@@ -1,86 +1,86 @@
 # Linux-Coop
 
-[Voir en portugais](README.pt.md) | [Voir en anglais](README.md) | [Voir en espagnol](README.es.md) | [Voir le principal](README.md)
+[Voir en portugais](README.pt.md) | [Voir en anglais](README.md) | [Voir en espagnol](README.es.md)
 
 # Linux-Coop
 
-![Linux-Coop Banner](https://github.com/Mallor705/Linux-Coop/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
+![Bannière Linux-Coop](https://github.com/Mallor705/Linux-Coop/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
 
-Allows playing Windows titles in local cooperative mode on Linux, running multiple instances of the same game via Proton and Gamescope, with independent profiles and controller support.
+Permet de jouer à des titres Windows en mode coopératif local sous Linux, en exécutant plusieurs instances du même jeu via Proton et Gamescope, avec des profils indépendants et la prise en charge des contrôleurs.
 
-## Key Features
+## Caractéristiques Principales
 
-- **Advanced Local Co-op:** Run up to two instances of the same game simultaneously for a seamless local cooperative experience.
-- **Isolated Game Profiles:** Maintain independent saves and configurations for each game through customizable profiles.
-- **Execution Flexibility:** Supports selecting any `.exe` executable and various Proton versions, including GE-Proton.
-- **Customizable Resolution:** Adjust the resolution for each game instance individually.
-- **Simplified Debugging:** Automatic log generation to facilitate problem identification and correction.
-- **Controller Mapping:** Configure specific physical controllers for each player.
-- **Broad Compatibility:** Supports multiple games through the profile system.
+- **Coopération Locale Avancée:** Exécutez jusqu'à deux instances du même jeu simultanément pour une expérience coopérative locale fluide.
+- **Profils de Jeu Isolés:** Maintenez des sauvegardes et des configurations indépendantes pour chaque jeu grâce à des profils personnalisables.
+- **Flexibilité d'Exécution:** Prend en charge la sélection de tout exécutable `.exe` et de diverses versions de Proton, y compris GE-Proton.
+- **Résolution Personnalisable:** Ajustez la résolution pour chaque instance de jeu individuellement.
+- **Débogage Simplifié:** Génération automatique de journaux pour faciliter l'identification et la correction des problèmes.
+- **Mappage des Contrôleurs:** Configurez des contrôleurs physiques spécifiques pour chaque joueur.
+- **Compatibilité Étendue:** Prend en charge plusieurs jeux via le système de profils.
 
-## Project Status
+## État du Projet
 
-- **Core Functionality:** Games open in separate instances with independent saves.
-- **Performance:** Optimized performance for a fluid gaming experience.
-- **Proton Management:** Fully selectable Proton version, including GE-Proton support.
-- **Organization:** Dedicated profiles for each game.
+- **Fonctionnalité Principale:** Les jeux s'ouvrent dans des instances séparées avec des sauvegardes indépendantes.
+- **Performances:** Performances optimisées pour une expérience de jeu fluide.
+- **Gestion de Proton:** Version de Proton entièrement sélectionnable, y compris la prise en charge de GE-Proton.
+- **Organisation:** Profils dédiés à chaque jeu.
 
-### Known Issues
+### Problèmes Connus
 
-- **Controller Recognition:** In some cases, controllers may not be recognized (priority for correction).
-- **Window Arrangement:** Instances may open on the same monitor, requiring manual movement.
+- **Reconnaissance des Contrôleurs:** Dans certains cas, les contrôleurs peuvent ne pas être reconnus (priorité à la correction).
+- **Disposition des Fenêtres:** Les instances peuvent s'ouvrir sur le même moniteur, nécessitant un déplacement manuel.
 
-## System Prerequisites
+## Prérequis du Système
 
-To ensure the correct functioning of Linux-Coop, the following prerequisites are essential:
+Pour assurer le bon fonctionnement de Linux-Coop, les prérequis suivants sont essentiels :
 
-- **Steam:** Must be installed and configured on your system.
-- **Proton:** Install Proton (or GE-Proton) via Steam.
-- **Gamescope:** Install Gamescope by following the [official instructions](https://github.com/ValveSoftware/gamescope).
-- **Bubblewrap (`bwrap`):** Essential tool for process isolation.
-- **Device Permissions:** Ensure access permissions to control devices in `/dev/input/by-id/`.
-- **Linux Utilities:** Bash and basic Linux system utilities.
-- **Python 3.8+:** The project requires Python version 3.8 or higher.
+- **Steam:** Doit être installé et configuré sur votre système.
+- **Proton:** Installez Proton (ou GE-Proton) via Steam.
+- **Gamescope:** Installez Gamescope en suivant les [instructions officielles](https://github.com/ValveSoftware/gamescope).
+- **Bubblewrap (`bwrap`):** Outil essentiel pour l'isolation des processus.
+- **Permissions des Périphériques:** Assurez-vous d'avoir les permissions d'accès aux périphériques de contrôle dans `/dev/input/by-id/`.
+- **Utilitaires Linux:** Bash et les utilitaires système Linux de base.
+- **Python 3.8+:** Le projet nécessite Python version 3.8 ou supérieure.
 
 ## Installation
 
-1.  **Clone the repository:**
+1.  **Clonez le dépôt :**
     ```bash
     git clone https://github.com/Mallor705/Linux-Coop.git
     cd Linux-Coop
     ```
-2.  **Install dependencies:**
+2.  **Installez les dépendances :**
     ```bash
     pip install -r requirements.txt
     ```
 
-    Alternatively, if you are developing or prefer an editable installation:
+    Alternativement, si vous développez ou préférez une installation éditable :
 
     ```bash
     pip install -e .
     ```
 
-## How to Use
+## Comment Utiliser
 
-### 1. Create a Game Profile
+### 1. Créer un Profil de Jeu
 
-Create a JSON file in the `profiles/` folder with a descriptive name (e.g., `MyGame.json`).
+Créez un fichier JSON dans le dossier `profiles/` avec un nom descriptif (ex : `MonJeu.json`).
 
-**Example Content for Horizontal Splitscreen:**
+**Exemple de Contenu pour Écran Partagé Horizontal :**
 
 ```json
 {
-  "game_name": "GAME",
-  "exe_path": ".steam/Steam/steamapps/common/GAME/game.exe",
+  "game_name": "JEU",
+  "exe_path": ".steam/Steam/steamapps/common/JEU/game.exe",
   "players": [
     {
-      "account_name": "Player1",
+      "account_name": "Joueur1",
       "language": "brazilian",
       "listen_port": "",
       "user_steam_id": "76561190000000001"
     },
     {
-      "account_name": "Player2",
+      "account_name": "Joueur2",
       "language": "brazilian",
       "listen_port": "",
       "user_steam_id": "76561190000000002"
@@ -117,21 +117,21 @@ Create a JSON file in the `profiles/` folder with a descriptive name (e.g., `MyG
 }
 ```
 
-**Example Content for Vertical Splitscreen:**
+**Exemple de Contenu pour Écran Partagé Vertical :**
 
 ```json
 {
-  "game_name": "GAME",
-  "exe_path": ".steam/Steam/steamapps/common/GAME/game.exe",
+  "game_name": "JEU",
+  "exe_path": ".steam/Steam/steamapps/common/JEU/game.exe",
   "players": [
     {
-      "account_name": "Player1",
+      "account_name": "Joueur1",
       "language": "brazilian",
       "listen_port": "",
       "user_steam_id": "76561190000000001"
     },
     {
-      "account_name": "Player2",
+      "account_name": "Joueur2",
       "language": "brazilian",
       "listen_port": "",
       "user_steam_id": "76561190000000002"
@@ -175,62 +175,62 @@ Create a JSON file in the `profiles/` folder with a descriptive name (e.g., `MyG
 }
 ```
 
-### 2. Run the Main Script
+### 2. Exécutez le Script Principal
 
-From the project root, execute the command, replacing `<profile_name>` with the name of your profile JSON file (without the `.json` extension):
+À partir de la racine du projet, exécutez la commande, en remplaçant `<nom_du_profil>` par le nom de votre fichier JSON de profil (sans l'extension `.json`) :
 
 ```bash
-python ./linuxcoop.py <profile_name>
-# Or, if installed via setuptools:
-linux-coop <profile_name>
+python ./linuxcoop.py <nom_du_profil>
+# Ou, si installé via setuptools :
+linux-coop <nom_du_profil>
 ```
 
-Upon execution, the script will:
+Après l'exécution, le script :
 
-- Validate all necessary dependencies.
-- Load the specified game profile.
-- Create separate Proton prefixes for each game instance.
-- Launch both game windows via Gamescope.
-- Generate detailed logs in `~/.local/share/linux-coop/logs/` for debugging.
+- Validera toutes les dépendances nécessaires.
+- Chargera le profil de jeu spécifié.
+- Créera des préfixes Proton séparés pour chaque instance de jeu.
+- Lancera les deux fenêtres de jeu via Gamescope.
+- Générera des journaux détaillés dans `~/.local/share/linux-coop/logs/` pour le débogage.
 
-### 3. Controller Mapping
+### 3. Mappage des Contrôleurs
 
-- Controllers are configured in the profile file or in specific files within `controller_config/`.
-- To avoid conflicts, controller blacklists (e.g., `Player1_Controller_Blacklist`) are automatically generated.
-- **Important:** Connect all your physical controllers before starting the script.
+- Les contrôleurs sont configurés dans le fichier de profil ou dans des fichiers spécifiques à l'intérieur de `controller_config/`.
+- Pour éviter les conflits, les listes noires de contrôleurs (ex : `Player1_Controller_Blacklist`) sont générées automatiquement.
+- **Important :** Connectez tous vos contrôleurs physiques avant de démarrer le script.
 
-## Testing the Installation
+## Test de l'Installation
 
-To verify that the prerequisites are correctly installed, run the following commands:
+Pour vérifier que les prérequis sont correctement installés, exécutez les commandes suivantes :
 
 ```bash
 gamescope --version
 bwrap --version
 ```
 
-## Tips and Troubleshooting
+## Conseils et Dépannage
 
--   **Controllers not recognized:** Check permissions in `/dev/input/by-id/` and confirm that device IDs are correct in your profile file.
--   **Proton not found:** Ensure that the Proton version name in your profile exactly matches the installation name in Steam.
--   **Instances on the same monitor:** Game instances may open on the same monitor. To move and organize them, you can use the following keyboard shortcuts. **Note that shortcuts may vary depending on your Linux desktop environment and personalized settings:**
-      *   `Super + W` (or `Ctrl + F9` / `Ctrl + F10`): Displays an overview of all workspaces and open windows (Activities/Overview), similar to hovering the mouse in the top-left corner.
-      *   `Super + Arrows (↑ ↓ ← →)`: Moves and snaps the active window to one side of the screen.
-      *   `Super + PgDn`: Minimizes the active window.
-      *   `Super + PgUp`: Maximizes the active window.
-      *   `Alt + Tab`: Switches between open windows of different applications.
-      *   `Super + D`: Minimizes all windows and shows the desktop.
--   **Debugging logs:** Consult the `~/.local/share/linux-coop/logs/` directory for detailed information about errors and script behavior.
+-   **Contrôleurs non reconnus :** Vérifiez les permissions dans `/dev/input/by-id/` et confirmez que les ID des périphériques sont corrects dans votre fichier de profil.
+-   **Proton introuvable :** Assurez-vous que le nom de la version de Proton dans votre profil correspond exactement au nom d'installation dans Steam.
+-   **Instances sur le même moniteur :** Les instances de jeu peuvent s'ouvrir sur le même moniteur. Pour les déplacer et les organiser, vous pouvez utiliser les raccourcis clavier suivants. **Notez que les raccourcis peuvent varier en fonction de votre environnement de bureau Linux et de vos paramètres personnalisés :**
+      *   `Super + W` (ou `Ctrl + F9` / `Ctrl + F10`) : Affiche un aperçu de tous les espaces de travail et des fenêtres ouvertes (Activités/Aperçu), similaire au survol de la souris dans le coin supérieur gauche.
+      *   `Super + Flèches (↑ ↓ ← →)` : Déplace et ancre la fenêtre active sur un côté de l'écran.
+      *   `Super + PgDn` : Minimise la fenêtre active.
+      *   `Super + PgUp` : Maximise la fenêtre active.
+      *   `Alt + Tab` : Bascule entre les fenêtres ouvertes de différentes applications.
+      *   `Super + D` : Minimise toutes les fenêtres et affiche le bureau.
+-   **Journaux de débogage :** Consultez le répertoire `~/.local/share/linux-coop/logs/` pour obtenir des informations détaillées sur les erreurs et le comportement du script.
 
-## Important Notes
+## Remarques Importantes
 
--   Tested and optimized with Palworld, but may be compatible with other games (might require adjustments in the profile file).
--   Currently, the script only supports a two-player setup.
--   For games that do not natively support multiple instances, additional solutions such as sandboxes or separate Steam accounts might be necessary.
+-   Testé et optimisé avec Palworld, mais peut être compatible avec d'autres jeux (peut nécessiter des ajustements dans le fichier de profil).
+-   Actuellement, le script ne prend en charge qu'une configuration à deux joueurs.
+-   Pour les jeux qui ne prennent pas en charge nativement plusieurs instances, des solutions supplémentaires telles que des sandboxes ou des comptes Steam séparés pourraient être nécessaires.
 
 ## Contribution
 
-Contributions are welcome! Feel free to open issues or pull requests.
+Les contributions sont les bienvenues ! N'hésitez pas à ouvrir des issues ou des pull requests.
 
-## License
+## Licence
 
-This project is distributed under the MIT license. Consult the `LICENSE` file in the repository for more details. 
+Ce projet est distribué sous la licence MIT. Consultez le fichier `LICENSE` dans le dépôt pour plus de détails. 

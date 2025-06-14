@@ -1,75 +1,76 @@
 # Linux-Coop
 
-[Ver en portugués](README.pt.md) | [Ver en inglés](README.md) | [Ver el principal](README.md)
+[Ver en portugués](README.pt.md) | [Ver en inglés](README.md) | [Ver en francés](README.fr.md)
 
 # Linux-Coop
 
-![Linux-Coop Banner](https://github.com/Mallor705/Linux-Coop/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
+![Banner de Linux-Coop](https://github.com/Mallor705/Linux-Coop/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
 
-Allows playing Windows titles in local cooperative mode on Linux, running multiple instances of the same game via Proton and Gamescope, with independent profiles and controller support.
+Permite jugar títulos de Windows en modo cooperativo local en Linux, ejecutando múltiples instancias del mismo juego a través de Proton y Gamescope, con perfiles independientes y soporte para controladores.
 
-## Key Features
+## Características Principales
 
-- **Advanced Local Co-op:** Run up to two instances of the same game simultaneously for a seamless local cooperative experience.
-- **Isolated Game Profiles:** Maintain independent saves and configurations for each game through customizable profiles.
-- **Execution Flexibility:** Supports selecting any `.exe` executable and various Proton versions, including GE-Proton.
-- **Customizable Resolution:** Adjust the resolution for each game instance individually.
-- **Simplified Debugging:** Automatic log generation to facilitate problem identification and correction.
-- **Controller Mapping:** Configure specific physical controllers for each player.
-- **Broad Compatibility:** Supports multiple games through the profile system.
+- **Cooperativo Local Avanzado:** Ejecuta hasta dos instancias del mismo juego simultáneamente para una experiencia cooperativa local fluida.
+- **Perfiles de Juego Aislados:** Mantén guardados y configuraciones independientes para cada juego a través de perfiles personalizables.
+- **Flexibilidad de Ejecución:** Admite la selección de cualquier ejecutable `.exe` y varias versiones de Proton, incluido GE-Proton.
+- **Resolución Personalizable:** Ajusta la resolución para cada instancia del juego individualmente.
+- **Depuración Simplificada:** Generación automática de registros para facilitar la identificación y corrección de problemas.
+- **Mapeo de Controladores:** Configura controladores físicos específicos para cada jugador.
+- **Amplia Compatibilidad:** Admite múltiples juegos a través del sistema de perfiles.
 
-## Project Status
+## Estado del Proyecto
 
-- **Core Functionality:** Games open in separate instances with independent saves.
-- **Performance:** Optimized performance for a fluid gaming experience.
-- **Proton Management:** Fully selectable Proton version, including GE-Proton support.
-- **Organization:** Dedicated profiles for each game.
+- **Funcionalidad Principal:** Los juegos se abren en instancias separadas con guardados independientes.
+- **Rendimiento:** Rendimiento optimizado para una experiencia de juego fluida.
+- **Gestión de Proton:** Versión de Proton totalmente seleccionable, incluido el soporte para GE-Proton.
+- **Organización:** Perfiles dedicados para cada juego.
 
-### Known Issues
+### Problemas Conocidos
 
-- **Controller Recognition:** In some cases, controllers may not be recognized (priority for correction).
-- **Window Arrangement:** Instances may open on the same monitor, requiring manual movement.
+- **Reconocimiento de Controladores:** En algunos casos, es posible que los controladores no sean reconocidos (prioridad para la corrección).
+- **Disposición de Ventanas:** Las instancias pueden abrirse en el mismo monitor, lo que requiere un movimiento manual.
 
-## System Prerequisites
+## Requisitos del Sistema
 
-To ensure the correct functioning of Linux-Coop, the following prerequisites are essential:
+Para asegurar el correcto funcionamiento de Linux-Coop, los siguientes requisitos previos son esenciales:
 
-- **Steam:** Must be installed and configured on your system.
-- **Proton:** Install Proton (or GE-Proton) via Steam.
-- **Gamescope:** Install Gamescope by following the [official instructions](https://github.com/ValveSoftware/gamescope).
-- **Bubblewrap (`bwrap`):** Essential tool for process isolation.
-- **Device Permissions:** Ensure access permissions to control devices in `/dev/input/by-id/`.
-- **Linux Utilities:** Bash and basic Linux system utilities.
-- **Python 3.8+:** The project requires Python version 3.8 or higher.
+- **Steam:** Debe estar instalado y configurado en tu sistema.
+- **Proton:** Instala Proton (o GE-Proton) a través de Steam.
+- **Gamescope:** Instala Gamescope siguiendo las [instrucciones oficiales](https://github.com/ValveSoftware/gamescope).
+- **Bubblewrap (`bwrap`):** Herramienta esencial para el aislamiento de procesos.
+- **Permisos de Dispositivo:** Asegura los permisos de acceso a los dispositivos de control en `/dev/input/by-id/`.
+- **Utilidades de Linux:** Bash y utilidades básicas del sistema Linux.
+- **Python 3.8+:** El proyecto requiere la versión de Python 3.8 o superior.
 
-## Installation
+## Instalación
 
-1.  **Clone the repository:**
+1.  **Clona el repositorio:**
     ```bash
     git clone https://github.com/Mallor705/Linux-Coop.git
     cd Linux-Coop
     ```
-2.  **Install dependencies:**
+2.  **Instala las dependencias:**
     ```bash
     pip install -r requirements.txt
     ```
 
-    Alternatively, if you are developing or prefer an editable installation:
+    Alternativamente, si estás desarrollando o prefieres una instalación editable:
 
     ```bash
     pip install -e .
     ```
 
-## How to Use
+## Cómo Usar
 
-### 1. Create a Game Profile
+### 1. Crea un Perfil de Juego
 
-Create a JSON file in the `profiles/` folder with a descriptive name (e.g., `MyGame.json`).
+Crea un archivo JSON en la carpeta `profiles/` con un nombre descriptivo (ej: `MiJuego.json`).
 
-**Example Content for Horizontal Splitscreen:**
+**Contenido de Ejemplo para Pantalla Dividida Horizontal:**
 
 ```json
 {
+  "game_name": "JUEGO",
   "game_name": "GAME",
   "exe_path": ".steam/Steam/steamapps/common/GAME/game.exe",
   "players": [
