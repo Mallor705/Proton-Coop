@@ -1,6 +1,6 @@
 # Linux-Coop
 
-[Voir en portugais](README.pt.md) | [Voir en anglais](README.md) | [Voir en espagnol](README.es.md)
+[Voir en portugais](README.pt.md) | [Voir en anglais](../README.md) | [Voir en espagnol](README.es.md)
 
 # Linux-Coop
 

@@ -1,6 +1,6 @@
 # Linux-Coop
 
-[Ver em inglês](README.md) | [Ver em espanhol](README.es.md) | [Ver em francês](README.fr.md)
+[Ver em inglês](../README.md) | [Ver em espanhol](README.es.md) | [Ver em francês](README.fr.md)
 
 ![Banner Linux-Coop](https://github.com/Mallor705/Linux-Coop/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
 
