@@ -31,9 +31,24 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         # Tab 2: Player Configurations
         self.player_configs_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.player_configs_page.set_border_width(10)
+        self.player_configs_page.set_vexpand(True) # Ensure this page expands vertically
+        # self.player_configs_page.set_hexpand(True) # Removed as it's a vertical box and may not be necessary
         self.notebook.append_page(self.player_configs_page, Gtk.Label(label="Player Configurations"))
-        self.player_config_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5) # This should be outside _create_player_config_uis
-        self.player_configs_page.pack_start(self.player_config_vbox, True, True, 0)
+
+        # Create a ScrolledWindow for player configurations
+        player_scrolled_window = Gtk.ScrolledWindow()
+        player_scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        player_scrolled_window.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
+        player_scrolled_window.set_vexpand(True) # Essential for vertical expansion within its parent
+        player_scrolled_window.set_hexpand(True) # Essential for horizontal expansion within its parent
+        self.player_configs_page.pack_start(player_scrolled_window, True, True, 0)
+
+        # Create a Viewport for the player configurations content
+        player_viewport = Gtk.Viewport()
+        player_scrolled_window.add(player_viewport)
+
+        self.player_config_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5) 
+        player_viewport.add(self.player_config_vbox) # Add the vbox to the viewport
         self.setup_player_configs()
         
         self.show_all()
