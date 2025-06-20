@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from pydantic import BaseModel, Field, validator, ConfigDict
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 
 from ..core.exceptions import ProfileNotFoundError, ExecutableNotFoundError
 from ..core.cache import get_cache
@@ -50,9 +50,9 @@ class GameProfile(BaseModel):
 
     @validator('num_players')
     def validate_num_players(cls, v):
-        """Valida se o número de jogadores é suportado (mínimo 2)."""
-        if v < 2:
-            raise ValueError("O número mínimo suportado é 2 jogadores")
+        """Valida se o número de jogadores é suportado (mínimo 1, máximo 4)."""
+        if not (1 <= v <= 4):
+            raise ValueError("O número de jogadores deve ser entre 1 e 4.")
         return v
 
     @validator('exe_path')
@@ -136,3 +136,47 @@ class GameProfile(BaseModel):
         if self.player_configs is not None:
             return max(self.num_players, len(self.player_configs))
         return self.num_players
+
+    def get_instance_dimensions(self, instance_num: int) -> Tuple[int, int]:
+        """Retorna as dimensões (largura, altura) para uma instância específica."""
+        # Se não estiver no modo splitscreen, retorna as dimensões completas da instância
+        if not self.is_splitscreen_mode or not self.splitscreen:
+            return self.instance_width, self.instance_height
+
+        orientation = self.splitscreen.orientation
+        num_players = self.effective_num_players
+
+        if num_players == 1:
+            # Caso para 1 jogador (tela cheia) ou qualquer outro caso não mapeado explicitamente
+            return self.instance_width, self.instance_height
+        elif num_players == 2:
+            if orientation == "horizontal":
+                return self.instance_width // 2, self.instance_height
+            else:  # vertical
+                return self.instance_width, self.instance_height // 2
+        elif num_players == 3:
+            if orientation == "horizontal":
+                if instance_num == 1:
+                    # Instância 1 ocupa metade da largura, altura total
+                    return self.instance_width // 2, self.instance_height
+                else:  # Instância 2 ou 3
+                    # As outras duas dividem a outra metade da largura e a altura total
+                    return self.instance_width // 2, self.instance_height // 2
+            else:  # vertical
+                if instance_num == 1:
+                    # Instância 1 ocupa largura total, metade da altura
+                    return self.instance_width, self.instance_height // 2
+                else:  # Instância 2 ou 3
+                    # As outras duas dividem a largura total e a outra metade da altura
+                    return self.instance_width // 2, self.instance_height // 2
+        elif num_players == 4:
+            # Para 4 jogadores, cada um ocupa um quarto da tela
+            # Independentemente da orientação, divide-se por 2 em largura e altura
+            return self.instance_width // 2, self.instance_height // 2
+        else:
+            # Comportamento padrão para outros números de jogadores (ex: 5 ou mais)
+            # Divide igualmente na orientação especificada
+            if orientation == "horizontal":
+                return self.instance_width // num_players, self.instance_height
+            else:  # vertical
+                return self.instance_height, self.instance_height // num_players

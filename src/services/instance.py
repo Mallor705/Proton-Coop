@@ -136,7 +136,7 @@ class InstanceService:
         """Processa todos os arquivos do jogo, criando symlinks e configurando o Goldberg Emulator."""
         self.logger.info(f"Instance {instance.instance_num}: Processing game files and setting up Goldberg Emulator")
 
-        # 1. Identificar arquivos do Steam no diretório do jogo
+        # 1. Identificar arquivos do Steam API no diretório do jogo
         steam_api_files = self._identify_steam_api_files(original_game_path)
         self.logger.info(f"Instance {instance.instance_num}: Found Steam API files: {steam_api_files}")
 
@@ -526,8 +526,8 @@ class InstanceService:
         """Constrói o comando do Gamescope."""
         gamescope_path = 'gamescope'
 
-        effective_width = profile.effective_instance_width
-        effective_height = profile.effective_instance_height
+        # Obter as dimensões da instância diretamente do perfil
+        effective_width, effective_height = profile.get_instance_dimensions(instance_num)
 
         gamescope_cli_options = [
             gamescope_path,
