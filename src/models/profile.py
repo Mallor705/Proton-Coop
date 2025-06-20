@@ -16,7 +16,6 @@ class PlayerInstanceConfig(BaseModel):
 class SplitscreenConfig(BaseModel):
     """Configuração do modo splitscreen."""
     orientation: str = "horizontal"
-    instances: int = 2
 
     @validator('orientation')
     def validate_orientation(cls, v):
@@ -75,14 +74,14 @@ class GameProfile(BaseModel):
     def effective_instance_width(self) -> int:
         """Retorna a largura efetiva da instância, dividida se for splitscreen horizontal."""
         if self.is_splitscreen_mode and self.splitscreen and self.splitscreen.orientation == "horizontal":
-            return self.instance_width // self.splitscreen.instances
+            return self.instance_width // self.effective_num_players
         return self.instance_width
 
     @property
     def effective_instance_height(self) -> int:
         """Retorna a altura efetiva da instância, dividida se for splitscreen vertical."""
         if self.is_splitscreen_mode and self.splitscreen and self.splitscreen.orientation == "vertical":
-            return self.instance_height // self.splitscreen.instances
+            return self.instance_height // self.effective_num_players
         return self.instance_height
 
     @classmethod
@@ -134,6 +133,6 @@ class GameProfile(BaseModel):
     # Adicionar getter para num_players para garantir consistência caso player_configs seja a fonte da verdade
     @property
     def effective_num_players(self) -> int:
-        if self.player_configs:
-            return len(self.player_configs)
+        if self.player_configs is not None:
+            return max(self.num_players, len(self.player_configs))
         return self.num_players

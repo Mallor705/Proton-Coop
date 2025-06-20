@@ -1,0 +1,27 @@
+These utilities are third party applications and were not designed by the Nucleus Co-op team. Credit goes to each respective developer.
+
+Mr_Goldberg (Goldberg Emulator): https://mr_goldberg.gitlab.io/goldberg_emulator/ 
+
+syahmixp (SmartSteamEmu), 
+
+atom0s (Steamless): https://github.com/atom0s/Steamless
+
+EJocys (x360ce): https://github.com/x360ce/x360ce 
+
+0dd14 Lab (Xinput Plus): https://sites.google.com/site/0dd14lab/xinput-plus
+
+r1ch (ForceBindIP): https://r1ch.net/projects/forcebindip 
+
+HaYDeN (Flawless Widescreen): https://www.flawlesswidescreen.org/ 
+
+briankendall (devreorder): https://github.com/briankendall/devreorder 
+
+VerGreeneyes (DirectXWrapper): https://community.pcgamingwiki.com/files/file/87-the-bards-tale-2005-windowed-mode/ 
+
+wizark952 (dinput8 blocker), 
+
+Nemirtingas (Epic\Galaxy Emulator): https://nemirtingas.gitlab.io/nemirtingas_epic_emu/ / https://nemirtingas.gitlab.io/nemirtingas_galaxy_emu/ 
+
+darkreader (Dark Reader extension): https://github.com/darkreader/darkreader?tab=readme-ov-file
+
+Josivan88 (SplitCalculator).

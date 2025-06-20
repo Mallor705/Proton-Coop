@@ -6,7 +6,7 @@ Then use my emu like you normally would. (Don't forget to put a steam_appid.txt)
 
 
 For the LAN only connections feature:
-If for some reason you want to disable this feature create a file named: disable_lan_only.txt beside the steam_api dll.
+If for some reason you want to disable this feature create a file named: disable_lan_only.txt beside the steam_api dll or inside the steam_settings folder beside the steam api dll.
 
 I noticed a lot of games seem to connect to analytics services and other crap that I hate. 
 
@@ -31,5 +31,5 @@ All ips except these ranges are blocked:
 224.0.0.0 - 255.255.255.255
 
 
-Luma CEG support:
-If LumaCEG_Plugin_x86.dll (steam_api.dll) or LumaCEG_Plugin_x64.dll (steam_api64.dll) is present it will be loaded automatically.
+Support for loading any dlls:
+Any files put in the steam_settings\load_dlls\ folder will be loaded automatically using the LoadLibraryA function.

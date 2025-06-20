@@ -6,7 +6,7 @@ from typing import List, Optional, Dict
 from ..core.config import Config
 from ..core.exceptions import DependencyError
 from ..core.logger import Logger
-from ..models.profile import GameProfile
+from ..models.profile import GameProfile, PlayerInstanceConfig
 from ..models.instance import GameInstance
 from .proton import ProtonService
 from .process import ProcessService
@@ -79,7 +79,19 @@ class InstanceService:
     def _create_instances(self, profile: GameProfile, profile_name: str) -> List[GameInstance]:
         """Cria os modelos de instância para cada jogador."""
         instances = []
-        for i in range(1, profile.num_players + 1):
+        # Use effective_num_players para determinar o número total de instâncias a serem criadas
+        num_total_instances = profile.effective_num_players
+
+        for i in range(1, num_total_instances + 1):
+            # Tenta obter a configuração do jogador do perfil, se disponível
+            player_config = None
+            if profile.player_configs and (i - 1) < len(profile.player_configs):
+                player_config = profile.player_configs[i - 1]
+            else:
+                # Se não houver configuração para o jogador, cria uma genérica
+                self.logger.info(f"No specific player configuration found for instance {i}. Generating generic data.")
+                player_config = PlayerInstanceConfig(account_name=f"Player{i}")
+
             # Organiza os prefixos por jogo e por instância
             prefix_dir = Config.get_prefix_base_dir(profile.game_name) / f"instance_{i}"
             log_file = Config.LOG_DIR / f"{profile_name}_instance_{i}.log"
@@ -89,7 +101,8 @@ class InstanceService:
                 instance_num=i,
                 profile_name=profile_name,
                 prefix_dir=prefix_dir,
-                log_file=log_file
+                log_file=log_file,
+                player_config=player_config  # Passa a configuração do jogador para a instância
             )
             instances.append(instance)
         return instances
@@ -248,61 +261,68 @@ class InstanceService:
                         target_file = settings_target / item.name
                         if target_file.exists():
                             target_file.unlink()
-                        shutil.copy2(item, target_file)
-                        self.logger.info(f"Copied Goldberg settings file: {item.name}")
-                    elif item.is_dir():
-                        target_dir = settings_target / item.name
-                        if target_dir.exists():
-                            shutil.rmtree(target_dir)
-                        shutil.copytree(item, target_dir)
-                        self.logger.info(f"Copied Goldberg settings directory: {item.name}")
-            else:
-                self.logger.warning("settings folder not found in Goldberg source directory")
-
-            # Configurar arquivos do Goldberg para este diretório
-            self._setup_settings(steam_api_dir, profile, instance)
+                        shutil.copy2(item, target_file) # Copia o arquivo da pasta settings do goldberg
+                    
+                # Configurar os arquivos de settings para esta instância
+                self._setup_goldberg_config(settings_target, profile, instance) # Passa a instância para o setup
 
     def _setup_settings(self, instance_game_root: Path, profile: GameProfile, instance: GameInstance) -> None:
-        """Configura a pasta settings com as configurações específicas da instância."""
+        """Configura os arquivos de settings do Goldberg Emulator para a instância.
+        Isso inclui account_name.txt, language.txt, listen_port.txt e user_steam_id.txt.
+        """
+        self.logger.info(f"Instance {instance.instance_num}: Setting up Goldberg Emulator settings...")
         settings_dir = instance_game_root / "settings"
+        settings_dir.mkdir(parents=True, exist_ok=True)
         
-        # Garantir que a pasta existe
-        settings_dir.mkdir(exist_ok=True)
-
-        # Configurar arquivos do Goldberg
-        self._setup_goldberg_config(settings_dir, profile, instance)
+        self._setup_goldberg_config(settings_dir, profile, instance) # Passa a instância para o setup
 
     def _setup_goldberg_config(self, settings_dir: Path, profile: GameProfile, instance: GameInstance) -> None:
-        """Configura os arquivos de configuração do Goldberg Emulator."""
-        # Configurar AppID
-        if profile.app_id:
-            with open(settings_dir / "steam_appid.txt", "w") as f:
-                f.write(f"{profile.app_id}\n")
-            self.logger.info(f"Instance {instance.instance_num}: Set Steam AppID to {profile.app_id}")
+        """Escreve os arquivos de configuração do Goldberg Emulator, utilizando as configurações do jogador."""
+        player_config = instance.player_config  # Obtém a configuração do jogador da instância
 
-        # Configurar nome da conta e SteamID se houver configurações específicas da instância
-        if profile.player_configs and (instance.instance_num - 1) < len(profile.player_configs):
-            instance_config = profile.player_configs[instance.instance_num - 1]
-            
-            if instance_config.account_name:
-                with open(settings_dir / "account_name.txt", "w") as f:
-                    f.write(f"{instance_config.account_name}\n")
-                self.logger.info(f"Instance {instance.instance_num}: Set account name to {instance_config.account_name}")
+        if not player_config: # Fallback para garantir que sempre haja uma configuração
+            self.logger.warning(f"Instance {instance.instance_num}: Player configuration not found for Goldberg. Using generic defaults.")
+            player_config = PlayerInstanceConfig(account_name=f"Player{instance.instance_num}")
 
-            if instance_config.user_steam_id:
-                with open(settings_dir / "user_steam_id.txt", "w") as f:
-                    f.write(f"{instance_config.user_steam_id}\n")
-                self.logger.info(f"Instance {instance.instance_num}: Set SteamID to {instance_config.user_steam_id}")
+        # account_name.txt
+        account_name_path = settings_dir / "account_name.txt"
+        account_name = player_config.account_name or f"Player{instance.instance_num}"
+        self.logger.info(f"Instance {instance.instance_num}: Setting account_name to '{account_name}'")
+        with open(account_name_path, 'w', encoding='utf-8') as f:
+            f.write(account_name)
 
-            if instance_config.language:
-                with open(settings_dir / "language.txt", "w") as f:
-                    f.write(f"{instance_config.language}\n")
-                self.logger.info(f"Instance {instance.instance_num}: Set language to {instance_config.language}")
-            
-            if instance_config.listen_port:
-                with open(settings_dir / "listen_port.txt", "w") as f:
-                    f.write(f"{instance_config.listen_port}\n")
-                self.logger.info(f"Instance {instance.instance_num}: Set listen port to {instance_config.listen_port}")
+        # language.txt
+        language_path = settings_dir / "language.txt"
+        language = player_config.language or "english" # Default language
+        self.logger.info(f"Instance {instance.instance_num}: Setting language to '{language}'")
+        with open(language_path, 'w', encoding='utf-8') as f:
+            f.write(language)
+
+        # listen_port.txt
+        listen_port_path = settings_dir / "listen_port.txt"
+        listen_port = player_config.listen_port # No default, let Goldberg handle if None
+        if listen_port:
+            self.logger.info(f"Instance {instance.instance_num}: Setting listen_port to '{listen_port}'")
+            with open(listen_port_path, 'w', encoding='utf-8') as f:
+                f.write(listen_port)
+        else:
+            # Garante que o arquivo é removido se não houver listen_port definido
+            if listen_port_path.exists():
+                listen_port_path.unlink()
+            self.logger.info(f"Instance {instance.instance_num}: listen_port not specified, will use Goldberg's default.")
+
+        # user_steam_id.txt
+        user_steam_id_path = settings_dir / "user_steam_id.txt"
+        user_steam_id = player_config.user_steam_id # No default, let Goldberg handle if None
+        if user_steam_id:
+            self.logger.info(f"Instance {instance.instance_num}: Setting user_steam_id to '{user_steam_id}'")
+            with open(user_steam_id_path, 'w', encoding='utf-8') as f:
+                f.write(user_steam_id)
+        else:
+            # Garante que o arquivo é removido se não houver user_steam_id definido
+            if user_steam_id_path.exists():
+                user_steam_id_path.unlink()
+            self.logger.info(f"Instance {instance.instance_num}: user_steam_id not specified, will use Goldberg's default.")
 
     def _identify_steam_api_files(self, game_path: Path) -> dict:
         """Identifica os arquivos do Steam API no diretório do jogo."""

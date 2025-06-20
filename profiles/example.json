@@ -1,6 +1,7 @@
 {
   "game_name": "GAME",
   "exe_path": ".steam/Steam/steamapps/common/GAME/game.exe",
+  "NUM_PLAYERS": 2,
   "players": [
     {
       "account_name": "Player1",
