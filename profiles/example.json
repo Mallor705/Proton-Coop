@@ -1,56 +1,54 @@
 {
-  "game_name": "GAME",
-  "exe_path": ".steam/Steam/steamapps/common/GAME/game.exe",
+  "GAME_NAME": "GAME",
+  "EXE_PATH": ".steam/Steam/steamapps/common/GAME/game.exe",
   "NUM_PLAYERS": 2,
-  "players": [
+  "PLAYERS": [
     {
-      "account_name": "Player1",
-      "language": "brazilian",
-      "listen_port": "47584",
-      "user_steam_id": "76561190000000001"
+      "ACCOUNT_NAME": "Player1",
+      "LANGUAGE": "brazilian",
+      "LISTEN_PORT": "47584",
+      "USER_STEAM_ID": "76561190000000001"
     },
     {
-      "account_name": "Player2",
-      "language": "brazilian",
-      "listen_port": "47584",
-      "user_steam_id": "76561190000000002"
+      "ACCOUNT_NAME": "Player2",
+      "LANGUAGE": "brazilian",
+      "LISTEN_PORT": "47584",
+      "USER_STEAM_ID": "76561190000000002"
     }
   ],
-  "proton_version": "GE-Proton10-4",
-  "instance_width": 1920,
-  "instance_height": 1080,
+  "PROTON_VERSION": "GE-Proton10-4",
+  "INSTANCE_WIDTH": 1920,
+  "INSTANCE_HEIGHT": 1080,
 
-  "player_physical_device_ids": [
+  "PLAYER_PHYSICAL_DEVICE_IDS": [
     "", 
     ""
   ],
   
-  "player_mouse_event_paths": [
+  "PLAYER_MOUSE_EVENT_PATHS": [
     "",
     ""
   ],
   
-  "player_keyboard_event_paths": [
+  "PLAYER_KEYBOARD_EVENT_PATHS": [
     "",
     ""
   ],
   
-  "player_audio_device_ids": [
+  "PLAYER_AUDIO_DEVICE_IDS": [
     "",
     ""
   ],
   
-  "app_id": "12345678",
-  "game_args": "",
-  "use_goldberg_emu": false,
-  "env_vars": {
+  "APP_ID": "12345678",
+  "GAME_ARGS": "",
+  "USE_GOLDBERG_EMU": false,
+  "ENV_VARS": {
     "WINEDLLOVERRIDES": "",
     "MANGOHUD": "1"
   },
-  "is_native": false,
-  "mode": "splitscreen",
-  "splitscreen": {
-    "orientation": "horizontal",
-    "instances": 2
+  "MODE": "splitscreen",
+  "SPLITSCREEN": {
+    "ORIENTATION": "horizontal"
   }
 }

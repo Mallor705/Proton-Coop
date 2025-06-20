@@ -8,10 +8,10 @@ from ..core.cache import get_cache
 
 class PlayerInstanceConfig(BaseModel):
     """Configurações específicas para uma instância de jogador."""
-    account_name: Optional[str] = None
-    language: Optional[str] = None
-    listen_port: Optional[str] = None
-    user_steam_id: Optional[str] = None
+    account_name: Optional[str] = Field(default=None, alias="ACCOUNT_NAME")
+    language: Optional[str] = Field(default=None, alias="LANGUAGE")
+    listen_port: Optional[str] = Field(default=None, alias="LISTEN_PORT")
+    user_steam_id: Optional[str] = Field(default=None, alias="USER_STEAM_ID")
 
 class SplitscreenConfig(BaseModel):
     """Configuração do modo splitscreen."""
@@ -40,13 +40,13 @@ class GameProfile(BaseModel):
     app_id: Optional[str] = Field(default=None, alias="APP_ID")
     game_args: Optional[str] = Field(default=None, alias="GAME_ARGS")
     is_native: bool = False
-    mode: Optional[str] = Field(default=None, alias="mode")
-    splitscreen: Optional[SplitscreenConfig] = Field(default=None, alias="splitscreen")
-    env_vars: Optional[Dict[str, str]] = Field(default=None, alias="env_vars")
+    mode: Optional[str] = Field(default=None, alias="MODE")
+    splitscreen: Optional[SplitscreenConfig] = Field(default=None, alias="SPLITSCREEN")
+    env_vars: Optional[Dict[str, str]] = Field(default=None, alias="ENV_VARS")
 
-    # Novo campo para configurações por jogador, usando alias "players" para o JSON
-    player_configs: Optional[List[PlayerInstanceConfig]] = Field(default=None, alias="players")
-    use_goldberg_emu: bool = Field(default=True, alias="use_goldberg_emu")
+    # Novo campo para configurações por jogador, usando alias "PLAYERS" para o JSON
+    player_configs: Optional[List[PlayerInstanceConfig]] = Field(default=None, alias="PLAYERS")
+    use_goldberg_emu: bool = Field(default=True, alias="USE_GOLDBERG_EMU")
 
     @validator('num_players')
     def validate_num_players(cls, v):
@@ -120,15 +120,15 @@ class GameProfile(BaseModel):
     def _process_profile_data(cls, data: Dict) -> None:
         """Processa dados do perfil de forma otimizada."""
         # Detecta se o jogo é nativo com base na extensão do executável
-        exe_path_str = data.get('exe_path')
+        exe_path_str = data.get('EXE_PATH')
         if exe_path_str:
             data['is_native'] = not exe_path_str.lower().endswith('.exe')
         else:
             data['is_native'] = False
 
-        # Se 'num_players' não estiver no JSON mas 'players' estiver, infere num_players
-        if 'num_players' not in data and 'players' in data and isinstance(data['players'], list):
-            data['num_players'] = len(data['players'])
+        # Se 'NUM_PLAYERS' não estiver no JSON mas 'PLAYERS' estiver, infere NUM_PLAYERS
+        if 'NUM_PLAYERS' not in data and 'PLAYERS' in data and isinstance(data['PLAYERS'], list):
+            data['NUM_PLAYERS'] = len(data['PLAYERS'])
 
     # Adicionar getter para num_players para garantir consistência caso player_configs seja a fonte da verdade
     @property
