@@ -1,4 +1,3 @@
-import click
 import signal
 import subprocess
 from functools import lru_cache
@@ -81,8 +80,6 @@ class LinuxCoopCLI:
         profile_path = Config.PROFILE_DIR / f"{profile_name}.json"
         return GameProfile.load_from_file(profile_path)
 
-@click.command()
-@click.argument('profile_name')
 def main(profile_name):
     """Lança instâncias do jogo usando o perfil especificado."""
     cli = LinuxCoopCLI()
