@@ -71,6 +71,7 @@ coverage.xml
 .vscode/
 
 # Outros arquivos
+logs/
 *.log
 relatorio_*
 # Arquivos de configuração
