@@ -523,7 +523,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                 INSTANCE_WIDTH=width,
                 INSTANCE_HEIGHT=height,
                 MODE=mode,
-                SPLITSCREEN={"orientation": orientation} if mode == "splitscreen" else None,
+                SPLITSCREEN=SplitscreenConfig(orientation=orientation) if mode == "splitscreen" else None,
                 PLAYER_PHYSICAL_DEVICE_IDS=[],
                 PLAYER_MOUSE_EVENT_PATHS=[],
                 PLAYER_KEYBOARD_EVENT_PATHS=[],
@@ -696,11 +696,16 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
 
         splitscreen_config = None
         if self.mode_combo.get_active_text() == "splitscreen":
+            selected_orientation = self.splitscreen_orientation_combo.get_active_text()
+            self.logger.info(f"DEBUG: Selected splitscreen orientation from UI: {selected_orientation}") # Debug line
             splitscreen_config = SplitscreenConfig(
-                orientation=self.splitscreen_orientation_combo.get_active_text()
+                orientation=selected_orientation
             )
+            self.logger.info(f"DEBUG: SplitscreenConfig orientation immediately after creation: {splitscreen_config.orientation}") # NEW DEBUG LINE
         
         is_native_value = not Path(self.exe_path_entry.get_text()).name.lower().endswith('.exe')
+
+        mode = self.mode_combo.get_active_text()
 
         profile_data = GameProfile(
             game_name=self.game_name_entry.get_text(),
@@ -712,12 +717,19 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             app_id=self.app_id_entry.get_text() or None,
             game_args=self.game_args_entry.get_text() or None,
             is_native=is_native_value,
-            mode=self.mode_combo.get_active_text() if self.mode_combo.get_active_text() != "None" else None,
+            mode=mode,
             splitscreen=splitscreen_config,
             env_vars=self._get_env_vars_from_ui(),
             player_configs=player_configs_data,
             use_goldberg_emu=self.use_goldberg_emu_check.get_active()
         )
+        
+        # DEBUG: Check the mode value right before GameProfile instantiation
+        self.logger.info(f"DEBUG: Mode value before GameProfile instantiation: {mode}")
+
+        # DEBUG: Check the orientation directly from the GameProfile object before dumping
+        if profile_data.splitscreen:
+            self.logger.info(f"DEBUG: Splitscreen orientation in GameProfile object: {profile_data.splitscreen.orientation}")
 
         profile_dumped = profile_data.model_dump(by_alias=True, exclude_unset=False, exclude_defaults=False, mode='json')
         self.logger.info(f"DEBUG: Collecting {len(profile_dumped.get('PLAYERS', []))} player configs for saving.") # Debug line
@@ -754,7 +766,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         else:
             self.mode_combo.set_active_id("None")
 
-        splitscreen_orientation = profile_data.get("SPLITSCREEN", {}).get("orientation")
+        splitscreen_orientation = profile_data.get("SPLITSCREEN", {}).get("ORIENTATION")
         if splitscreen_orientation:
             self.splitscreen_orientation_combo.set_active_id(splitscreen_orientation)
         else:

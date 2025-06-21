@@ -20,8 +20,9 @@ class PlayerInstanceConfig(BaseModel):
     AUDIO_DEVICE_ID: Optional[str] = Field(default=None, alias="AUDIO_DEVICE_ID")
 
 class SplitscreenConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     """Configuração do modo splitscreen."""
-    orientation: str = Field("horizontal", alias="ORIENTATION")
+    orientation: str = Field(alias="ORIENTATION")
 
     @validator('orientation')
     def validate_orientation(cls, v):
