@@ -34,7 +34,7 @@ class GameProfile(BaseModel):
 
     """Modelo de perfil de jogo, contendo configurações e validações para execução multi-instância."""
     game_name: str = Field(..., alias="GAME_NAME")
-    exe_path: str = Field(..., alias="EXE_PATH")
+    exe_path: Path = Field(..., alias="EXE_PATH")
     proton_version: Optional[str] = Field(default=None, alias="PROTON_VERSION")
     num_players: int = Field(..., alias="NUM_PLAYERS")
     instance_width: int = Field(..., alias="INSTANCE_WIDTH")
@@ -64,7 +64,7 @@ class GameProfile(BaseModel):
         cache = get_cache()
         if not cache.check_path_exists(path_v):
             raise ExecutableNotFoundError(f"Game executable not found: {path_v}")
-        return v # Return as string
+        return path_v # Retorna o objeto Path
 
     @property
     def is_splitscreen_mode(self) -> bool:

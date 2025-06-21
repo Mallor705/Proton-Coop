@@ -449,7 +449,7 @@ class InstanceService:
 
         idx = instance.instance_num - 1
         player_config = profile.player_configs[idx]
-        device_from_profile = player_config.get("physical_device_id")
+        device_from_profile = player_config.PHYSICAL_DEVICE_ID
         
         if not device_from_profile or not device_from_profile.strip():
             return None
@@ -489,7 +489,7 @@ class InstanceService:
         player_config = profile.player_configs[instance_idx] if profile.player_configs and 0 <= instance_idx < len(profile.player_configs) else None
 
         if player_config:
-            mouse_path_str_for_instance = player_config.get("mouse_event_path")
+            mouse_path_str_for_instance = player_config.MOUSE_EVENT_PATH
             if mouse_path_str_for_instance and mouse_path_str_for_instance.strip():
                 mouse_path_obj = Path(mouse_path_str_for_instance)
                 if mouse_path_obj.exists() and mouse_path_obj.is_char_device():
@@ -500,7 +500,7 @@ class InstanceService:
         has_dedicated_keyboard = False
         keyboard_path_str_for_instance = None
         if player_config:
-            keyboard_path_str_for_instance = player_config.get("keyboard_event_path")
+            keyboard_path_str_for_instance = player_config.KEYBOARD_EVENT_PATH
             if keyboard_path_str_for_instance and keyboard_path_str_for_instance.strip():
                 keyboard_path_obj = Path(keyboard_path_str_for_instance)
                 if keyboard_path_obj.exists() and keyboard_path_obj.is_char_device():
@@ -510,7 +510,7 @@ class InstanceService:
 
         audio_device_id_for_instance = None
         if player_config:
-            audio_device_id = player_config.get("audio_device_id")
+            audio_device_id = player_config.AUDIO_DEVICE_ID
             if audio_device_id and audio_device_id.strip():
                 audio_device_id_for_instance = audio_device_id
                 self.logger.info(f"Instance {instance_num}: Audio device ID '{audio_device_id}' assigned.")
@@ -620,7 +620,7 @@ class InstanceService:
         player_config = profile.player_configs[instance_idx] if profile.player_configs and 0 <= instance_idx < len(profile.player_configs) else None
 
         if player_config:
-            joystick_path_str = player_config.get("physical_device_id")
+            joystick_path_str = player_config.PHYSICAL_DEVICE_ID
             if joystick_path_str and joystick_path_str.strip():
                 joystick_path = Path(joystick_path_str)
                 if joystick_path.exists() and joystick_path.is_char_device():
