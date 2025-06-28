@@ -90,7 +90,7 @@ class InstanceService:
             else:
                 # Se não houver configuração para o jogador, cria uma genérica
                 self.logger.info(f"No specific player configuration found for instance {i}. Generating generic data.")
-                player_config = PlayerInstanceConfig(account_name=f"Player{i}")
+                player_config = PlayerInstanceConfig(ACCOUNT_NAME=f"Player{i}")
 
             # Organiza os prefixos por jogo e por instância
             prefix_dir = Config.get_prefix_base_dir(profile.game_name) / f"instance_{i}"
@@ -174,7 +174,7 @@ class InstanceService:
             return
 
         goldberg_source_dir = Path(__file__).parent.parent / "utils" / "goldberg_emulator"
-        
+
         if not goldberg_source_dir.exists():
             self.logger.error(f"Goldberg source directory not found: {goldberg_source_dir}")
             return
@@ -233,7 +233,7 @@ class InstanceService:
             steam_api_dir = instance_game_root / relative_dir
             if not steam_api_instance_dir:
                 steam_api_instance_dir = steam_api_dir  # Guardar o primeiro diretório para usar depois
-            
+
             # Copiar os arquivos filtrados do Goldberg para cada diretório
             for goldberg_file, steam_file in files_to_copy.items():
                 source_file = goldberg_source_dir / goldberg_file
@@ -251,10 +251,10 @@ class InstanceService:
             settings_source = goldberg_source_dir / "settings"
             if settings_source.exists():
                 settings_target = steam_api_dir / "settings"
-                
+
                 # Criar pasta se não existir
                 settings_target.mkdir(exist_ok=True)
-                
+
                 # Copiar apenas os arquivos do Goldberg, preservando o resto
                 for item in settings_source.glob("*"):
                     if item.is_file():
@@ -262,7 +262,7 @@ class InstanceService:
                         if target_file.exists():
                             target_file.unlink()
                         shutil.copy2(item, target_file) # Copia o arquivo da pasta settings do goldberg
-                    
+
                 # Configurar os arquivos de settings para esta instância
                 self._setup_goldberg_config(settings_target, profile, instance) # Passa a instância para o setup
 
@@ -273,7 +273,7 @@ class InstanceService:
         self.logger.info(f"Instance {instance.instance_num}: Setting up Goldberg Emulator settings...")
         settings_dir = instance_game_root / "settings"
         settings_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self._setup_goldberg_config(settings_dir, profile, instance) # Passa a instância para o setup
 
     def _setup_goldberg_config(self, settings_dir: Path, profile: GameProfile, instance: GameInstance) -> None:
@@ -282,25 +282,25 @@ class InstanceService:
 
         if not player_config: # Fallback para garantir que sempre haja uma configuração
             self.logger.warning(f"Instance {instance.instance_num}: Player configuration not found for Goldberg. Using generic defaults.")
-            player_config = PlayerInstanceConfig(account_name=f"Player{instance.instance_num}")
+            player_config = PlayerInstanceConfig(ACCOUNT_NAME=f"Player{instance.instance_num}")
 
         # account_name.txt
         account_name_path = settings_dir / "account_name.txt"
-        account_name = player_config.account_name or f"Player{instance.instance_num}"
+        account_name = player_config.ACCOUNT_NAME or f"Player{instance.instance_num}"
         self.logger.info(f"Instance {instance.instance_num}: Setting account_name to '{account_name}'")
         with open(account_name_path, 'w', encoding='utf-8') as f:
             f.write(account_name)
 
         # language.txt
         language_path = settings_dir / "language.txt"
-        language = player_config.language or "english" # Default language
+        language = player_config.LANGUAGE or "english" # Default language
         self.logger.info(f"Instance {instance.instance_num}: Setting language to '{language}'")
         with open(language_path, 'w', encoding='utf-8') as f:
             f.write(language)
 
         # listen_port.txt
         listen_port_path = settings_dir / "listen_port.txt"
-        listen_port = player_config.listen_port # No default, let Goldberg handle if None
+        listen_port = player_config.LISTEN_PORT # No default, let Goldberg handle if None
         if listen_port:
             self.logger.info(f"Instance {instance.instance_num}: Setting listen_port to '{listen_port}'")
             with open(listen_port_path, 'w', encoding='utf-8') as f:
@@ -313,7 +313,7 @@ class InstanceService:
 
         # user_steam_id.txt
         user_steam_id_path = settings_dir / "user_steam_id.txt"
-        user_steam_id = player_config.user_steam_id # No default, let Goldberg handle if None
+        user_steam_id = player_config.USER_STEAM_ID # No default, let Goldberg handle if None
         if user_steam_id:
             self.logger.info(f"Instance {instance.instance_num}: Setting user_steam_id to '{user_steam_id}'")
             with open(user_steam_id_path, 'w', encoding='utf-8') as f:
@@ -332,7 +332,7 @@ class InstanceService:
             'linux64': [],
             'linux32': []
         }
-        
+
         # Procurar por arquivos do Steam API em todos os diretórios e subpastas
         for file in game_path.rglob("*"):
             if file.name == "steam_api64.dll":
@@ -343,7 +343,7 @@ class InstanceService:
                 steam_files['linux64'].append(file.relative_to(game_path))
             elif file.name == "libsteam_api.so":
                 steam_files['linux32'].append(file.relative_to(game_path))
-        
+
         return steam_files
 
     def _verify_executable_symlink(self, instance: GameInstance, symlinked_exe_path_target: Path, original_exe_path: Path) -> None:
@@ -381,7 +381,7 @@ class InstanceService:
         instance.pid = pid
         self.logger.info(f"Instance {instance.instance_num} started with PID: {pid}")
 
-    def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = None) -> dict:
+    def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = {}) -> dict:
         """Prepara as variáveis de ambiente para a instância do jogo, incluindo isolamento de controles e configuração XKB."""
         # Use cache for base environment
         base_env_key = f"base_{profile.is_native if profile else False}_{steam_root}_{profile.app_id if profile else None}"
@@ -416,7 +416,7 @@ class InstanceService:
         # Variáveis de ambiente específicas da instância
         if not (profile.is_native if profile else False):
             env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
-            env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')    
+            env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
             env['WINEDLLOVERRIDES'] = "OnlineFix64=n,b;steam_api64=n,b;winmm=n,b"
 
         # Adicionar variáveis de ambiente definidas no perfil
@@ -450,7 +450,7 @@ class InstanceService:
         idx = instance.instance_num - 1
         player_config = profile.player_configs[idx]
         device_from_profile = player_config.PHYSICAL_DEVICE_ID
-        
+
         if not device_from_profile or not device_from_profile.strip():
             return None
 
@@ -484,7 +484,7 @@ class InstanceService:
         """Valida dispositivos de entrada e retorna informações sobre eles."""
         has_dedicated_mouse = False
         mouse_path_str_for_instance = None
-        
+
         # Obter config do jogador específico
         player_config = profile.player_configs[instance_idx] if profile.player_configs and 0 <= instance_idx < len(profile.player_configs) else None
 
