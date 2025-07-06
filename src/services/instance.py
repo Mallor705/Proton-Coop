@@ -417,7 +417,6 @@ class InstanceService:
         if not (profile.is_native if profile else False):
             env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
             env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
-            env['WINEDLLOVERRIDES'] = "OnlineFix64=n,b;steam_api64=n,b;winmm=n,b"
 
         # Adicionar variáveis de ambiente definidas no perfil
         if profile and profile.env_vars:
