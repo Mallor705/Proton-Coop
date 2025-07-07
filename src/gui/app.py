@@ -22,7 +22,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.instance_width_spin.set_value(1920) # Default from example.json
         self.instance_height_spin = Gtk.SpinButton.new_with_range(480, 2160, 1)
         self.instance_height_spin.set_value(1080) # Default from example.json
-        
+
         self.mode_combo = Gtk.ComboBoxText()
         self.mode_combo.append_text("None")
         self.mode_combo.append_text("splitscreen")
@@ -39,7 +39,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.detected_audio_devices = self.device_manager.get_audio_devices()
         self.logger = Logger(name="LinuxCoopGUI", log_dir=Path("./logs"))
         self.proton_service = ProtonService(self.logger)
-        
+
         self.notebook = Gtk.Notebook()
         self.add(self.notebook)
 
@@ -76,10 +76,10 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         player_viewport = Gtk.Viewport()
         player_scrolled_window.add(player_viewport)
 
-        self.player_config_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5) 
+        self.player_config_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         player_viewport.add(self.player_config_vbox) # Add the vbox to the viewport
         self.setup_player_configs()
-        
+
         # Tab 3: Window Layout Preview
         self.window_layout_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.window_layout_page.set_border_width(10)
@@ -90,7 +90,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.preview_settings_grid.set_column_spacing(10)
         self.preview_settings_grid.set_row_spacing(10)
         self.window_layout_page.pack_start(self.preview_settings_grid, False, False, 0)
-        
+
         # Num Players
         preview_row = 0
         self.preview_settings_grid.attach(Gtk.Label(label="Number of Players:", xalign=0), 0, preview_row, 1, 1)
@@ -149,12 +149,12 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
 
         # Exe Path
         self.general_settings_grid.attach(Gtk.Label(label="Executable Path:", xalign=0), 0, row, 1, 1)
-        
+
         exe_path_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         self.exe_path_entry = Gtk.Entry()
         self.exe_path_entry.set_hexpand(True)
         exe_path_hbox.pack_start(self.exe_path_entry, True, True, 0)
-        
+
         exe_path_button = Gtk.Button(label="Browse...")
         exe_path_button.connect("clicked", self.on_exe_path_button_clicked)
         exe_path_hbox.pack_start(exe_path_button, False, False, 0)
@@ -203,7 +203,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         env_vars_frame.set_margin_top(10)
         env_vars_frame.set_margin_bottom(10)
         self.general_settings_grid.attach(env_vars_frame, 0, row, 2, 1) # Span two columns
-        
+
         env_vars_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         env_vars_frame.add(env_vars_vbox)
 
@@ -246,7 +246,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
             self.exe_path_entry.set_text(dialog.get_filename())
-        
+
         dialog.destroy()
 
     def on_load_button_clicked(self, button):
@@ -289,7 +289,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
 
     def _add_env_var_row(self, key="", value=""):
         hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        
+
         key_entry = Gtk.Entry()
         key_entry.set_placeholder_text("Variable Name")
         key_entry.set_hexpand(True)
@@ -305,7 +305,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         remove_button = Gtk.Button(label="-")
         remove_button.set_relief(Gtk.ReliefStyle.NONE)
         remove_button.set_tooltip_text("Remove this environment variable")
-        
+
         # Create a ListBoxRow and add the hbox to it
         list_box_row = Gtk.ListBoxRow()
         list_box_row.add(hbox)
@@ -355,7 +355,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
     def setup_player_configs(self):
         self.player_frames = [] # To hold a frame for each player's config
         self.player_device_combos = [] # To hold lists of combo boxes for each player
-        
+
         # Initial creation of player config UIs based on default num_players
         self._create_player_config_uis(self.num_players_spin.get_value_as_int())
 
@@ -403,7 +403,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             # for dev in self.detected_input_devices.get("mouse_event_paths", []):
             #     player_combos["mouse_event_path"].append_text(dev)
             # player_combos["mouse_event_path"].set_active(0)
-            
+
             # player_combos["keyboard_event_path"].append_text("None")
             # for dev in self.detected_input_devices.get("keyboard_event_paths", []):
             #     player_combos["keyboard_event_path"].append_text(dev)
@@ -481,7 +481,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             self.player_config_entries.append((player_frame, player_config_widgets))
         self.player_config_vbox.show_all()
         self.logger.info(f"DEBUG: Created {len(self.player_config_entries)} player config UIs.") # Debug line
-    
+
     def on_num_players_changed(self, spin_button):
         num_players = spin_button.get_value_as_int()
         self._create_player_config_uis(num_players)
@@ -684,7 +684,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                 cr.rectangle(x_offset_display + draw_w, y_offset_display + draw_h, draw_w, draw_h)
                 cr.set_source_rgb(1.0, 1.0, 1.0) # White border
                 cr.stroke()
-            
+
             else: # General case for more than 4 players, or other splits (uniform horizontal/vertical)
                 current_x = x_offset_display
                 current_y = y_offset_display
@@ -693,7 +693,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                     for i in range(num_players):
                         instance_w, instance_h = dummy_profile.get_instance_dimensions(i + 1)
                         draw_h = instance_h * scale # Width will be scaled_total_width
-                        
+
                         cr.rectangle(x_offset_display, current_y, scaled_total_width, draw_h)
                         cr.set_source_rgb(1.0, 1.0, 1.0) # White border
                         cr.stroke()
@@ -702,7 +702,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                     for i in range(num_players):
                         instance_w, instance_h = dummy_profile.get_instance_dimensions(i + 1)
                         draw_w = instance_w * scale # Height will be scaled_total_height
-                        
+
                         cr.rectangle(current_x, y_offset_display, draw_w, scaled_total_height)
                         cr.set_source_rgb(1.0, 1.0, 1.0) # White border
                         cr.stroke()
@@ -747,7 +747,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                 orientation=selected_orientation
             )
             self.logger.info(f"DEBUG: SplitscreenConfig orientation immediately after creation: {splitscreen_config.orientation}") # NEW DEBUG LINE
-        
+
         is_native_value = not Path(self.exe_path_entry.get_text()).name.lower().endswith('.exe')
 
         mode = self.mode_combo.get_active_text()
@@ -760,7 +760,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             instance_width=self.instance_width_spin.get_value_as_int(),
             instance_height=self.instance_height_spin.get_value_as_int(),
             app_id=self.app_id_entry.get_text() or None,
-            game_args=self.game_args_entry.get_text() or None,
+            game_args=self.game_args_entry.get_text() or "",
             is_native=is_native_value,
             mode=mode,
             splitscreen=splitscreen_config,
@@ -768,7 +768,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             player_configs=player_configs_data,
             use_goldberg_emu=self.use_goldberg_emu_check.get_active()
         )
-        
+
         # DEBUG: Check the mode value right before GameProfile instantiation
         self.logger.info(f"DEBUG: Mode value before GameProfile instantiation: {mode}")
 
@@ -784,7 +784,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.game_name_entry.set_text(profile_data.get("GAME_NAME", ""))
         self.exe_path_entry.set_text(str(profile_data.get("EXE_PATH", "")))
         self.num_players_spin.set_value(profile_data.get("NUM_PLAYERS", 1))
-        
+
         # Set Proton Version Combo Box
         proton_version = profile_data.get("PROTON_VERSION")
         if proton_version:
@@ -832,7 +832,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         if env_vars:
             for key, value in env_vars.items():
                 self._add_env_var_row(key, value)
-        
+
         # Load player configurations
         self._create_player_config_uis(profile_data.get("NUM_PLAYERS", 1)) # Re-create based on num_players
 
@@ -845,7 +845,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                     player_combos["language"].set_text(player_config_data.get("LANGUAGE", ""))
                     player_combos["listen_port"].set_text(player_config_data.get("LISTEN_PORT", ""))
                     player_combos["user_steam_id"].set_text(player_config_data.get("USER_STEAM_ID", ""))
-                    
+
                     # Set ComboBoxText for device IDs/paths
                     for combo_key, alias_key in [
                         ("physical_device_id", "PHYSICAL_DEVICE_ID"),
@@ -862,9 +862,11 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                                     break
                             else:
                                 # If not found, set to "None" or first item
-                                player_combos[combo_key].set_active(0)
+                                if len(player_combos[combo_key].get_model()) > 0:
+                                    player_combos[combo_key].set_active(0)
                         else:
-                            player_combos[combo_key].set_active(0)
+                            if len(player_combos[combo_key].get_model()) > 0:
+                                player_combos[combo_key].set_active(0)
 
     def _create_device_list_store(self, devices: List[Dict[str, str]]) -> Gtk.ListStore:
         list_store = Gtk.ListStore(str, str) # id, name
@@ -886,4 +888,4 @@ def run_gui():
     app.run(None)
 
 if __name__ == "__main__":
-    run_gui() 
+    run_gui()

@@ -36,45 +36,49 @@ class InstanceService:
         self.logger.info("Dependencies validated successfully")
 
     def launch_instances(self, profile: GameProfile, profile_name: str) -> None:
-        """Lança todas as instâncias do jogo conforme o perfil fornecido."""
-        # Cache proton lookup
-        proton_cache_key = f"{profile.is_native}_{profile.proton_version}"
-        if proton_cache_key not in self._env_cache:
-            if profile.is_native:
-                proton_path = None
-                steam_root = None
+            """Lança todas as instâncias do jogo conforme o perfil fornecido."""
+            if not profile.exe_path:
+                self.logger.error(f"Executable path is not configured for profile '{profile_name}'. Cannot launch.")
+                return
+
+            # Cache proton lookup
+            proton_cache_key = f"{profile.is_native}_{profile.proton_version}"
+            if proton_cache_key not in self._env_cache:
+                if profile.is_native:
+                    proton_path = None
+                    steam_root = None
+                else:
+                    proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version or "Experimental")
+                self._env_cache[proton_cache_key] = {'proton_path': proton_path, 'steam_root': steam_root}
             else:
-                proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version or "Experimental")
-            self._env_cache[proton_cache_key] = {'proton_path': proton_path, 'steam_root': steam_root}
-        else:
-            cached_data = self._env_cache[proton_cache_key]
-            proton_path = cached_data['proton_path']
-            steam_root = cached_data['steam_root']
+                cached_data = self._env_cache[proton_cache_key]
+                proton_path = cached_data['proton_path']
+                steam_root = cached_data['steam_root']
 
-        self.process_service.cleanup_previous_instances(proton_path, profile.exe_path)
+            self.process_service.cleanup_previous_instances(proton_path, profile.exe_path)
 
-        # Create directories in batch
-        directories = [
-            Config.LOG_DIR,
-            Path.home() / '.config/protonfixes',
-            Config.PREFIX_BASE_DIR
-        ]
-        for directory in directories:
-            directory.mkdir(parents=True, exist_ok=True)
+            # Create directories in batch
+            directories = [
+                Config.LOG_DIR,
+                Path.home() / '.config/protonfixes',
+                Config.PREFIX_BASE_DIR
+            ]
+            for directory in directories:
+                directory.mkdir(parents=True, exist_ok=True)
 
-        instances = self._create_instances(profile, profile_name)
+            instances = self._create_instances(profile, profile_name)
 
-        self.logger.info(f"Launching {profile.num_players} instance(s) of '{profile.game_name}'...")
+            self.logger.info(f"Launching {profile.num_players} instance(s) of '{profile.game_name}'...")
 
-        original_game_path = profile.exe_path.parent
+            original_game_path = profile.exe_path.parent
 
-        for instance in instances:
-            self._launch_single_instance(instance, profile, proton_path, steam_root, original_game_path)
-            time.sleep(5)
+            for instance in instances:
+                self._launch_single_instance(instance, profile, proton_path, steam_root, original_game_path)
+                time.sleep(5)
 
-        self.logger.info(f"All {profile.num_players} instances launched")
-        self.logger.info(f"PIDs: {self.process_service.pids}")
-        self.logger.info("Press CTRL+C to terminate all instances")
+            self.logger.info(f"All {profile.num_players} instances launched")
+            self.logger.info(f"PIDs: {self.process_service.pids}")
+            self.logger.info("Press CTRL+C to terminate all instances")
 
     def _create_instances(self, profile: GameProfile, profile_name: str) -> List[GameInstance]:
         """Cria os modelos de instância para cada jogador."""
@@ -361,6 +365,10 @@ class InstanceService:
                               proton_path: Optional[Path], steam_root: Optional[Path], original_game_path: Path) -> None:
         """Lança uma única instância do jogo."""
         self.logger.info(f"Preparing instance {instance.instance_num}...")
+
+        if not profile.exe_path:
+            self.logger.error(f"Instance {instance.instance_num}: Executable path is missing in profile, cannot launch.")
+            return
 
         symlinked_executable_path = self._create_game_directory_symlink_structure(
             instance,
