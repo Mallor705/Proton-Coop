@@ -45,6 +45,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
 
         # Initialize player config entries list
         self.player_config_entries = []
+        self.player_checkboxes = []
 
         # Tab 1: General Settings
         self.general_settings_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -365,6 +366,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.player_frames.clear()
         self.player_device_combos.clear()
         self.player_config_entries.clear()
+        self.player_checkboxes.clear()
 
         # Clear existing widgets in player_config_vbox before repopulating
         for child in self.player_config_vbox.get_children():
@@ -416,6 +418,13 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
 
             # Add fields to player grid
             p_row = 0
+
+            check_button = Gtk.CheckButton(label=f"Executar Jogador {i + 1}")
+            check_button.set_active(True)
+            self.player_checkboxes.append(check_button)
+            player_grid.attach(check_button, 0, p_row, 2, 1)
+            p_row += 1
+
             player_grid.attach(Gtk.Label(label="Account Name:", xalign=0), 0, p_row, 1, 1)
             player_grid.attach(player_combos["account_name"], 1, p_row, 1, 1)
             p_row += 1
@@ -498,6 +507,9 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
     def on_save_button_clicked(self, button):
         print("Save button clicked!")
         profile_data_dumped = self.get_profile_data() # This call already uses model_dump(mode='json')
+
+        selected_players = [i + 1 for i, cb in enumerate(self.player_checkboxes) if cb.get_active()]
+        profile_data_dumped['selected_players'] = selected_players
 
         # DEBUG: Check the type of the 'exe_path' field within the dumped data
         if "EXE_PATH" in profile_data_dumped:
@@ -864,9 +876,18 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                                 # If not found, set to "None" or first item
                                 if len(player_combos[combo_key].get_model()) > 0:
                                     player_combos[combo_key].set_active(0)
-                        else:
-                            if len(player_combos[combo_key].get_model()) > 0:
-                                player_combos[combo_key].set_active(0)
+
+            selected_players = profile_data.get("selected_players")
+            if selected_players is None:
+                # If not defined, all players are active by default
+                for cb in self.player_checkboxes:
+                    cb.set_active(True)
+            else:
+                for i, cb in enumerate(self.player_checkboxes):
+                    cb.set_active((i + 1) in selected_players)
+
+            if len(player_combos[combo_key].get_model()) > 0:
+                player_combos[combo_key].set_active(0)
 
     def _create_device_list_store(self, devices: List[Dict[str, str]]) -> Gtk.ListStore:
         list_store = Gtk.ListStore(str, str) # id, name

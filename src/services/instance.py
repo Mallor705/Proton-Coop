@@ -68,7 +68,7 @@ class InstanceService:
 
             instances = self._create_instances(profile, profile_name)
 
-            self.logger.info(f"Launching {profile.num_players} instance(s) of '{profile.game_name}'...")
+            self.logger.info(f"Launching {profile.effective_num_players} instance(s) of '{profile.game_name}'...")
 
             original_game_path = profile.exe_path.parent
 
@@ -76,37 +76,36 @@ class InstanceService:
                 self._launch_single_instance(instance, profile, proton_path, steam_root, original_game_path)
                 time.sleep(5)
 
-            self.logger.info(f"All {profile.num_players} instances launched")
+            self.logger.info(f"All {profile.effective_num_players} instances launched")
             self.logger.info(f"PIDs: {self.process_service.pids}")
             self.logger.info("Press CTRL+C to terminate all instances")
 
     def _create_instances(self, profile: GameProfile, profile_name: str) -> List[GameInstance]:
         """Cria os modelos de instância para cada jogador."""
         instances = []
-        # Use effective_num_players para determinar o número total de instâncias a serem criadas
-        num_total_instances = profile.effective_num_players
+        if not profile.player_configs:
+            return instances
 
-        for i in range(1, num_total_instances + 1):
-            # Tenta obter a configuração do jogador do perfil, se disponível
-            player_config = None
-            if profile.player_configs and (i - 1) < len(profile.player_configs):
-                player_config = profile.player_configs[i - 1]
-            else:
-                # Se não houver configuração para o jogador, cria uma genérica
-                self.logger.info(f"No specific player configuration found for instance {i}. Generating generic data.")
-                player_config = PlayerInstanceConfig(ACCOUNT_NAME=f"Player{i}")
+        # Itera sobre a lista completa de configurações de jogadores com seu índice
+        for i, player_config in enumerate(profile.player_configs):
+            instance_num = i + 1
+
+            # Verifica se esta instância está na lista de jogadores selecionados para iniciar.
+            # Se a lista de seleção estiver vazia ou for None, todos os jogadores são iniciados.
+            if profile.selected_players and instance_num not in profile.selected_players:
+                continue  # Pula para o próximo jogador se não estiver selecionado
 
             # Organiza os prefixos por jogo e por instância
-            prefix_dir = Config.get_prefix_base_dir(profile.game_name) / f"instance_{i}"
-            log_file = Config.LOG_DIR / f"{profile_name}_instance_{i}.log"
+            prefix_dir = Config.get_prefix_base_dir(profile.game_name) / f"instance_{instance_num}"
+            log_file = Config.LOG_DIR / f"{profile_name}_instance_{instance_num}.log"
             prefix_dir.mkdir(parents=True, exist_ok=True)
             (prefix_dir / "pfx").mkdir(exist_ok=True)
             instance = GameInstance(
-                instance_num=i,
+                instance_num=instance_num,
                 profile_name=profile_name,
                 prefix_dir=prefix_dir,
                 log_file=log_file,
-                player_config=player_config  # Passa a configuração do jogador para a instância
+                player_config=player_config
             )
             instances.append(instance)
         return instances

@@ -63,7 +63,7 @@ class GameProfile(BaseModel):
         """Valida se o caminho do executável existe, se fornecido."""
         if v is None: # Allow None for optional exe_path
             return v
-        
+
         path_v = Path(v)
         cache = get_cache()
         if not cache.check_path_exists(path_v):
@@ -137,10 +137,22 @@ class GameProfile(BaseModel):
         if 'NUM_PLAYERS' not in data and 'PLAYERS' in data and isinstance(data['PLAYERS'], list):
             data['NUM_PLAYERS'] = len(data['PLAYERS'])
 
+    selected_players: Optional[List[int]] = Field(default=None, alias="selected_players")
+
     # Adicionar getter para num_players para garantir consistência caso player_configs seja a fonte da verdade
     @property
     def effective_num_players(self) -> int:
-        return self.num_players
+        """Retorna o número de jogadores que serão efetivamente iniciados."""
+        return len(self.players_to_launch)
+
+    @property
+    def players_to_launch(self) -> List[PlayerInstanceConfig]:
+        """Retorna os jogadores que devem ser iniciados com base na seleção."""
+        if not self.selected_players or not self.player_configs:
+            return self.player_configs or []
+
+        # Filtra jogadores com base na lista selected_players (índice baseado em 1)
+        return [p for i, p in enumerate(self.player_configs) if (i + 1) in self.selected_players]
 
     def get_instance_dimensions(self, instance_num: int) -> Tuple[int, int]:
         """Retorna as dimensões (largura, altura) para uma instância específica."""
