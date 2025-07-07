@@ -9,6 +9,7 @@ from ..services.proton import ProtonService
 from ..core.logger import Logger
 from ..core.config import Config
 from typing import Dict, List
+import subprocess
 
 class ProfileEditorWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
@@ -230,6 +231,11 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         save_button = Gtk.Button(label="Save Profile")
         save_button.connect("clicked", self.on_save_button_clicked)
         button_hbox.pack_end(save_button, False, False, 0)
+
+        # Play Button
+        play_button = Gtk.Button(label="▶️ Play")
+        play_button.connect("clicked", self.on_play_button_clicked)
+        button_hbox.pack_start(play_button, False, False, 0)
 
         # Load Button
         load_button = Gtk.Button(label="Load Profile")
@@ -540,6 +546,37 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         except Exception as e:
             dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR, Gtk.ButtonsType.OK,
                                        f"Error saving profile: {e}")
+            dialog.run()
+            dialog.destroy()
+
+    def on_play_button_clicked(self, widget):
+        """Salva o perfil atual e executa o jogo diretamente (sem abrir terminal gráfico)."""
+        import shutil
+
+        self.on_save_button_clicked(widget)
+
+        profile_name = self.game_name_entry.get_text().replace(" ", "_").lower()
+        if not profile_name:
+            self.logger.error("Cannot launch game with an empty profile name.")
+            return
+
+        script_path = Path(__file__).parent.parent.parent / "linuxcoop.py"
+        python_exec = shutil.which("python3") or shutil.which("python")
+        if not python_exec:
+            dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR, Gtk.ButtonsType.OK,
+                                       "Nenhum interpretador Python encontrado no sistema.")
+            dialog.run()
+            dialog.destroy()
+            return
+
+        command = [python_exec, str(script_path), profile_name]
+        self.logger.info(f"Executing command: {' '.join(command)}")
+        try:
+            subprocess.Popen(command)
+        except Exception as e:
+            self.logger.error(f"Failed to launch game: {e}")
+            dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR, Gtk.ButtonsType.OK,
+                                       f"Error launching game: {e}")
             dialog.run()
             dialog.destroy()
 
