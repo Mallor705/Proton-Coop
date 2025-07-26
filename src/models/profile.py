@@ -49,7 +49,6 @@ class GameProfile(BaseModel):
 
     # Novo campo para configurações por jogador, usando alias "PLAYERS" para o JSON
     player_configs: Optional[List[PlayerInstanceConfig]] = Field(default=None, alias="PLAYERS")
-    use_goldberg_emu: bool = Field(default=True, alias="USE_GOLDBERG_EMU")
 
     @validator('num_players')
     def validate_num_players(cls, v):
@@ -163,6 +162,10 @@ class GameProfile(BaseModel):
         orientation = self.splitscreen.orientation
         num_players = self.effective_num_players
 
+        # Ensure num_players is at least 1 to prevent ZeroDivisionError
+        if num_players < 1:
+            num_players = 1
+
         if num_players == 1:
             # Caso para 1 jogador (tela cheia) ou qualquer outro caso não mapeado explicitamente
             return self.instance_width, self.instance_height
@@ -174,25 +177,24 @@ class GameProfile(BaseModel):
         elif num_players == 3:
             if orientation == "horizontal":
                 if instance_num == 1:
-                    # Instância 1 ocupa largura total, metade da altura
+                    # Player 1 (top): Full width, half height
                     return self.instance_width, self.instance_height // 2
-                else:  # Instância 2 ou 3
-                    # As outras duas dividem a largura total e a outra metade da altura
+                else:  # Player 2 or 3 (bottom, split horizontally)
+                    # Each occupies half width, half height
                     return self.instance_width // 2, self.instance_height // 2
             else:  # vertical
                 if instance_num == 1:
-                    # Instância 1 ocupa metade da largura, altura total
+                    # Player 1 (left): Half width, full height
                     return self.instance_width // 2, self.instance_height
-                else:  # Instância 2 ou 3
-                    # As outras duas dividem a outra metade da largura e a altura total
+                else:  # Player 2 or 3 (right, split vertically)
+                    # Each occupies half of remaining width, half of total height
                     return self.instance_width // 2, self.instance_height // 2
         elif num_players == 4:
-            # Para 4 jogadores, cada um ocupa um quarto da tela
-            # Independentemente da orientação, divide-se por 2 em largura e altura
+            # For 4 players, each occupies a quarter of the screen (2x2 grid)
             return self.instance_width // 2, self.instance_height // 2
         else:
-            # Comportamento padrão para outros números de jogadores (ex: 5 ou mais)
-            # Divide igualmente na orientação especificada
+            # Default behavior for other numbers of players (e.g., 5 or more)
+            # Divide equally in the specified orientation
             if orientation == "horizontal":
                 return self.instance_width, self.instance_height // num_players
             else:  # vertical

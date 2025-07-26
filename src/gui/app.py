@@ -8,8 +8,10 @@ from ..models.profile import GameProfile, PlayerInstanceConfig, SplitscreenConfi
 from ..services.proton import ProtonService
 from ..core.logger import Logger
 from ..core.config import Config
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import subprocess
+import shutil
+import cairo # Importar cairo aqui para o desenho
 
 class ProfileEditorWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
@@ -91,6 +93,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.preview_settings_grid = Gtk.Grid()
         self.preview_settings_grid.set_column_spacing(10)
         self.preview_settings_grid.set_row_spacing(10)
+        self.preview_settings_grid.set_border_width(10)
         self.window_layout_page.pack_start(self.preview_settings_grid, False, False, 0)
 
         # Num Players
@@ -138,113 +141,148 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         # Connect num_players_spin to its specific handler for player config UI update
         self.num_players_spin.connect("value-changed", self.on_num_players_changed)
 
+        # Add a Statusbar at the bottom
+        self.statusbar = Gtk.Statusbar()
+        main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(main_vbox)
+        main_vbox.pack_start(self.notebook, True, True, 0)
+        main_vbox.pack_end(self.statusbar, False, False, 0)
+
         self.show_all()
 
     def setup_general_settings(self):
+        # Use a main VBox for this page to hold frames
+        main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
+        self.general_settings_page.pack_start(main_vbox, True, True, 0)
+
+        # Frame 1: Game Details
+        game_details_frame = Gtk.Frame(label="Detalhes do Jogo")
+        game_details_frame.set_shadow_type(Gtk.ShadowType.ETCHED_OUT)
+        main_vbox.pack_start(game_details_frame, False, False, 0)
+
+        game_details_grid = Gtk.Grid()
+        game_details_grid.set_column_spacing(10)
+        game_details_grid.set_row_spacing(10)
+        game_details_grid.set_border_width(10)
+        game_details_frame.add(game_details_grid)
+
         row = 0
 
         # Game Name
-        self.general_settings_grid.attach(Gtk.Label(label="Game Name:", xalign=0), 0, row, 1, 1)
+        game_details_grid.attach(Gtk.Label(label="Nome do Jogo:", xalign=0), 0, row, 1, 1)
         self.game_name_entry = Gtk.Entry()
-        self.general_settings_grid.attach(self.game_name_entry, 1, row, 1, 1)
+        self.game_name_entry.set_placeholder_text("Ex: Palworld")
+        game_details_grid.attach(self.game_name_entry, 1, row, 1, 1)
         row += 1
 
-        # Exe Path
-        self.general_settings_grid.attach(Gtk.Label(label="Executable Path:", xalign=0), 0, row, 1, 1)
+        # Executable Path
+        game_details_grid.attach(Gtk.Label(label="Caminho do Executável:", xalign=0), 0, row, 1, 1)
 
         exe_path_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         self.exe_path_entry = Gtk.Entry()
         self.exe_path_entry.set_hexpand(True)
+        self.exe_path_entry.set_placeholder_text("Ex: ~/.steam/steamapps/common/Palworld/Palworld.exe")
         exe_path_hbox.pack_start(self.exe_path_entry, True, True, 0)
 
-        exe_path_button = Gtk.Button(label="Browse...")
+        exe_path_button = Gtk.Button(label="Procurar...")
         exe_path_button.connect("clicked", self.on_exe_path_button_clicked)
         exe_path_hbox.pack_start(exe_path_button, False, False, 0)
 
-        self.general_settings_grid.attach(exe_path_hbox, 1, row, 1, 1)
-        row += 1
-
-        # Proton Version
-        self.general_settings_grid.attach(Gtk.Label(label="Proton Version:", xalign=0), 0, row, 1, 1)
-        self.proton_version_combo = Gtk.ComboBoxText()
-        # Populate with detected Proton versions
-        proton_versions = self.proton_service.list_installed_proton_versions()
-        if not proton_versions:
-            self.proton_version_combo.append_text("No Proton versions found")
-            self.proton_version_combo.set_sensitive(False) # Disable if no versions found
-        else:
-            self.proton_version_combo.append_text("None") # Option for no specific Proton version
-            for version in proton_versions:
-                self.proton_version_combo.append_text(version)
-            self.proton_version_combo.set_active(0) # Select "None" by default
-
-        self.general_settings_grid.attach(self.proton_version_combo, 1, row, 1, 1)
+        game_details_grid.attach(exe_path_hbox, 1, row, 1, 1)
         row += 1
 
         # App ID
-        self.general_settings_grid.attach(Gtk.Label(label="App ID:", xalign=0), 0, row, 1, 1)
+        game_details_grid.attach(Gtk.Label(label="ID do Aplicativo (Steam):", xalign=0), 0, row, 1, 1)
         self.app_id_entry = Gtk.Entry()
-        self.general_settings_grid.attach(self.app_id_entry, 1, row, 1, 1)
+        self.app_id_entry.set_placeholder_text("Opcional (ex: 1621530)")
+        game_details_grid.attach(self.app_id_entry, 1, row, 1, 1)
         row += 1
 
-        # Game Args
-        self.general_settings_grid.attach(Gtk.Label(label="Game Arguments:", xalign=0), 0, row, 1, 1)
+        # Game Arguments
+        game_details_grid.attach(Gtk.Label(label="Argumentos do Jogo:", xalign=0), 0, row, 1, 1)
         self.game_args_entry = Gtk.Entry()
-        self.general_settings_grid.attach(self.game_args_entry, 1, row, 1, 1)
+        self.game_args_entry.set_placeholder_text("Opcional (ex: -EpicPortal)")
+        game_details_grid.attach(self.game_args_entry, 1, row, 1, 1)
         row += 1
 
-        # Use Goldberg Emu
-        self.general_settings_grid.attach(Gtk.Label(label="Use Goldberg Emulator:", xalign=0), 0, row, 1, 1)
-        self.use_goldberg_emu_check = Gtk.CheckButton()
-        self.use_goldberg_emu_check.set_active(True) # Default from example.json
-        self.general_settings_grid.attach(self.use_goldberg_emu_check, 1, row, 1, 1)
+        # Is Native Checkbox
+        game_details_grid.attach(Gtk.Label(label="É Jogo Nativo (Linux)?", xalign=0), 0, row, 1, 1)
+        self.is_native_check = Gtk.CheckButton()
+        self.is_native_check.set_active(False) # Most games will be Windows
+        game_details_grid.attach(self.is_native_check, 1, row, 1, 1)
         row += 1
 
-        # Env Vars
-        env_vars_frame = Gtk.Frame(label="Environment Variables")
-        env_vars_frame.set_margin_top(10)
-        env_vars_frame.set_margin_bottom(10)
-        self.general_settings_grid.attach(env_vars_frame, 0, row, 2, 1) # Span two columns
+        # Frame 2: Proton & Launch Options
+        proton_options_frame = Gtk.Frame(label="Opções de Proton e Lançamento")
+        proton_options_frame.set_shadow_type(Gtk.ShadowType.ETCHED_OUT)
+        main_vbox.pack_start(proton_options_frame, False, False, 0)
+
+        proton_options_grid = Gtk.Grid()
+        proton_options_grid.set_column_spacing(10)
+        proton_options_grid.set_row_spacing(10)
+        proton_options_grid.set_border_width(10)
+        proton_options_frame.add(proton_options_grid)
+
+        row = 0 # Reset row counter for this grid
+
+        # Proton Version
+        proton_options_grid.attach(Gtk.Label(label="Versão do Proton:", xalign=0), 0, row, 1, 1)
+        self.proton_version_combo = Gtk.ComboBoxText()
+        proton_versions = self.proton_service.list_installed_proton_versions()
+        if not proton_versions:
+            self.proton_version_combo.append_text("Nenhuma versão de Proton encontrada")
+            self.proton_version_combo.set_sensitive(False)
+        else:
+            self.proton_version_combo.append_text("Nenhuma (Usar padrão do Steam)")
+            for version in proton_versions:
+                self.proton_version_combo.append_text(version)
+            self.proton_version_combo.set_active(0)
+
+        proton_options_grid.attach(self.proton_version_combo, 1, row, 1, 1)
+        row += 1
+
+        # Environment Variables
+        env_vars_frame = Gtk.Frame(label="Variáveis de Ambiente Personalizadas")
+        env_vars_frame.set_shadow_type(Gtk.ShadowType.ETCHED_OUT)
+        main_vbox.pack_start(env_vars_frame, False, False, 0)
 
         env_vars_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        env_vars_vbox.set_border_width(10)
         env_vars_frame.add(env_vars_vbox)
 
         self.env_vars_listbox = Gtk.ListBox()
         self.env_vars_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
         env_vars_vbox.pack_start(self.env_vars_listbox, True, True, 0)
-        self.env_var_entries = [] # List to store (key_entry, value_entry) tuples
+        self.env_var_entries = []
 
-        # Add default env vars
         self._add_env_var_row("WINEDLLOVERRIDES", "")
         self._add_env_var_row("MANGOHUD", "1")
 
-        add_env_var_button = Gtk.Button(label="Add Environment Variable")
+        add_env_var_button = Gtk.Button(label="Adicionar Variável")
         add_env_var_button.connect("clicked", self._on_add_env_var_clicked)
         env_vars_vbox.pack_start(add_env_var_button, False, False, 0)
-        row += 1 # Increment row for the next element after env vars frame
 
-        # Add a horizontal box for Save and Load buttons
+        # Buttons at the bottom
         button_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        self.general_settings_page.pack_end(button_hbox, False, False, 0)
+        button_hbox.set_halign(Gtk.Align.END) # Align buttons to the right
+        main_vbox.pack_end(button_hbox, False, False, 0)
 
-        # Save Button
-        save_button = Gtk.Button(label="Save Profile")
+        load_button = Gtk.Button(label="Carregar Perfil")
+        load_button.connect("clicked", self.on_load_button_clicked)
+        button_hbox.pack_start(load_button, False, False, 0)
+
+        save_button = Gtk.Button(label="Salvar Perfil")
         save_button.connect("clicked", self.on_save_button_clicked)
-        button_hbox.pack_end(save_button, False, False, 0)
+        button_hbox.pack_start(save_button, False, False, 0)
 
-        # Play Button
-        play_button = Gtk.Button(label="▶️ Play")
+        play_button = Gtk.Button(label="▶️ Iniciar Jogo")
+        play_button.get_style_context().add_class("suggested-action") # Highlight play button
         play_button.connect("clicked", self.on_play_button_clicked)
         button_hbox.pack_start(play_button, False, False, 0)
 
-        # Load Button
-        load_button = Gtk.Button(label="Load Profile")
-        load_button.connect("clicked", self.on_load_button_clicked)
-        button_hbox.pack_end(load_button, False, False, 0)
-
     def on_exe_path_button_clicked(self, button):
         dialog = Gtk.FileChooserDialog(
-            title="Select Game Executable",
+            title="Selecionar Executável do Jogo",
             parent=self,
             action=Gtk.FileChooserAction.OPEN,
             buttons=(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
@@ -255,16 +293,16 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             self.exe_path_entry.set_text(dialog.get_filename())
 
         dialog.destroy()
+        self.statusbar.push(0, "Caminho do executável selecionado.")
 
     def on_load_button_clicked(self, button):
         dialog = Gtk.FileChooserDialog(
-            title="Load Game Profile",
+            title="Carregar Perfil de Jogo",
             parent=self,
             action=Gtk.FileChooserAction.OPEN,
             buttons=(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
         )
 
-        # Set the current folder to PROFILE_DIR
         try:
             Config.PROFILE_DIR.mkdir(parents=True, exist_ok=True)
             dialog.set_current_folder(str(Config.PROFILE_DIR))
@@ -278,14 +316,16 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                 profile = GameProfile.load_from_file(file_path)
                 self.load_profile_data(profile.model_dump(by_alias=True)) # Use model_dump to convert to dict
                 self.logger.info(f"Profile loaded successfully from {file_path}")
+                self.statusbar.push(0, f"Perfil carregado: {file_path.name}")
             except Exception as e:
                 self.logger.error(f"Failed to load profile from {file_path}: {e}")
+                self.statusbar.push(0, f"Erro ao carregar perfil: {e}")
                 error_dialog = Gtk.MessageDialog(
                     parent=self,
                     flags=Gtk.DialogFlags.MODAL,
                     type=Gtk.MessageType.ERROR,
                     buttons=Gtk.ButtonsType.OK,
-                    message_format=f"Error loading profile:\n{e}"
+                    message_format=f"Erro ao carregar perfil:\n{e}"
                 )
                 error_dialog.run()
                 error_dialog.destroy()
@@ -293,47 +333,46 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
 
     def _on_add_env_var_clicked(self, button):
         self._add_env_var_row()
+        self.statusbar.push(0, "Variável de ambiente adicionada.")
 
     def _add_env_var_row(self, key="", value=""):
         hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
 
         key_entry = Gtk.Entry()
-        key_entry.set_placeholder_text("Variable Name")
+        key_entry.set_placeholder_text("Nome da Variável")
         key_entry.set_hexpand(True)
         key_entry.set_text(key)
         hbox.pack_start(key_entry, True, True, 0)
 
         value_entry = Gtk.Entry()
-        value_entry.set_placeholder_text("Value")
+        value_entry.set_placeholder_text("Valor")
         value_entry.set_hexpand(True)
         value_entry.set_text(value)
         hbox.pack_start(value_entry, True, True, 0)
 
         remove_button = Gtk.Button(label="-")
         remove_button.set_relief(Gtk.ReliefStyle.NONE)
-        remove_button.set_tooltip_text("Remove this environment variable")
+        remove_button.set_tooltip_text("Remover esta variável de ambiente")
 
-        # Create a ListBoxRow and add the hbox to it
         list_box_row = Gtk.ListBoxRow()
         list_box_row.add(hbox)
 
-        # Connect the remove button to a lambda that passes the ListBoxRow itself
         remove_button.connect("clicked", lambda btn, row=list_box_row, k_entry=key_entry, v_entry=value_entry: self._remove_env_var_row(btn, row, k_entry, v_entry))
         hbox.pack_end(remove_button, False, False, 0)
 
         self.env_vars_listbox.add(list_box_row)
         list_box_row.show_all()
-        self.env_var_entries.append((key_entry, value_entry, list_box_row)) # Store entries and row for removal
+        self.env_var_entries.append((key_entry, value_entry, list_box_row))
 
     def _remove_env_var_row(self, button, row, key_entry, value_entry):
         self.env_vars_listbox.remove(row)
-        # Remove the tuple from our tracking list
         self.env_var_entries.remove((key_entry, value_entry, row))
+        self.statusbar.push(0, "Variável de ambiente removida.")
 
     def _get_env_vars_from_ui(self) -> Dict[str, str]:
         env_vars = {}
         for key_entry, value_entry, _ in self.env_var_entries:
-            key = key_entry.get_text().strip().upper() # Convert key to ALL CAPS
+            key = key_entry.get_text().strip().upper()
             value = value_entry.get_text().strip()
             if key:
                 env_vars[key] = value
@@ -346,24 +385,23 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             for key, widget in widgets.items():
                 if isinstance(widget, Gtk.Entry):
                     config[key] = widget.get_text()
-                elif isinstance(widget, Gtk.ComboBox): # Alterado para Gtk.ComboBox
+                elif isinstance(widget, Gtk.ComboBox):
                     model = widget.get_model()
                     active_iter = widget.get_active_iter()
                     if active_iter:
-                        selected_id = model.get_value(active_iter, 0) # Obtém o ID (coluna 0)
-                        config[key] = selected_id if selected_id != "" else None # Salva None se for a opção "None" do ListStore
+                        selected_id = model.get_value(active_iter, 0)
+                        config[key] = selected_id if selected_id != "" else None
                     else:
-                        config[key] = None # Nenhum item selecionado
+                        config[key] = None
                 else:
                     config[key] = ""
             player_configs_data.append(config)
         return player_configs_data
 
     def setup_player_configs(self):
-        self.player_frames = [] # To hold a frame for each player's config
-        self.player_device_combos = [] # To hold lists of combo boxes for each player
+        self.player_frames = []
+        self.player_device_combos = []
 
-        # Initial creation of player config UIs based on default num_players
         self._create_player_config_uis(self.num_players_spin.get_value_as_int())
 
     def _create_player_config_uis(self, num_players: int):
@@ -374,20 +412,20 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.player_config_entries.clear()
         self.player_checkboxes.clear()
 
-        # Clear existing widgets in player_config_vbox before repopulating
         for child in self.player_config_vbox.get_children():
             self.player_config_vbox.remove(child)
 
         for i in range(num_players):
-            player_frame = Gtk.Frame(label=f"Player {i+1} Configuration")
+            player_frame = Gtk.Frame(label=f"Configuração Jogador {i+1}")
             player_frame.set_margin_top(10)
+            player_frame.set_shadow_type(Gtk.ShadowType.ETCHED_OUT)
             self.player_config_vbox.pack_start(player_frame, False, False, 0)
             self.player_frames.append(player_frame)
 
             player_grid = Gtk.Grid()
-            player_grid.set_column_spacing(5)
-            player_grid.set_row_spacing(5)
-            player_grid.set_border_width(5)
+            player_grid.set_column_spacing(10)
+            player_grid.set_row_spacing(10)
+            player_grid.set_border_width(10)
             player_frame.add(player_grid)
 
             player_combos = {
@@ -402,84 +440,67 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             }
             self.player_device_combos.append(player_combos)
 
-            # Populate combos with detected devices - REMOVIDO: Já tratado por _create_device_list_store
-            # for dev in self.detected_input_devices.get("physical_device_ids", []):
-            #     player_combos["physical_device_id"].append_text(dev)
-            # player_combos["physical_device_id"].set_active(0)
-
-            # player_combos["mouse_event_path"].append_text("None")
-            # for dev in self.detected_input_devices.get("mouse_event_paths", []):
-            #     player_combos["mouse_event_path"].append_text(dev)
-            # player_combos["mouse_event_path"].set_active(0)
-
-            # player_combos["keyboard_event_path"].append_text("None")
-            # for dev in self.detected_input_devices.get("keyboard_event_paths", []):
-            #     player_combos["keyboard_event_path"].append_text(dev)
-            # player_combos["keyboard_event_path"].set_active(0)
-
-            # player_combos["audio_device_id"].append_text("None")
-            # for dev in self.detected_audio_devices:
-            #     player_combos["audio_device_id"].append_text(dev)
-            # player_combos["audio_device_id"].set_active(0)
-
-            # Add fields to player grid
             p_row = 0
 
-            check_button = Gtk.CheckButton(label=f"Executar Jogador {i + 1}")
+            check_button = Gtk.CheckButton(label=f"Habilitar Jogador {i + 1}")
             check_button.set_active(True)
             self.player_checkboxes.append(check_button)
             player_grid.attach(check_button, 0, p_row, 2, 1)
             p_row += 1
 
-            player_grid.attach(Gtk.Label(label="Account Name:", xalign=0), 0, p_row, 1, 1)
+            player_grid.attach(Gtk.Label(label="Nome da Conta:", xalign=0), 0, p_row, 1, 1)
+            player_combos["account_name"].set_placeholder_text(f"Jogador {i+1}")
             player_grid.attach(player_combos["account_name"], 1, p_row, 1, 1)
             p_row += 1
 
-            player_grid.attach(Gtk.Label(label="Language:", xalign=0), 0, p_row, 1, 1)
+            player_grid.attach(Gtk.Label(label="Idioma:", xalign=0), 0, p_row, 1, 1)
+            player_combos["language"].set_placeholder_text("Ex: brazilian, english")
             player_grid.attach(player_combos["language"], 1, p_row, 1, 1)
             p_row += 1
 
-            player_grid.attach(Gtk.Label(label="Listen Port:", xalign=0), 0, p_row, 1, 1)
+            player_grid.attach(Gtk.Label(label="Porta de Escuta (Goldberg):", xalign=0), 0, p_row, 1, 1)
+            player_combos["listen_port"].set_placeholder_text("Opcional")
             player_grid.attach(player_combos["listen_port"], 1, p_row, 1, 1)
             p_row += 1
 
-            player_grid.attach(Gtk.Label(label="User Steam ID:", xalign=0), 0, p_row, 1, 1)
+            player_grid.attach(Gtk.Label(label="ID Steam do Usuário:", xalign=0), 0, p_row, 1, 1)
+            player_combos["user_steam_id"].set_placeholder_text("Opcional (ex: 7656119...)")
             player_grid.attach(player_combos["user_steam_id"], 1, p_row, 1, 1)
             p_row += 1
 
-            player_grid.attach(Gtk.Label(label="Joystick Device:", xalign=0), 0, p_row, 1, 1)
+            player_grid.attach(Gtk.Label(label="Dispositivo Joystick:", xalign=0), 0, p_row, 1, 1)
             physical_device_id_combo = player_combos["physical_device_id"]
             renderer = Gtk.CellRendererText()
             physical_device_id_combo.pack_start(renderer, True)
-            physical_device_id_combo.add_attribute(renderer, "text", 1) # Display 'name'
-            physical_device_id_combo.set_active(0) # Select "None" by default
+            physical_device_id_combo.add_attribute(renderer, "text", 1)
+            physical_device_id_combo.set_active(0)
             player_grid.attach(physical_device_id_combo, 1, p_row, 1, 1)
             p_row += 1
 
-            player_grid.attach(Gtk.Label(label="Mouse Device:", xalign=0), 0, p_row, 1, 1)
+            player_grid.attach(Gtk.Label(label="Dispositivo Mouse:", xalign=0), 0, p_row, 1, 1)
             mouse_event_path_combo = player_combos["mouse_event_path"]
             renderer = Gtk.CellRendererText()
             mouse_event_path_combo.pack_start(renderer, True)
-            mouse_event_path_combo.add_attribute(renderer, "text", 1) # Display 'name'
-            mouse_event_path_combo.set_active(0) # Select "None" by default
+            mouse_event_path_combo.add_attribute(renderer, "text", 1)
+            mouse_event_path_combo.set_active(0)
             player_grid.attach(mouse_event_path_combo, 1, p_row, 1, 1)
             p_row += 1
 
-            player_grid.attach(Gtk.Label(label="Keyboard Device:", xalign=0), 0, p_row, 1, 1)
+            player_grid.attach(Gtk.Label(label="Dispositivo Teclado:", xalign=0), 0, p_row, 1, 1)
             keyboard_event_path_combo = player_combos["keyboard_event_path"]
             renderer = Gtk.CellRendererText()
             keyboard_event_path_combo.pack_start(renderer, True)
-            keyboard_event_path_combo.add_attribute(renderer, "text", 1) # Display 'name'
-            keyboard_event_path_combo.set_active(0) # Select "None" by default
+            keyboard_event_path_combo.add_attribute(renderer, "text", 1)
+            keyboard_event_path_combo.set_active(0)
             player_grid.attach(keyboard_event_path_combo, 1, p_row, 1, 1)
             p_row += 1
 
-            player_grid.attach(Gtk.Label(label="Audio Device:", xalign=0), 0, p_row, 1, 1)
+            player_grid.attach(Gtk.Label(label="Dispositivo Áudio:", xalign=0), 0, p_row, 1, 1)
             audio_device_id_combo = player_combos["audio_device_id"]
             renderer = Gtk.CellRendererText()
             audio_device_id_combo.pack_start(renderer, True)
-            audio_device_id_combo.add_attribute(renderer, "text", 1) # Display 'name'
-            audio_device_id_combo.set_active(0) # Select "None" by default
+            audio_device_id_combo.add_attribute(renderer, "text", 1)
+            audio_device_id_combo.set_active(0)
             player_grid.attach(audio_device_id_combo, 1, p_row, 1, 1)
             p_row += 1
 
@@ -500,36 +521,33 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
     def on_num_players_changed(self, spin_button):
         num_players = spin_button.get_value_as_int()
         self._create_player_config_uis(num_players)
+        self.statusbar.push(0, f"Número de jogadores alterado para {num_players}.")
 
     def on_mode_changed(self, combo):
         mode = combo.get_active_text()
         if mode == "splitscreen":
             self.splitscreen_orientation_label.show()
             self.splitscreen_orientation_combo.show()
+            self.statusbar.push(0, "Modo de tela dividida ativado.")
         else:
             self.splitscreen_orientation_label.hide()
             self.splitscreen_orientation_combo.hide()
+            self.statusbar.push(0, "Modo de tela dividida desativado.")
 
     def on_save_button_clicked(self, button):
-        print("Save button clicked!")
-        profile_data_dumped = self.get_profile_data() # This call already uses model_dump(mode='json')
+        self.statusbar.push(0, "Salvando perfil...")
+        profile_data_dumped = self.get_profile_data()
 
         selected_players = [i + 1 for i, cb in enumerate(self.player_checkboxes) if cb.get_active()]
         profile_data_dumped['selected_players'] = selected_players
 
-        # DEBUG: Check the type of the 'exe_path' field within the dumped data
-        if "EXE_PATH" in profile_data_dumped:
-            print(f"DEBUG: Type of EXE_PATH in dumped data: {type(profile_data_dumped['EXE_PATH'])}")
-            print(f"DEBUG: Value of EXE_PATH in dumped data: {profile_data_dumped['EXE_PATH']}")
-
-        # Save the profile data to a JSON file
         profile_name = self.game_name_entry.get_text().replace(" ", "_").lower()
         if not profile_name:
-            # Handle case where game name is empty
             dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR, Gtk.ButtonsType.OK,
-                                       "Game Name cannot be empty.")
+                                       "O nome do jogo não pode ser vazio.")
             dialog.run()
             dialog.destroy()
+            self.statusbar.push(0, "Erro: Nome do jogo vazio.")
             return
 
         profile_dir = Path.home() / ".config/linux-coop/profiles"
@@ -539,30 +557,29 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         try:
             with open(profile_path, "w", encoding="utf-8") as f:
                 json.dump(profile_data_dumped, f, indent=2)
-            dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.INFO, Gtk.ButtonsType.OK,
-                                       f"Profile saved successfully to {profile_path}")
-            dialog.run()
-            dialog.destroy()
+            self.statusbar.push(0, f"Perfil salvo com sucesso em: {profile_path.name}")
         except Exception as e:
+            self.logger.error(f"Falha ao salvar perfil em {profile_path}: {e}")
+            self.statusbar.push(0, f"Erro ao salvar perfil: {e}")
             dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR, Gtk.ButtonsType.OK,
-                                       f"Error saving profile: {e}")
+                                       f"Erro ao salvar perfil:\n{e}")
             dialog.run()
             dialog.destroy()
 
     def on_play_button_clicked(self, widget):
-        """Salva o perfil atual e executa o jogo diretamente (sem abrir terminal gráfico)."""
-        import shutil
-
-        self.on_save_button_clicked(widget)
+        self.statusbar.push(0, "Iniciando jogo...")
+        self.on_save_button_clicked(widget) # Ensure profile is saved before playing
 
         profile_name = self.game_name_entry.get_text().replace(" ", "_").lower()
         if not profile_name:
-            self.logger.error("Cannot launch game with an empty profile name.")
+            self.logger.error("Não é possível iniciar o jogo com um nome de perfil vazio.")
+            self.statusbar.push(0, "Erro: Nome do perfil vazio. Jogo não iniciado.")
             return
 
         script_path = Path(__file__).parent.parent.parent / "linuxcoop.py"
         python_exec = shutil.which("python3") or shutil.which("python")
         if not python_exec:
+            self.statusbar.push(0, "Erro: Interpretador Python não encontrado.")
             dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR, Gtk.ButtonsType.OK,
                                        "Nenhum interpretador Python encontrado no sistema.")
             dialog.run()
@@ -572,11 +589,13 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         command = [python_exec, str(script_path), profile_name]
         self.logger.info(f"Executing command: {' '.join(command)}")
         try:
-            subprocess.Popen(command)
+            subprocess.Popen(command) # Non-blocking call
+            self.statusbar.push(0, f"Jogo '{profile_name}' iniciado com sucesso.")
         except Exception as e:
-            self.logger.error(f"Failed to launch game: {e}")
+            self.logger.error(f"Falha ao iniciar jogo: {e}")
+            self.statusbar.push(0, f"Erro ao iniciar jogo: {e}")
             dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR, Gtk.ButtonsType.OK,
-                                       f"Error launching game: {e}")
+                                       f"Erro ao iniciar jogo:\n{e}")
             dialog.run()
             dialog.destroy()
 
@@ -590,7 +609,10 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         mode = self.mode_combo.get_active_text()
         orientation = self.splitscreen_orientation_combo.get_active_text()
 
-        # Calculate scaling factor to fit preview within drawing area
+        # Ensure num_players is at least 1 to prevent ZeroDivisionError
+        if num_players < 1:
+            num_players = 1
+
         drawing_area_width = widget.get_allocated_width()
         drawing_area_height = widget.get_allocated_height()
 
@@ -599,31 +621,42 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
 
         scale_w = drawing_area_width / width
         scale_h = drawing_area_height / height
-        scale = min(scale_w, scale_h) * 0.9 # Use 90% of available space
+        scale = min(scale_w, scale_h) * 0.9
 
-        # These are the scaled dimensions of the total 'screen' area, not individual windows
         scaled_total_width = width * scale
         scaled_total_height = height * scale
 
-        # Calculate offsets to center the overall layout
         x_offset_display = (drawing_area_width - scaled_total_width) / 2
         y_offset_display = (drawing_area_height - scaled_total_height) / 2
 
+        print(f"DEBUG LAYOUT: Total Width/Height (unscaled): {width}x{height}")
+        print(f"DEBUG LAYOUT: Drawing Area Width/Height: {drawing_area_width}x{drawing_area_height}")
+        print(f"DEBUG LAYOUT: Scale: {scale}")
+        print(f"DEBUG LAYOUT: Scaled Total Width/Height: {scaled_total_width}x{scaled_total_height}")
+        print(f"DEBUG LAYOUT: Offsets: X={x_offset_display}, Y={y_offset_display}")
+        print(f"DEBUG LAYOUT: Num Players: {num_players}, Mode: {mode}, Orientation: {orientation}")
+
         try:
+            # Create dummy player configs for the dummy profile to ensure effective_num_players is correct
+            dummy_player_configs = []
+            for _ in range(num_players):
+                dummy_player_configs.append(PlayerInstanceConfig())
+
             dummy_profile = GameProfile(
                 GAME_NAME="Preview",
                 EXE_PATH=None,
                 NUM_PLAYERS=num_players,
-                INSTANCE_WIDTH=width,
-                INSTANCE_HEIGHT=height,
+                INSTANCE_WIDTH=width, # Use total width for dummy profile
+                INSTANCE_HEIGHT=height, # Use total height for dummy profile
                 MODE=mode,
                 SPLITSCREEN=SplitscreenConfig(orientation=orientation) if mode == "splitscreen" else None,
+                player_configs=dummy_player_configs, # Pass dummy player configs
+                # Other player device IDs and native flag are not needed for layout preview
                 PLAYER_PHYSICAL_DEVICE_IDS=[],
                 PLAYER_MOUSE_EVENT_PATHS=[],
                 PLAYER_KEYBOARD_EVENT_PATHS=[],
                 PLAYER_AUDIO_DEVICE_IDS=[],
                 is_native=False,
-                use_goldberg_emu=False
             )
         except Exception as e:
             print(f"Error creating dummy profile: {e}")
@@ -632,132 +665,71 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         cr.set_line_width(2)
 
         if mode == "splitscreen" and num_players > 1:
-            if num_players == 2:
-                instance_w, instance_h = dummy_profile.get_instance_dimensions(1)
+            for i in range(num_players):
+                instance_w, instance_h = dummy_profile.get_instance_dimensions(i + 1) # Unscaled dimensions
                 draw_w = instance_w * scale
                 draw_h = instance_h * scale
 
-                if orientation == "horizontal":
-                    # Two windows side-by-side (each half width, full height)
-                    # Player 1
-                    cr.rectangle(x_offset_display, y_offset_display, draw_w, scaled_total_height)
-                    cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                    cr.stroke()
-                    # Player 2
-                    cr.rectangle(x_offset_display + draw_w, y_offset_display, draw_w, scaled_total_height)
-                    cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                    cr.stroke()
-                else: # vertical
-                    # Two windows top-bottom (each full width, half height)
-                    # Player 1
-                    cr.rectangle(x_offset_display, y_offset_display, scaled_total_width, draw_h)
-                    cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                    cr.stroke()
-                    # Player 2
-                    cr.rectangle(x_offset_display, y_offset_display + draw_h, scaled_total_width, draw_h)
-                    cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                    cr.stroke()
+                pos_x, pos_y = 0.0, 0.0 # Initialize positions
 
-            elif num_players == 3:
-                if orientation == "horizontal": # One large top, two small bottom
-                    # Player 1 (top, full width, half height)
-                    # Use get_instance_dimensions for precise dimensions
-                    inst1_w, inst1_h = dummy_profile.get_instance_dimensions(1)
-                    draw_inst1_w = inst1_w * scale
-                    draw_inst1_h = inst1_h * scale
-                    cr.rectangle(x_offset_display, y_offset_display, draw_inst1_w, draw_inst1_h)
-                    cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                    cr.stroke()
+                if num_players == 2:
+                    if orientation == "horizontal":
+                        pos_x = i * draw_w
+                    else: # vertical
+                        pos_y = i * draw_h
+                elif num_players == 3:
+                    # Fetch dimensions for all players in 3-player splitscreen
+                    p1_unscaled_w, p1_unscaled_h = dummy_profile.get_instance_dimensions(1)
+                    p2_unscaled_w, p2_unscaled_h = dummy_profile.get_instance_dimensions(2) # P2 and P3 have same dimensions
 
-                    # Players 2 & 3 (bottom half, split horizontally)
-                    inst2_w, inst2_h = dummy_profile.get_instance_dimensions(2) # Dimensions for subsequent players
-                    draw_inst2_w = inst2_w * scale
-                    draw_inst2_h = inst2_h * scale
+                    p1_draw_w, p1_draw_h = p1_unscaled_w * scale, p1_unscaled_h * scale
+                    p2_draw_w, p2_draw_h = p2_unscaled_w * scale, p2_unscaled_h * scale
 
-                    # Player 2
-                    cr.rectangle(x_offset_display, y_offset_display + draw_inst1_h, draw_inst2_w, draw_inst2_h)
-                    cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                    cr.stroke()
+                    if orientation == "horizontal": # 1 large top, 2 small bottom
+                        if i == 0: # Player 1 (top)
+                            pos_x, pos_y = 0, 0
+                        elif i == 1: # Player 2 (bottom-left)
+                            pos_x, pos_y = 0, p1_draw_h # Offset by P1's height
+                        elif i == 2: # Player 3 (bottom-right)
+                            pos_x, pos_y = p2_draw_w, p1_draw_h # Offset by P2's width and P1's height
+                    else: # vertical: 1 large left, 2 small right
+                        if i == 0: # Player 1 (left)
+                            pos_x, pos_y = 0, 0
+                        elif i == 1: # Player 2 (top-right)
+                            pos_x, pos_y = p1_draw_w, 0 # Offset by P1's width
+                        elif i == 2: # Player 3 (bottom-right)
+                            pos_x, pos_y = p1_draw_w, p2_draw_h # Offset by P1's width and P2's height
+                elif num_players == 4:
+                    # 2x2 grid
+                    row = i // 2
+                    col = i % 2
+                    pos_x = col * draw_w
+                    pos_y = row * draw_h
+                else: # Generic case for more than 4 players, uniform distribution
+                    if orientation == "horizontal": # Stacked vertically
+                        pos_y = i * draw_h
+                    else: # vertical (Side by side)
+                        pos_x = i * draw_w
 
-                    # Player 3
-                    cr.rectangle(x_offset_display + draw_inst2_w, y_offset_display + draw_inst1_h, draw_inst2_w, draw_inst2_h)
-                    cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                    cr.stroke()
+                print(f"DEBUG LAYOUT: P{i+1} - Unscaled: {instance_w}x{instance_h}, Scaled: {draw_w:.2f}x{draw_h:.2f}, Pos: ({pos_x:.2f}, {pos_y:.2f}), Rect: ({x_offset_display + pos_x:.2f}, {y_offset_display + pos_y:.2f}, {draw_w:.2f}, {draw_h:.2f})")
 
-                else: # vertical # One large left, two small right
-                    # Player 1 (left, half width, full height)
-                    inst1_w, inst1_h = dummy_profile.get_instance_dimensions(1)
-                    draw_inst1_w = inst1_w * scale
-                    draw_inst1_h = inst1_h * scale
-                    cr.rectangle(x_offset_display, y_offset_display, draw_inst1_w, draw_inst1_h)
-                    cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                    cr.stroke()
-
-                    # Players 2 & 3 (right half, split vertically)
-                    inst2_w, inst2_h = dummy_profile.get_instance_dimensions(2)
-                    draw_inst2_w = inst2_w * scale
-                    draw_inst2_h = inst2_h * scale
-
-                    # Player 2
-                    cr.rectangle(x_offset_display + draw_inst1_w, y_offset_display, draw_inst2_w, draw_inst2_h)
-                    cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                    cr.stroke()
-
-                    # Player 3
-                    cr.rectangle(x_offset_display + draw_inst1_w, y_offset_display + draw_inst2_h, draw_inst2_w, draw_inst2_h)
-                    cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                    cr.stroke()
-
-            elif num_players == 4:
-                # 2x2 Grid, all windows are the same size
-                instance_w, instance_h = dummy_profile.get_instance_dimensions(1)
-                draw_w = instance_w * scale
-                draw_h = instance_h * scale
-
-                # Player 1 (Top-Left)
-                cr.rectangle(x_offset_display, y_offset_display, draw_w, draw_h)
+                cr.rectangle(x_offset_display + pos_x, y_offset_display + pos_y, draw_w, draw_h)
                 cr.set_source_rgb(1.0, 1.0, 1.0) # White border
                 cr.stroke()
 
-                # Player 2 (Top-Right)
-                cr.rectangle(x_offset_display + draw_w, y_offset_display, draw_w, draw_h)
-                cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                cr.stroke()
+                # Draw player number inside the rectangle
+                cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+                font_size = max(10, min(draw_w, draw_h) // 5)
+                cr.set_font_size(font_size)
+                cr.set_source_rgb(1.0, 1.0, 1.0) # White text
 
-                # Player 3 (Bottom-Left)
-                cr.rectangle(x_offset_display, y_offset_display + draw_h, draw_w, draw_h)
-                cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                cr.stroke()
-
-                # Player 4 (Bottom-Right)
-                cr.rectangle(x_offset_display + draw_w, y_offset_display + draw_h, draw_w, draw_h)
-                cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                cr.stroke()
-
-            else: # General case for more than 4 players, or other splits (uniform horizontal/vertical)
-                current_x = x_offset_display
-                current_y = y_offset_display
-
-                if orientation == "horizontal": # Stacked vertically
-                    for i in range(num_players):
-                        instance_w, instance_h = dummy_profile.get_instance_dimensions(i + 1)
-                        draw_h = instance_h * scale # Width will be scaled_total_width
-
-                        cr.rectangle(x_offset_display, current_y, scaled_total_width, draw_h)
-                        cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                        cr.stroke()
-                        current_y += draw_h
-                else: # vertical (Side by side)
-                    for i in range(num_players):
-                        instance_w, instance_h = dummy_profile.get_instance_dimensions(i + 1)
-                        draw_w = instance_w * scale # Height will be scaled_total_height
-
-                        cr.rectangle(current_x, y_offset_display, draw_w, scaled_total_height)
-                        cr.set_source_rgb(1.0, 1.0, 1.0) # White border
-                        cr.stroke()
-                        current_x += draw_w
-
-        else: # None or single player
+                text = f"P{i+1}"
+                xbearing, ybearing, width_text, height_text, xadvance, yadvance = cr.text_extents(text)
+                text_x = x_offset_display + pos_x + (draw_w - width_text) / 2
+                text_y = y_offset_display + pos_y + (draw_h + height_text) / 2
+                cr.move_to(text_x, text_y)
+                cr.show_text(text)
+        else:
             instance_w, instance_h = dummy_profile.get_instance_dimensions(1)
             draw_w = instance_w * scale
             draw_h = instance_h * scale
@@ -765,9 +737,22 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             cr.set_source_rgb(1.0, 1.0, 1.0) # White border
             cr.stroke()
 
+            # Draw Player 1 label for single instance
+            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+            font_size = max(10, min(draw_w, draw_h) // 5)
+            cr.set_font_size(font_size)
+            cr.set_source_rgb(1.0, 1.0, 1.0)
+
+            text = "P1"
+            xbearing, ybearing, width_text, height_text, xadvance, yadvance = cr.text_extents(text)
+            text_x = x_offset_display + (draw_w - width_text) / 2
+            text_y = y_offset_display + (draw_h + height_text) / 2
+            cr.move_to(text_x, text_y)
+            cr.show_text(text)
+
     def get_profile_data(self):
         proton_version = self.proton_version_combo.get_active_text()
-        if proton_version == "None" or not proton_version:
+        if proton_version == "Nenhuma (Usar padrão do Steam)" or not proton_version:
             proton_version = None
 
         player_configs_data = []
@@ -776,14 +761,14 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             for key, widget in widgets.items():
                 if isinstance(widget, Gtk.Entry):
                     config[key] = widget.get_text()
-                elif isinstance(widget, Gtk.ComboBox): # Alterado para Gtk.ComboBox
+                elif isinstance(widget, Gtk.ComboBox):
                     model = widget.get_model()
                     active_iter = widget.get_active_iter()
                     if active_iter:
-                        selected_id = model.get_value(active_iter, 0) # Obtém o ID (coluna 0)
-                        config[key] = selected_id if selected_id != "" else None # Salva None se for a opção "None" do ListStore
+                        selected_id = model.get_value(active_iter, 0)
+                        config[key] = selected_id if selected_id != "" else None
                     else:
-                        config[key] = None # Nenhum item selecionado
+                        config[key] = None
                 else:
                     config[key] = ""
             player_configs_data.append(config)
@@ -791,13 +776,17 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         splitscreen_config = None
         if self.mode_combo.get_active_text() == "splitscreen":
             selected_orientation = self.splitscreen_orientation_combo.get_active_text()
-            self.logger.info(f"DEBUG: Selected splitscreen orientation from UI: {selected_orientation}") # Debug line
+            self.logger.info(f"DEBUG: Selected splitscreen orientation from UI: {selected_orientation}")
             splitscreen_config = SplitscreenConfig(
                 orientation=selected_orientation
             )
-            self.logger.info(f"DEBUG: SplitscreenConfig orientation immediately after creation: {splitscreen_config.orientation}") # NEW DEBUG LINE
+            self.logger.info(f"DEBUG: SplitscreenConfig orientation immediately after creation: {splitscreen_config.orientation}")
 
-        is_native_value = not Path(self.exe_path_entry.get_text()).name.lower().endswith('.exe')
+        # Correctly determine is_native_value by checking if the path ends with .exe
+        exe_path_text = self.exe_path_entry.get_text()
+        is_native_value = False
+        if exe_path_text:
+            is_native_value = not Path(exe_path_text).suffix.lower() == ".exe"
 
         mode = self.mode_combo.get_active_text()
 
@@ -809,24 +798,20 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             instance_width=self.instance_width_spin.get_value_as_int(),
             instance_height=self.instance_height_spin.get_value_as_int(),
             app_id=self.app_id_entry.get_text() or None,
-            game_args=self.game_args_entry.get_text() or "",
+            game_args=self.game_args_entry.get_text(),
+            env_vars=self._get_env_vars_from_ui(),
             is_native=is_native_value,
             mode=mode,
             splitscreen=splitscreen_config,
-            env_vars=self._get_env_vars_from_ui(),
-            player_configs=player_configs_data,
-            use_goldberg_emu=self.use_goldberg_emu_check.get_active()
         )
 
-        # DEBUG: Check the mode value right before GameProfile instantiation
         self.logger.info(f"DEBUG: Mode value before GameProfile instantiation: {mode}")
 
-        # DEBUG: Check the orientation directly from the GameProfile object before dumping
         if profile_data.splitscreen:
             self.logger.info(f"DEBUG: Splitscreen orientation in GameProfile object: {profile_data.splitscreen.orientation}")
 
         profile_dumped = profile_data.model_dump(by_alias=True, exclude_unset=False, exclude_defaults=False, mode='json')
-        self.logger.info(f"DEBUG: Collecting {len(profile_dumped.get('PLAYERS', []))} player configs for saving.") # Debug line
+        self.logger.info(f"DEBUG: Collecting {len(profile_dumped.get('PLAYERS', []))} player configs for saving.")
         return profile_dumped
 
     def load_profile_data(self, profile_data):
@@ -834,25 +819,23 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.exe_path_entry.set_text(str(profile_data.get("EXE_PATH", "")))
         self.num_players_spin.set_value(profile_data.get("NUM_PLAYERS", 1))
 
-        # Set Proton Version Combo Box
         proton_version = profile_data.get("PROTON_VERSION")
         if proton_version:
-            # Try to find the index of the version in the combo box
             model = self.proton_version_combo.get_model()
             for i, row in enumerate(model):
                 if row[0] == proton_version:
                     self.proton_version_combo.set_active(i)
                     break
             else:
-                # If not found, set to "None" or first item
-                self.proton_version_combo.set_active(0) # This would be "None" if present
+                self.proton_version_combo.set_active(0)
         else:
-            self.proton_version_combo.set_active(0) # Default to "None"
+            self.proton_version_combo.set_active(0)
 
         self.instance_width_spin.set_value(profile_data.get("INSTANCE_WIDTH", 1920))
         self.instance_height_spin.set_value(profile_data.get("INSTANCE_HEIGHT", 1080))
         self.app_id_entry.set_text(profile_data.get("APP_ID", ""))
         self.game_args_entry.set_text(profile_data.get("GAME_ARGS", ""))
+        self.is_native_check.set_active(profile_data.get("IS_NATIVE", False))
 
         mode = profile_data.get("MODE")
         if mode:
@@ -866,24 +849,20 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             if splitscreen_orientation:
                 self.splitscreen_orientation_combo.set_active_id(splitscreen_orientation)
             else:
-                self.splitscreen_orientation_combo.set_active(0) # Default to horizontal or first item
+                self.splitscreen_orientation_combo.set_active(0)
         else:
-            self.splitscreen_orientation_combo.set_active(0) # Default to horizontal or first item
+            self.splitscreen_orientation_combo.set_active(0)
 
-        self.use_goldberg_emu_check.set_active(profile_data.get("USE_GOLDBERG_EMU", True))
-
-        # Load environment variables
+        env_vars_data = profile_data.get("ENV_VARS", {})
         for key_entry, value_entry, list_box_row in self.env_var_entries:
-            list_box_row.destroy() # Clear existing rows before loading new ones
+            list_box_row.destroy()
         self.env_var_entries.clear()
 
-        env_vars = profile_data.get("ENV_VARS", {})
-        if env_vars:
-            for key, value in env_vars.items():
+        if env_vars_data:
+            for key, value in env_vars_data.items():
                 self._add_env_var_row(key, value)
 
-        # Load player configurations
-        self._create_player_config_uis(profile_data.get("NUM_PLAYERS", 1)) # Re-create based on num_players
+        self._create_player_config_uis(profile_data.get("NUM_PLAYERS", 1))
 
         player_configs_data = profile_data.get("PLAYERS", [])
         if player_configs_data:
@@ -895,14 +874,13 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                     player_combos["listen_port"].set_text(player_config_data.get("LISTEN_PORT", ""))
                     player_combos["user_steam_id"].set_text(player_config_data.get("USER_STEAM_ID", ""))
 
-                    # Set ComboBoxText for device IDs/paths
                     for combo_key, alias_key in [
                         ("physical_device_id", "PHYSICAL_DEVICE_ID"),
                         ("mouse_event_path", "MOUSE_EVENT_PATH"),
                         ("keyboard_event_path", "KEYBOARD_EVENT_PATH"),
                         ("audio_device_id", "AUDIO_DEVICE_ID")
                     ]:
-                        selected_value = player_config_data.get(alias_key) # Use alias_key to get ALL CAPS value
+                        selected_value = player_config_data.get(alias_key)
                         if selected_value:
                             model = player_combos[combo_key].get_model()
                             for j, row in enumerate(model):
@@ -910,25 +888,20 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                                     player_combos[combo_key].set_active(j)
                                     break
                             else:
-                                # If not found, set to "None" or first item
                                 if len(player_combos[combo_key].get_model()) > 0:
                                     player_combos[combo_key].set_active(0)
 
             selected_players = profile_data.get("selected_players")
             if selected_players is None:
-                # If not defined, all players are active by default
                 for cb in self.player_checkboxes:
                     cb.set_active(True)
             else:
                 for i, cb in enumerate(self.player_checkboxes):
                     cb.set_active((i + 1) in selected_players)
 
-            if len(player_combos[combo_key].get_model()) > 0:
-                player_combos[combo_key].set_active(0)
-
     def _create_device_list_store(self, devices: List[Dict[str, str]]) -> Gtk.ListStore:
-        list_store = Gtk.ListStore(str, str) # id, name
-        list_store.append(["", "None"]) # Add "None" option as the first choice
+        list_store = Gtk.ListStore(str, str)
+        list_store.append(["", "None"])
         for device in devices:
             list_store.append([device["id"], device["name"]])
         return list_store
@@ -946,4 +919,9 @@ def run_gui():
     app.run(None)
 
 if __name__ == "__main__":
+    # Isso garante que a GUI só seja iniciada se o script for executado diretamente
+    # e não quando importado como um módulo.
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk, Gdk
+    import cairo # Importar cairo aqui para o desenho
     run_gui()
