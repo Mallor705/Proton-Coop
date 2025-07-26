@@ -13,18 +13,18 @@ from .proton import ProtonService
 from .process import ProcessService
 
 class InstanceService:
-    """Serviço responsável por gerenciar instâncias do jogo, incluindo validação de dependências, criação, lançamento e monitoramento."""
+    """Service responsible for managing game instances, including dependency validation, creation, launching, and monitoring."""
     def __init__(self, logger: Logger):
-        """Inicializa o serviço de instâncias com logger, ProtonService e ProcessService."""
+        """Initializes the instance service with logger, ProtonService, and ProcessService."""
         self.logger = logger
         self.proton_service = ProtonService(logger)
         self.process_service = ProcessService(logger)
         self._dependency_cache: Dict[str, bool] = {}
         self._env_cache: Dict[str, dict] = {}
-        self.cpu_count = psutil.cpu_count(logical=True) # Obter o número de núcleos lógicos da CPU (inclui threads)
+        self.cpu_count = psutil.cpu_count(logical=True) # Get the number of logical CPU cores (includes threads)
 
     def validate_dependencies(self) -> None:
-        """Valida se todos os comandos necessários estão disponíveis no sistema."""
+        """Validates if all necessary commands are available on the system."""
         if self._dependency_cache:
             self.logger.info("Dependencies already validated (cached)")
             return
@@ -38,7 +38,7 @@ class InstanceService:
         self.logger.info("Dependencies validated successfully")
 
     def launch_instances(self, profile: GameProfile, profile_name: str) -> None:
-            """Lança todas as instâncias do jogo conforme o perfil fornecido."""
+            """Launches all game instances according to the provided profile."""
             if not profile.exe_path:
                 self.logger.error(f"Executable path is not configured for profile '{profile_name}'. Cannot launch.")
                 return
@@ -107,21 +107,21 @@ class InstanceService:
             self.logger.info("Press CTRL+C to terminate all instances")
 
     def _create_instances(self, profile: GameProfile, profile_name: str) -> List[GameInstance]:
-        """Cria os modelos de instância para cada jogador."""
+        """Creates instance models for each player."""
         instances = []
         if not profile.player_configs:
             return instances
 
-        # Itera sobre a lista completa de configurações de jogadores com seu índice
+        # Iterates over the complete list of player configurations with its index
         for i, player_config in enumerate(profile.player_configs):
             instance_num = i + 1
 
-            # Verifica se esta instância está na lista de jogadores selecionados para iniciar.
-            # Se a lista de seleção estiver vazia ou for None, todos os jogadores são iniciados.
+            # Checks if this instance is in the list of selected players to launch.
+            # If the selection list is empty or None, all players are launched.
             if profile.selected_players and instance_num not in profile.selected_players:
-                continue  # Pula para o próximo jogador se não estiver selecionado
+                continue  # Skip to the next player if not selected
 
-            # Organiza os prefixos por jogo e por instância
+            # Organizes prefixes by game and by instance
             prefix_dir = Config.get_prefix_base_dir(profile.game_name) / f"instance_{instance_num}"
             log_file = Config.LOG_DIR / f"{profile_name}_instance_{instance_num}.log"
             prefix_dir.mkdir(parents=True, exist_ok=True)
@@ -137,23 +137,23 @@ class InstanceService:
         return instances
 
     def _create_game_directory_symlink_structure(self, instance: GameInstance, original_game_path: Path, original_exe_path: Path, profile: GameProfile) -> Path:
-        """Cria uma estrutura de diretórios espelhada com symlinks para a pasta original do jogo.
-        Retorna o caminho para o link simbólico do executável principal.
+        """Creates a mirrored directory structure with symlinks for the original game folder.
+        Returns the path to the main executable's symlink.
         """
         instance_game_root = instance.prefix_dir / "game_files"
         instance_game_root.mkdir(parents=True, exist_ok=True)
 
         self.logger.info(f"Instance {instance.instance_num}: Creating symlink structure for {original_game_path} at {instance_game_root}")
 
-        # Determina o caminho relativo do executável original em relação à pasta raiz do jogo.
+        # Determines the relative path of the original executable in relation to the game's root folder.
         try:
             relative_exe_path = original_exe_path.relative_to(original_game_path)
         except ValueError as e:
-            # Isso pode acontecer se original_exe_path não estiver dentro de original_game_path
+            # This can happen if original_exe_path is not inside original_game_path
             self.logger.error(f"Instance {instance.instance_num}: Executable path {original_exe_path} is not inside game path {original_game_path}. Error: {e}")
             raise
 
-        # Caminho esperado para o link simbólico do executável
+        # Expected path for the executable symlink
         symlinked_exe_path_target = instance_game_root / relative_exe_path
 
         self._process_game_files(instance, original_game_path, instance_game_root, profile)
@@ -162,18 +162,18 @@ class InstanceService:
         return symlinked_exe_path_target
 
     def _process_game_files(self, instance: GameInstance, original_game_path: Path, instance_game_root: Path, profile: GameProfile) -> None:
-        """Processa todos os arquivos do jogo, criando symlinks e configurando o Goldberg Emulator."""
+        """Processes all game files, creating symlinks and configuring the Goldberg Emulator."""
         self.logger.info(f"Instance {instance.instance_num}: Processing game files")
 
-        # Criar estrutura de diretórios
+        # Create directory structure
         instance_game_root.mkdir(parents=True, exist_ok=True)
 
-        # Criar symlinks para os arquivos do jogo
+        # Create symlinks for game files
         for item in original_game_path.rglob("*"):
             relative_item_path = item.relative_to(original_game_path)
             target_path_for_item = instance_game_root / relative_item_path
 
-            # Garante que o diretório pai exista
+            # Ensures the parent directory exists
             target_path_for_item.parent.mkdir(parents=True, exist_ok=True)
 
             if item.is_dir():
@@ -189,10 +189,10 @@ class InstanceService:
                         self.logger.warning(f"Instance {instance.instance_num}: Failed to create symlink for {item}: {e}")
 
     def _verify_executable_symlink(self, instance: GameInstance, symlinked_exe_path_target: Path, original_exe_path: Path) -> None:
-        """Verifica se o link simbólico para o executável foi criado corretamente."""
+        """Verifies if the symlink for the executable was created correctly."""
         if not symlinked_exe_path_target.exists() or not symlinked_exe_path_target.is_symlink():
             self.logger.error(f"Instance {instance.instance_num}: Expected symlinked executable at {symlinked_exe_path_target} was not found or is not a symlink.")
-            # Adicionalmente, verificar se o alvo do symlink é o executável original
+            # Additionally, check if the symlink target is the original executable
             if symlinked_exe_path_target.is_symlink() and Path(os.readlink(str(symlinked_exe_path_target))) != original_exe_path:
                  self.logger.error(f"Instance {instance.instance_num}: Symlink {symlinked_exe_path_target} points to {os.readlink(str(symlinked_exe_path_target))}, not {original_exe_path}")
             raise FileNotFoundError(f"Failed to create or verify symlink for executable {original_exe_path} at {symlinked_exe_path_target}")
@@ -201,7 +201,7 @@ class InstanceService:
 
     def _launch_single_instance(self, instance: GameInstance, profile: GameProfile,
                               proton_path: Optional[Path], steam_root: Optional[Path], original_game_path: Path, cpu_affinity: str) -> None:
-        """Lança uma única instância do jogo com afinidade de CPU."""
+        """Launches a single game instance with CPU affinity."""
         self.logger.info(f"Preparing instance {instance.instance_num} with CPU affinity: {cpu_affinity}...")
 
         if not profile.exe_path:
@@ -212,7 +212,7 @@ class InstanceService:
             instance,
             original_game_path,
             profile.exe_path,
-            profile # Passando o objeto profile completo
+            profile # Passing the complete profile object
         )
 
         # Validate devices for this instance
@@ -228,14 +228,14 @@ class InstanceService:
         self.logger.info(f"Instance {instance.instance_num} started with PID: {pid}")
 
     def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = {}, cpu_affinity: str = "") -> dict:
-        """Prepara as variáveis de ambiente para a instância do jogo, incluindo isolamento de controles, configuração XKB e afinidade de CPU para Wine."""
+        """Prepares environment variables for the game instance, including control isolation, XKB configuration, and CPU affinity for Wine."""
         # Use cache for base environment
         base_env_key = f"base_{profile.is_native if profile else False}_{steam_root}_{profile.app_id if profile else None}"
         if base_env_key not in self._env_cache:
             env = os.environ.copy()
             env['PATH'] = os.environ['PATH']
 
-            # Limpar variáveis Python potencialmente conflitantes
+            # Clean up potentially conflicting Python variables
             env.pop('PYTHONHOME', None)
             env.pop('PYTHONPATH', None)
 
@@ -249,7 +249,7 @@ class InstanceService:
                     env['SteamAppId'] = profile.app_id
                     env['SteamGameId'] = profile.app_id
 
-            # Configuração XKB para layout de teclado (cache os valores)
+            # XKB configuration for keyboard layout (cache values)
             xkb_vars = ['XKB_DEFAULT_LAYOUT', 'XKB_DEFAULT_VARIANT', 'XKB_DEFAULT_RULES', 'XKB_DEFAULT_MODEL', 'XKB_DEFAULT_OPTIONS']
             for var in xkb_vars:
                 if var in os.environ:
@@ -259,15 +259,15 @@ class InstanceService:
         else:
             env = self._env_cache[base_env_key].copy()
 
-        # Variáveis de ambiente específicas da instância
+        # Instance-specific environment variables
         if not (profile.is_native if profile else False):
             env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
             env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
-            # Adicionar WINE_CPU_TOPOLOGY para afinidade de CPU
+            # Add WINE_CPU_TOPOLOGY for CPU affinity
             env['WINE_CPU_TOPOLOGY'] = f"{self.cpu_count}:{cpu_affinity}"
             self.logger.info(f"Instance {instance.instance_num}: Setting WINE_CPU_TOPOLOGY to '{env['WINE_CPU_TOPOLOGY']}'.")
 
-        # Adicionar variáveis de ambiente definidas no perfil
+        # Add environment variables defined in the profile
         if profile and profile.env_vars:
             for key, value in profile.env_vars.items():
                 env[key] = value
@@ -307,22 +307,22 @@ class InstanceService:
         return None
 
     def _build_command(self, profile: GameProfile, proton_path: Optional[Path], instance: GameInstance, symlinked_exe_path: Path, cpu_affinity: str) -> List[str]:
-        """Monta o comando para executar o gamescope e o jogo (nativo ou via Proton), usando bwrap para isolar o controle."""
+        """Builds the command to run gamescope and the game (native or via Proton), using bwrap to isolate the control."""
         instance_idx = instance.instance_num - 1
 
-        # Validar dispositivos de entrada
+        # Validate input devices
         device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
 
-        # Construir comando do Gamescope
+        # Build Gamescope command
         gamescope_cmd = self._build_gamescope_command(profile, device_info['should_add_grab_flags'], instance.instance_num)
 
-        # Construir comando base do jogo
+        # Build base game command
         base_cmd = self._build_base_game_command(profile, proton_path, symlinked_exe_path, gamescope_cmd, instance.instance_num)
 
-        # Construir comando bwrap com dispositivos
+        # Build bwrap command with devices
         bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num)
 
-        # Adicionar taskset no início do comando final para garantir afinidade para todo o processo
+        # Add taskset at the beginning of the final command to ensure affinity for the entire process
         taskset_cmd = ["taskset", "-c", cpu_affinity]
         final_cmd = taskset_cmd + bwrap_cmd + base_cmd
         final_bwrap_cmd_str = ' '.join(final_cmd)
@@ -331,11 +331,11 @@ class InstanceService:
         return final_cmd
 
     def _validate_input_devices(self, profile: GameProfile, instance_idx: int, instance_num: int) -> dict:
-        """Valida dispositivos de entrada e retorna informações sobre eles."""
+        """Validates input devices and returns information about them."""
         has_dedicated_mouse = False
         mouse_path_str_for_instance = None
 
-        # Obter config do jogador específico
+        # Get specific player config
         player_config = profile.player_configs[instance_idx] if profile.player_configs and 0 <= instance_idx < len(profile.player_configs) else None
 
         if player_config:
@@ -375,10 +375,10 @@ class InstanceService:
         }
 
     def _build_gamescope_command(self, profile: GameProfile, should_add_grab_flags: bool, instance_num: int) -> List[str]:
-        """Constrói o comando do Gamescope."""
+        """Builds the Gamescope command."""
         gamescope_path = 'gamescope'
 
-        # Obter as dimensões da instância diretamente do perfil
+        # Get instance dimensions directly from the profile
         effective_width, effective_height = profile.get_instance_dimensions(instance_num)
 
         gamescope_cli_options = [
@@ -390,17 +390,17 @@ class InstanceService:
             '-h', str(effective_height),
         ]
 
-        # Sempre definir um limite de FPS para janelas desfocadas para um valor muito alto
+        # Always set an unfocused FPS limit to a very high value
         gamescope_cli_options.extend(['-o', '999'])
         self.logger.info(f"Instance {instance_num}: Setting unfocused FPS limit to 999.")
 
-        # Sempre definir um limite de FPS para janelas focadas para um valor muito alto
+        # Always set a focused FPS limit to a very high value
         gamescope_cli_options.extend(['-r', '999'])
         self.logger.info(f"Instance {instance_num}: Setting focused FPS limit to 999.")
 
-        # Configurações específicas para splitscreen vs normal
+        # Specific configurations for splitscreen vs normal
         if profile.is_splitscreen_mode:
-            gamescope_cli_options.append('-b')  # borderless ao invés de fullscreen
+            gamescope_cli_options.append('-b')  # borderless instead of fullscreen
         else:
             gamescope_cli_options.extend(['-f', '--adaptive-sync'])
 
@@ -411,14 +411,14 @@ class InstanceService:
         return gamescope_cli_options
 
     def _build_base_game_command(self, profile: GameProfile, proton_path: Optional[Path], symlinked_exe_path: Path, gamescope_cmd: List[str], instance_num: int) -> List[str]:
-        """Constrói o comando base do jogo."""
-        # Adiciona os argumentos do jogo definidos no perfil, se houver
+        """Builds the base game command."""
+        # Add game arguments defined in the profile, if any
         game_specific_args = []
         if profile.game_args:
             game_specific_args = profile.game_args.split()
             self.logger.info(f"Instance {instance_num}: Adding game arguments: {game_specific_args}")
 
-        base_cmd_prefix = gamescope_cmd + ['--']  # Separador para o comando a ser executado
+        base_cmd_prefix = gamescope_cmd + ['--']  # Separator for the command to be executed
 
         if profile.is_native:
             base_cmd = list(base_cmd_prefix)
@@ -434,7 +434,7 @@ class InstanceService:
         return base_cmd
 
     def _build_bwrap_command(self, profile: GameProfile, instance_idx: int, device_info: dict, instance_num: int) -> List[str]:
-        """Constrói o comando bwrap com dispositivos de entrada."""
+        """Builds the bwrap command with input devices."""
         bwrap_cmd = [
             'bwrap',
             '--dev-bind', '/', '/',
@@ -457,11 +457,11 @@ class InstanceService:
         return bwrap_cmd
 
     def _collect_device_paths(self, profile: GameProfile, instance_idx: int, device_info: dict, instance_num: int) -> List[str]:
-        """Coleta todos os caminhos de dispositivo necessários para bwrap."""
+        """Collects all necessary device paths for bwrap."""
         collected_paths = []
 
         # Joysticks
-        # Obter config do jogador específico
+        # Get specific player config
         player_config = profile.player_configs[instance_idx] if profile.player_configs and 0 <= instance_idx < len(profile.player_configs) else None
 
         if player_config:
@@ -474,12 +474,12 @@ class InstanceService:
                 else:
                     self.logger.warning(f"Instance {instance_num}: Joystick device '{joystick_path_str}' specified in profile but not found or not a char device. Not binding.")
 
-        # Mouses - usa as variáveis já validadas
+        # Mice - uses already validated variables
         if device_info['has_dedicated_mouse']:
             collected_paths.append(device_info['mouse_path_str_for_instance'])
             self.logger.info(f"Instance {instance_num}: Queued mouse device '{device_info['mouse_path_str_for_instance']}' for bwrap binding.")
 
-        # Teclados - usa as variáveis já validadas
+        # Keyboards - uses already validated variables
         if device_info['has_dedicated_keyboard']:
             collected_paths.append(device_info['keyboard_path_str_for_instance'])
             self.logger.info(f"Instance {instance_num}: Queued keyboard device '{device_info['keyboard_path_str_for_instance']}' for bwrap binding.")
@@ -487,12 +487,12 @@ class InstanceService:
         return collected_paths
 
     def monitor_and_wait(self) -> None:
-        """Monitora as instâncias até que todas sejam finalizadas."""
+        """Monitors instances until all are terminated."""
         while self.process_service.monitor_processes():
             time.sleep(5)
 
         self.logger.info("All instances have terminated")
 
     def terminate_all(self) -> None:
-        """Finaliza todas as instâncias do jogo gerenciadas pelo serviço."""
+        """Terminates all game instances managed by the service."""
         self.process_service.terminate_all()

@@ -13,8 +13,8 @@ class DeviceManager:
             result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
-            # print(f"Error executing command '{command}': {e}")
-            # print(f"Stderr: {e.stderr}")
+            # print(f"Error executing command '{command}': {e}") # Error executing command
+            # print(f"Stderr: {e.stderr}") # Stderr
             return "" # Return empty string on error, the calling method should handle it
 
     def _get_device_name_from_id(self, device_id_full: str) -> str:
@@ -55,20 +55,16 @@ class DeviceManager:
                 full_device_id_path = f"/dev/input/by-id/{device_name_id_raw}"
                 device_human_name = self._get_device_name_from_id(full_device_id_path)
 
-                if "event-kbd" in device_name_id_raw:
-                    detected_devices["keyboard"].append({"id": full_device_id_path, "name": device_human_name})
+                # Prioritize categorization to avoid duplicates
+                if "event-joystick" in device_name_id_raw:
+                    detected_devices["joystick"].append({"id": full_device_id_path, "name": device_human_name})
                 elif "event-mouse" in device_name_id_raw:
                     detected_devices["mouse"].append({"id": full_device_id_path, "name": device_human_name})
-                elif "event-joystick" in device_name_id_raw:
-                    detected_devices["joystick"].append({"id": full_device_id_path, "name": device_human_name})
-                # Also add /dev/input/jsX paths to joystick if they exist and are relevant
-                elif "joystick" in device_name_id_raw and match.group(2).startswith("/js"):
-                    # For joysticks, we might still want to list the /dev/input/jsX path for direct use
-                    # if the profile or other parts of the code specifically look for it.
-                    # However, the user asked to store /dev/input/by-id/ format in profile.
-                    # I will add both if it's a joystick, for broader compatibility.
-                    # The 'id' will be the /dev/input/by-id path, and a 'secondary_id' for /dev/input/jsX
-                    pass # We only care about the by-id path for storage as per request.
+                elif "event-kbd" in device_name_id_raw:
+                    detected_devices["keyboard"].append({"id": full_device_id_path, "name": device_human_name})
+                # Removed the redundant joystick check (already covered by event-joystick)
+                # elif "joystick" in device_name_id_raw and match.group(2).startswith("/js"):
+                #     pass
         
         # Sort devices by name for consistent UI display
         for dev_type in detected_devices:

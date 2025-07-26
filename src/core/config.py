@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 class Config:
-    """Configurações globais do Linux-Coop, incluindo diretórios, comandos e caminhos do Steam."""
+    """Global Linux-Coop configurations, including directories, commands, and Steam paths."""
     SCRIPT_DIR = Path(__file__).parent.parent.parent
     PROFILE_DIR = Path.home() / ".config/linux-coop/profiles"
     LOG_DIR = Path.home() / ".cache/linux-coop/logs"
@@ -29,5 +29,5 @@ class Config:
 
     @staticmethod
     def get_prefix_base_dir(game_name: str) -> Path:
-        """Retorna o diretório base de prefixos para um jogo específico."""
+        """Returns the base prefix directory for a specific game."""
         return Config.PREFIX_BASE_DIR / game_name

@@ -10,26 +10,26 @@ from ..models.profile import GameProfile
 from ..services.instance import InstanceService
 
 class TerminateCLI(Exception):
-    """Exceção para finalizar a CLI de forma controlada."""
+    """Exception to terminate the CLI in a controlled manner."""
     pass
 
 class LinuxCoopCLI:
-    """Interface de linha de comando para o Linux-Coop."""
+    """Command-line interface for Linux-Coop."""
     def __init__(self):
-        """Inicializa a CLI com logger e configuração de sinais."""
+        """Initializes the CLI with logger and signal configuration."""
         self.logger = Logger("linux-coop", Config.LOG_DIR)
         self._instance_service: Optional[InstanceService] = None
         self.setup_signal_handlers()
 
     @property
     def instance_service(self) -> InstanceService:
-        """Lazy loading do InstanceService."""
+        """Lazy loading of InstanceService."""
         if self._instance_service is None:
             self._instance_service = InstanceService(self.logger)
         return self._instance_service
 
     def setup_signal_handlers(self):
-        """Configura os handlers de sinal para garantir limpeza ao encerrar."""
+        """Configures signal handlers to ensure cleanup upon exit."""
         def signal_handler(signum, frame):
             self.logger.info("Received interrupt signal. Terminating instances...")
             if self._instance_service is not None:
@@ -40,9 +40,9 @@ class LinuxCoopCLI:
         signal.signal(signal.SIGTERM, signal_handler)
 
     def run(self, profile_name: str, edit_mode: bool = False):
-        """Fluxo principal de execução da CLI."""
+        """Main execution flow of the CLI."""
         if not profile_name or not profile_name.strip():
-            self.logger.error("O nome do perfil não pode ser vazio.")
+            self.logger.error("The profile name cannot be empty.")
             raise TerminateCLI()
 
         profile_path = Config.PROFILE_DIR / f"{profile_name}.json"
@@ -55,10 +55,10 @@ class LinuxCoopCLI:
             return # Exit after editing
 
         try:
-            # Validações em lote
+            # Batch validations
             self._batch_validate(profile_name)
 
-            # Carrega perfil (com cache)
+            # Load profile (with cache)
             profile = self._load_profile(profile_name)
             self.logger.info(f"Loaded profile env_vars: {profile.env_vars}")
 
@@ -75,7 +75,7 @@ class LinuxCoopCLI:
             raise TerminateCLI()
 
     def _batch_validate(self, profile_name: str):
-        """Executa todas as validações necessárias em lote."""
+        """Executes all necessary validations in batch."""
         # Validate dependencies (cached in InstanceService)
         self.instance_service.validate_dependencies()
 
@@ -87,13 +87,13 @@ class LinuxCoopCLI:
 
     @lru_cache(maxsize=16)
     def _load_profile(self, profile_name: str) -> GameProfile:
-        """Carrega perfil com cache."""
+        """Loads profile with cache."""
         profile_path = Config.PROFILE_DIR / f"{profile_name}.json"
         return GameProfile.load_from_file(profile_path)
 
     def edit_profile(self, profile_path: os.PathLike):
-        """Abre o arquivo de perfil especificado no editor de texto padrão do sistema.
-        Tenta usar o EDITOR ambiente variável, senão um fallback como 'xdg-open'."""
+        """Opens the specified profile file in the system's default text editor.
+        Tries to use the EDITOR environment variable, otherwise a fallback like 'xdg-open'."""
         editor = os.environ.get('EDITOR')
         if editor:
             command = [editor, str(profile_path)]
@@ -113,7 +113,7 @@ class LinuxCoopCLI:
             self.logger.error(f"An unexpected error occurred while trying to open the profile: {e}")
 
 def main(profile_name, edit_mode=False):
-    """Lança instâncias do jogo usando o perfil especificado ou edita-o."""
+    """Launches game instances using the specified profile or edits it."""
     cli = LinuxCoopCLI()
     try:
         cli.run(profile_name, edit_mode)

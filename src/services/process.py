@@ -9,18 +9,18 @@ import psutil
 from ..core.logger import Logger
 
 class ProcessService:
-    """Serviço responsável por gerenciar processos das instâncias do jogo."""
+    """Service responsible for managing game instance processes."""
     def __init__(self, logger: Logger):
-        """Inicializa o serviço de processos com logger e lista de PIDs."""
+        """Initializes the process service with a logger and a list of PIDs."""
         self.logger = logger
         self.pids: List[int] = []
         self._terminated_pids: Set[int] = set()
     
     def cleanup_previous_instances(self, proton_path: Optional[Path], exe_path: Path) -> None:
-        """Finaliza instâncias anteriores do jogo que estejam em execução."""
+        """Terminates any previously running game instances."""
         self.logger.info(f"Terminating previous instances of '{exe_path.name}'...")
         
-        # Otimização: buscar apenas processos relevantes
+        # Optimization: search only for relevant processes
         exe_name = exe_path.name.lower()
         proton_name = proton_path.name.lower() if proton_path else None
         
@@ -65,7 +65,7 @@ class ProcessService:
             time.sleep(1)  # Final cleanup delay
     
     def launch_instance(self, cmd: List[str], log_file: Path, env: dict, cwd: Optional[Path] = None) -> int:
-        """Lança uma instância do jogo e retorna o PID do processo."""
+        """Launches a game instance and returns the process PID."""
         self.logger.info(f"Launching process with command: {' '.join(cmd)}")
         self.logger.info(f"Environment variables: {env}")
         if cwd:
@@ -82,7 +82,7 @@ class ProcessService:
 
         self.pids.append(process.pid)
         try:
-            # Pequeno atraso para permitir que o SO aplique a afinidade da CPU
+            # Small delay to allow the OS to apply CPU affinity
             time.sleep(0.1)
             p = psutil.Process(process.pid)
             cpu_affinity = p.cpu_affinity()
@@ -92,7 +92,7 @@ class ProcessService:
         return process.pid
     
     def terminate_all(self) -> None:
-        """Finaliza todos os processos gerenciados."""
+        """Terminates all managed processes."""
         if not self.pids:
             return
             
@@ -120,7 +120,7 @@ class ProcessService:
     
     @lru_cache(maxsize=32)
     def _check_pid_exists(self, pid: int) -> bool:
-        """Cache para verificação de existência de PID."""
+        """Cache for PID existence check."""
         try:
             os.kill(pid, 0)
             return True
@@ -128,7 +128,7 @@ class ProcessService:
             return False
     
     def monitor_processes(self) -> bool:
-        """Verifica se ainda existem processos em execução."""
+        """Checks if there are still processes running."""
         if not self.pids:
             return False
             

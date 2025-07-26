@@ -5,7 +5,7 @@ from typing import Optional
 from ..models.profile import PlayerInstanceConfig
 
 class GameInstance(BaseModel):
-    """Modelo que representa uma instância individual do jogo."""
+    """Model representing an individual game instance."""
     instance_num: int
     profile_name: str
     prefix_dir: Path
@@ -14,5 +14,5 @@ class GameInstance(BaseModel):
     player_config: Optional[PlayerInstanceConfig] = None
     
     def __init__(self, **data):
-        """Inicializa a instância do jogo com os dados fornecidos."""
+        """Initializes the game instance with the provided data."""
         super().__init__(**data)

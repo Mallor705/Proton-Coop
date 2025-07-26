@@ -14,7 +14,7 @@ def check_pyinstaller():
     try:
         import PyInstaller  # noqa: F401
     except ImportError:
-        print("PyInstaller não está instalado. Instalando via pip...")
+        print("PyInstaller is not installed. Installing via pip...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
 
 def clean_previous_builds():
@@ -24,7 +24,7 @@ def clean_previous_builds():
                 shutil.rmtree(path)
             else:
                 path.unlink()
-    print("Builds anteriores limpos.")
+    print("Previous builds cleaned.")
 
 def build_pyinstaller(onefile=True, noconsole=False, extra_args=None):
     cmd = [
@@ -42,28 +42,28 @@ def build_pyinstaller(onefile=True, noconsole=False, extra_args=None):
         cmd.append("--noconsole")
     if extra_args:
         cmd.extend(extra_args)
-    print("Executando:", " ".join(cmd))
+    print("Executing:", " ".join(cmd))
     subprocess.check_call(cmd)
 
 def print_usage():
     print(f"""
-Script para compilar o Linux-Coop com PyInstaller.
+Script to compile Linux-Coop with PyInstaller.
 
-Uso:
-    python {__file__} [--onefile/--onedir] [--console/--noconsole] [--clean] [--help] [argumentos PyInstaller]
+Usage:
+    python {__file__} [--onefile/--onedir] [--console/--noconsole] [--clean] [--help] [PyInstaller arguments]
 
-Opções:
-    --onefile       Gera um único executável (padrão).
-    --onedir        Gera pasta com arquivos (modo onedir).
-    --console       Exibe console ao rodar o executável.
-    --noconsole     Não exibe console (padrão para apps GUI).
-    --clean         Remove builds anteriores antes de compilar.
-    --help          Exibe esta mensagem.
+Options:
+    --onefile       Generates a single executable (default).
+    --onedir        Generates a folder with files (onedir mode).
+    --console       Displays console when running the executable.
+    --noconsole     Does not display console (default for GUI apps).
+    --clean         Removes previous builds before compiling.
+    --help          Displays this message.
 
-Exemplo:
+Example:
     python {__file__} --onefile --noconsole --clean
 
-Após a compilação, o executável estará em: {DIST_DIR}/
+After compilation, the executable will be in: {DIST_DIR}/
 """)
 
 def main():
@@ -101,8 +101,8 @@ def main():
     check_pyinstaller()
     build_pyinstaller(onefile=onefile, noconsole=noconsole, extra_args=extra_args)
 
-    print("\nCompilação finalizada!")
-    print(f"Executável gerado em: {DIST_DIR}/")
+    print("\nCompilation finished!")
+    print(f"Executable generated in: {DIST_DIR}/")
 
 if __name__ == "__main__":
     main()

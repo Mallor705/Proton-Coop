@@ -3,7 +3,7 @@ from pathlib import Path
 import time
 
 class ProfileCache:
-    """Cache externo para perfis e validações de path."""
+    """External cache for profiles and path validations."""
     
     def __init__(self):
         self._path_cache: Dict[str, bool] = {}
@@ -12,7 +12,7 @@ class ProfileCache:
         self._cache_ttl = 300  # 5 minutes TTL
     
     def check_path_exists(self, path: Path) -> bool:
-        """Verifica se um path existe com cache."""
+        """Checks if a path exists with caching."""
         path_str = str(path)
         current_time = time.time()
         
@@ -29,7 +29,7 @@ class ProfileCache:
         return exists
     
     def get_profile(self, profile_key: str) -> Optional[Any]:
-        """Recupera um profile do cache."""
+        """Retrieves a profile from the cache."""
         current_time = time.time()
         
         if (profile_key in self._profile_cache and
@@ -39,12 +39,12 @@ class ProfileCache:
         return None
     
     def set_profile(self, profile_key: str, profile: Any) -> None:
-        """Armazena um profile no cache."""
+        """Stores a profile in the cache."""
         self._profile_cache[profile_key] = profile
         self._cache_timestamps[profile_key] = time.time()
     
     def clear_expired(self) -> None:
-        """Remove entradas expiradas do cache."""
+        """Removes expired entries from the cache."""
         current_time = time.time()
         expired_keys = [
             key for key, timestamp in self._cache_timestamps.items()
@@ -60,5 +60,5 @@ class ProfileCache:
 _global_cache = ProfileCache()
 
 def get_cache() -> ProfileCache:
-    """Retorna a instância global do cache."""
+    """Returns the global cache instance."""
     return _global_cache

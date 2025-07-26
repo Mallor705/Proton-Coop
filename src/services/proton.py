@@ -6,15 +6,15 @@ from ..core.exceptions import ProtonNotFoundError
 from ..core.logger import Logger
 
 class ProtonService:
-    """Serviço responsável por localizar e validar o Proton e diretórios do Steam."""
+    """Service responsible for locating and validating Proton and Steam directories."""
     def __init__(self, logger: Logger):
-        """Inicializa o serviço de Proton com logger."""
+        """Initializes the Proton service with a logger."""
         self.logger = logger
         self._steam_path_cache: Dict[str, Optional[Path]] = {}
         self._proton_cache: Dict[str, Tuple[Optional[Path], Optional[Path]]] = {}
     
     def find_proton_path(self, version: str) -> Tuple[Path, Path]:
-        """Procura o executável do Proton e o diretório raiz do Steam para a versão informada."""
+        """Searches for the Proton executable and the Steam root directory for the given version."""
         # Check cache first
         if version in self._proton_cache:
             cached_result = self._proton_cache[version]
@@ -42,7 +42,7 @@ class ProtonService:
     
     @lru_cache(maxsize=32)
     def _get_valid_steam_paths(self) -> Tuple[Path, ...]:
-        """Cache Steam paths que existem no sistema."""
+        """Caches Steam paths that exist on the system."""
         valid_paths = []
         for steam_path in Config.STEAM_PATHS:
             cache_key = str(steam_path)
@@ -56,7 +56,7 @@ class ProtonService:
 
     @lru_cache(maxsize=64)
     def _search_proton_in_steam(self, steam_path: Path, version: str) -> Optional[Path]:
-        """Procura o Proton nos diretórios do Steam com cache."""
+        """Searches for Proton in Steam directories with cache."""
         search_dirs = [
             steam_path / "steamapps/common",
             steam_path / "compatibilitytools.d"
@@ -84,7 +84,7 @@ class ProtonService:
         return None
 
     def list_installed_proton_versions(self) -> List[str]:
-        """Lista todas as versões do Proton instaladas encontradas nos diretórios do Steam."""
+        """Lists all installed Proton versions found in Steam directories."""
         self.logger.info("Listing installed Proton versions.")
         installed_versions = set()
         
