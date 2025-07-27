@@ -13,6 +13,10 @@ import subprocess
 import shutil
 import cairo # Import cairo here for drawing
 import sys # Importado para usar sys.executable
+import os # Import os for process management (killpg, getpgid)
+import signal # Import signal for process termination
+import time # Import time for busy-wait in _stop_game
+from gi.repository import GLib # Importado para usar GLib.timeout_add
 
 class ProfileEditorWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
@@ -56,6 +60,10 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.player_config_entries = []
         self.player_checkboxes = []
 
+        # Atributo para controlar o processo do jogo
+        self.cli_process_pid = None
+        self.monitoring_timeout_id = None # Para controlar o timeout do monitoramento
+
         # Tab 1: General Settings
         self.general_settings_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.general_settings_page.set_border_width(10)
@@ -66,21 +74,20 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.general_settings_grid.set_row_spacing(10)
         self.general_settings_grid.set_border_width(10)
         self.general_settings_page.pack_start(self.general_settings_grid, False, False, 0)
-        self.setup_general_settings()
+        self.setup_general_settings() # Call setup_general_settings here
 
         # Tab 2: Player Configurations
         self.player_configs_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.player_configs_page.set_border_width(10)
-        self.player_configs_page.set_vexpand(True) # Ensure this page expands vertically
-        # self.player_configs_page.set_hexpand(True) # Removed as it's a vertical box and may not be necessary
+        self.player_configs_page.set_vexpand(True)
         self.notebook.append_page(self.player_configs_page, Gtk.Label(label="Player Configurations"))
 
         # Create a ScrolledWindow for player configurations
         player_scrolled_window = Gtk.ScrolledWindow()
         player_scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         player_scrolled_window.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
-        player_scrolled_window.set_vexpand(True) # Essential for vertical expansion within its parent
-        player_scrolled_window.set_hexpand(True) # Essential for horizontal expansion within its parent
+        player_scrolled_window.set_vexpand(True)
+        player_scrolled_window.set_hexpand(True)
         self.player_configs_page.pack_start(player_scrolled_window, True, True, 0)
 
         # Create a Viewport for the player configurations content
@@ -88,7 +95,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         player_scrolled_window.add(player_viewport)
 
         self.player_config_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        player_viewport.add(self.player_config_vbox) # Add the vbox to the viewport
+        player_viewport.add(self.player_config_vbox)
         self.setup_player_configs()
 
         # Tab 3: Window Layout Preview
@@ -131,16 +138,6 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.splitscreen_orientation_combo.hide()
         preview_row += 1
 
-        # REMOVED: Primary Monitor Entry (NEW)
-        # self.primary_monitor_label = Gtk.Label(label="Primary Monitor (Fullscreen):", xalign=0)
-        # self.preview_settings_grid.attach(self.primary_monitor_label, 0, preview_row, 1, 1)
-        # self.primary_monitor_entry = Gtk.Entry()
-        # self.primary_monitor_entry.set_placeholder_text("Ex: DP-1, HDMI-A-1 (leave blank for default)")
-        # self.preview_settings_grid.attach(self.primary_monitor_entry, 1, preview_row, 1, 1)
-        # self.primary_monitor_label.hide() # Hide by default, show only in non-splitscreen mode
-        # self.primary_monitor_entry.hide() # Hide by default
-        # preview_row += 1
-
         self.drawing_area = Gtk.DrawingArea()
         self.drawing_area.connect("draw", self.on_draw_window_layout)
         self.window_layout_page.pack_start(self.drawing_area, True, True, 0)
@@ -163,6 +160,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         main_vbox.pack_end(self.statusbar, False, False, 0)
 
         self.show_all()
+        self._update_play_button_state() # Set initial button state
 
     def setup_general_settings(self):
         # Use a main VBox for this page to hold frames
@@ -289,10 +287,24 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         save_button.connect("clicked", self.on_save_button_clicked)
         button_hbox.pack_start(save_button, False, False, 0)
 
-        play_button = Gtk.Button(label="▶️ Launch Game")
-        play_button.get_style_context().add_class("suggested-action") # Highlight play button
-        play_button.connect("clicked", self.on_play_button_clicked)
-        button_hbox.pack_start(play_button, False, False, 0)
+        # Make play_button an instance variable
+        self.play_button = Gtk.Button(label="▶️ Launch Game") # Changed to instance variable
+        self.play_button.get_style_context().add_class("suggested-action") # Highlight play button
+        # Connect to a general handler that will decide to launch or stop
+        self.play_button.connect("clicked", self.on_play_button_clicked)
+        button_hbox.pack_start(self.play_button, False, False, 0)
+
+    # NEW: Add _update_play_button_state method
+    def _update_play_button_state(self):
+        if self.cli_process_pid:
+            self.play_button.set_label("⏹️ Stop Gaming")
+            self.play_button.get_style_context().remove_class("suggested-action")
+            self.play_button.get_style_context().add_class("destructive-action")
+        else:
+            self.play_button.set_label("▶️ Launch Game")
+            self.play_button.get_style_context().remove_class("destructive-action")
+            self.play_button.get_style_context().add_class("suggested-action")
+        self.play_button.set_sensitive(True) # Ensure button is always sensitive initially
 
     def on_exe_path_button_clicked(self, button):
         dialog = Gtk.FileChooserDialog(
@@ -598,6 +610,10 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             dialog.destroy()
 
     def on_play_button_clicked(self, widget):
+        if self.cli_process_pid:
+            self._stop_game()
+            return
+
         self.statusbar.push(0, "Starting game...")
         self.on_save_button_clicked(widget) # Ensure profile is saved before playing
 
@@ -619,9 +635,18 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
 
         command = [python_exec, str(script_path), profile_name]
         self.logger.info(f"Executing command: {' '.join(command)}")
+
+        self.play_button.set_sensitive(False)
+        self.play_button.set_label("Iniciando...")
+
         try:
-            subprocess.Popen(command) # Non-blocking call
-            self.statusbar.push(0, f"Game '{profile_name}' launched successfully.")
+            # Launch the CLI script as a separate process group
+            process = subprocess.Popen(command, preexec_fn=os.setsid)
+            self.cli_process_pid = process.pid
+            self.statusbar.push(0, f"Game '{profile_name}' launched successfully with PID: {self.cli_process_pid}.")
+            self._update_play_button_state() # Update button to "Stop Gaming"
+            # Start monitoring the process
+            self.monitoring_timeout_id = GLib.timeout_add(1000, self._check_cli_process) # Corrigido para GLib.timeout_add
         except Exception as e:
             self.logger.error(f"Failed to launch game: {e}")
             self.statusbar.push(0, f"Error launching game: {e}")
@@ -629,6 +654,72 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                                        f"Error launching game:\n{e}")
             dialog.run()
             dialog.destroy()
+            self.cli_process_pid = None # Reset PID on error
+            self._update_play_button_state() # Reset button to "Launch Game"
+
+    # NEW: Add _stop_game method
+    def _stop_game(self):
+        if not self.cli_process_pid:
+            self.statusbar.push(0, "No game process to stop.")
+            return
+
+        self.statusbar.push(0, "Stopping game...")
+        self.play_button.set_sensitive(False)
+        self.play_button.set_label("Parando...")
+
+        try:
+            # Terminate the process group
+            os.killpg(os.getpgid(self.cli_process_pid), signal.SIGTERM)
+            self.logger.info(f"Sent SIGTERM to process group {os.getpgid(self.cli_process_pid)}")
+
+            # Give it a moment to terminate
+            # Gtk.timeout_add(1000, self._check_cli_process_after_term, self.cli_process_pid)
+            # More direct approach: busy-wait for a short period, then force kill if needed
+            for _ in range(5): # Wait up to 5 seconds
+                if not self._is_process_running(self.cli_process_pid):
+                    break
+                time.sleep(1)
+            
+            if self._is_process_running(self.cli_process_pid):
+                os.killpg(os.getpgid(self.cli_process_pid), signal.SIGKILL)
+                self.logger.warning(f"Sent SIGKILL to process group {os.getpgid(self.cli_process_pid)} as SIGTERM was not enough.")
+
+        except ProcessLookupError:
+            self.logger.info(f"Process {self.cli_process_pid} already terminated or not found.")
+        except OSError as e:
+            self.logger.error(f"Error terminating process group for PID {self.cli_process_pid}: {e}")
+        except Exception as e:
+            self.logger.error(f"An unexpected error occurred while stopping the game: {e}")
+        
+        self.cli_process_pid = None
+        if self.monitoring_timeout_id:
+            GLib.source_remove(self.monitoring_timeout_id) # Stop monitoring
+            self.monitoring_timeout_id = None
+        self.statusbar.push(0, "Game stopped.")
+        self._update_play_button_state() # Reset button to "Launch Game"
+
+    # Helper to check if a process is running
+    def _is_process_running(self, pid):
+        if pid is None:
+            return False
+        try:
+            os.kill(pid, 0) # Check if process exists
+            return True
+        except OSError:
+            return False
+
+    # NEW: Add _check_cli_process for monitoring
+    def _check_cli_process(self):
+        if self.cli_process_pid and not self._is_process_running(self.cli_process_pid):
+            self.logger.info(f"Detected CLI process {self.cli_process_pid} has terminated.")
+            self.cli_process_pid = None
+            self._update_play_button_state()
+            self.statusbar.push(0, "Game process terminated.")
+            if self.monitoring_timeout_id:
+                GLib.source_remove(self.monitoring_timeout_id) # Corrigido para GLib.source_remove
+                self.monitoring_timeout_id = None
+            return False # Stop the timeout
+        return True # Continue monitoring
 
     def on_layout_setting_changed(self, widget):
         self.drawing_area.queue_draw()
@@ -660,34 +751,28 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         x_offset_display = (drawing_area_width - scaled_total_width) / 2
         y_offset_display = (drawing_area_height - scaled_total_height) / 2
 
-        # print(f"DEBUG LAYOUT: Total Width/Height (unscaled): {width}x{height}")
-        # print(f"DEBUG LAYOUT: Drawing Area Width/Height: {drawing_area_width}x{drawing_area_height}")
-        # print(f"DEBUG LAYOUT: Scale: {scale}")
-        # print(f"DEBUG LAYOUT: Scaled Total Width/Height: {scaled_total_width}x{scaled_total_height}")
-        # print(f"DEBUG LAYOUT: Offsets: X={x_offset_display}, Y={y_offset_display}")
-        # print(f"DEBUG LAYOUT: Num Players: {num_players}, Mode: {mode}, Orientation: {orientation}")
-
         try:
             # Create dummy player configs for the dummy profile to ensure effective_num_players is correct
             dummy_player_configs = []
+            # NEW: dummy_player_monitor_ids = []
             for _ in range(num_players):
                 dummy_player_configs.append(PlayerInstanceConfig())
+                # NEW: dummy_player_monitor_ids.append(None) # Initialize with None
 
             dummy_profile = GameProfile(
                 GAME_NAME="Preview",
                 EXE_PATH=None,
                 NUM_PLAYERS=num_players,
-                INSTANCE_WIDTH=width, # Use total width for dummy profile
-                INSTANCE_HEIGHT=height, # Use total height for dummy profile
+                INSTANCE_WIDTH=width,
+                INSTANCE_HEIGHT=height,
                 MODE=mode,
                 SPLITSCREEN=SplitscreenConfig(orientation=orientation) if mode == "splitscreen" else None,
-                player_configs=dummy_player_configs, # Pass dummy player configs
+                player_configs=dummy_player_configs,
                 # Other player device IDs and native flag are not needed for layout preview
                 PLAYER_PHYSICAL_DEVICE_IDS=[],
                 PLAYER_MOUSE_EVENT_PATHS=[],
                 PLAYER_KEYBOARD_EVENT_PATHS=[],
                 PLAYER_AUDIO_DEVICE_IDS=[],
-                PLAYER_MONITOR_IDS=[],
                 is_native=False,
             )
         except Exception as e:
@@ -800,6 +885,25 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             text_y = y_offset_display + (draw_h + height_text) / 2
             cr.move_to(text_x, text_y)
             cr.show_text(text)
+
+            # Desenha o Monitor ID abaixo do número do jogador para instância única
+            monitor_id_text = ""
+            if self.player_config_entries and 0 < len(self.player_config_entries):
+                player_config_widgets = self.player_config_entries[0][1] # Get first player config
+                monitor_combo = player_config_widgets.get("MONITOR_ID")
+                if monitor_combo:
+                    active_iter = monitor_combo.get_active_iter()
+                    if active_iter:
+                        monitor_id_text = monitor_combo.get_model().get_value(active_iter, 0)
+            
+            if monitor_id_text:
+                cr.set_font_size(font_size * 0.7)
+                cr.set_source_rgb(0.7, 0.7, 0.7)
+                xbearing, ybearing, width_text, height_text, xadvance, yadvance = cr.text_extents(monitor_id_text)
+                text_x = x_offset_display + (draw_w - width_text) / 2
+                text_y = y_offset_display + (draw_h + height_text) / 2 + (font_size * 0.8)
+                cr.move_to(text_x, text_y)
+                cr.show_text(monitor_id_text)
 
     def get_profile_data(self):
         proton_version = self.proton_version_combo.get_active_text()
@@ -964,17 +1068,6 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                     else:
                         self.logger.warning(f"MONITOR_ID widget not found for player {i+1} in player_combos. Skipping monitor loading for this player.")
 
-            selected_players = profile_data.get("selected_players")
-            if selected_players is None:
-                for cb in self.player_checkboxes:
-                    cb.set_active(True)
-            else:
-                for i, cb in enumerate(self.player_checkboxes):
-                    cb.set_active((i + 1) in selected_players)
-        
-        # REMOVED: Load Primary Monitor
-        # REMOVED: self.primary_monitor_entry.set_text(profile_data.get("PRIMARY_MONITOR", ""))
-
     def _create_device_list_store(self, devices: List[Dict[str, str]]) -> Gtk.ListStore:
         list_store = Gtk.ListStore(str, str)
         list_store.append(["", "None"])
@@ -1000,8 +1093,5 @@ if __name__ == "__main__":
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk, Gdk
     import cairo # Import cairo here for drawing
-    # REMOVED: Initialize Gdk for display operations
-    # REMOVED: if not Gdk.Display.get_default():
-    # REMOVED:     print("Error: Could not get default Gdk Display. Is a display server running?")
-    # REMOVED:     sys.exit(1)
+    import time # Import time for busy-wait in _stop_game
     run_gui()
