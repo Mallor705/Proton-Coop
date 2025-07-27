@@ -1,10 +1,12 @@
 import json
 from pathlib import Path
-from pydantic import BaseModel, Field, validator, ConfigDict
+from pydantic import BaseModel, Field, validator, ConfigDict, ValidationError
 from typing import Optional, List, Dict, Tuple
 
 from ..core.exceptions import ProfileNotFoundError, ExecutableNotFoundError
 from ..core.cache import get_cache
+from ..core.logger import Logger
+from ..core.config import Config
 
 class PlayerInstanceConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -18,6 +20,7 @@ class PlayerInstanceConfig(BaseModel):
     MOUSE_EVENT_PATH: Optional[str] = Field(default=None, alias="MOUSE_EVENT_PATH")
     KEYBOARD_EVENT_PATH: Optional[str] = Field(default=None, alias="KEYBOARD_EVENT_PATH")
     AUDIO_DEVICE_ID: Optional[str] = Field(default=None, alias="AUDIO_DEVICE_ID")
+    MONITOR_ID: Optional[str] = Field(default=None, alias="MONITOR_ID") # Novo campo para o monitor específico do jogador
 
 class SplitscreenConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -46,6 +49,7 @@ class GameProfile(BaseModel):
     mode: Optional[str] = Field(default=None, alias="MODE")
     splitscreen: Optional[SplitscreenConfig] = Field(default=None, alias="SPLITSCREEN")
     env_vars: Optional[Dict[str, str]] = Field(default=None, alias="ENV_VARS")
+    primary_monitor: Optional[str] = Field(default=None, alias="PRIMARY_MONITOR") # Novo campo para o monitor principal
 
     # New field for player configurations, using "PLAYERS" alias for JSON
     player_configs: Optional[List[PlayerInstanceConfig]] = Field(default=None, alias="PLAYERS")
@@ -117,7 +121,18 @@ class GameProfile(BaseModel):
         # Batch processing of configurations
         cls._process_profile_data(data)
 
-        profile = cls(**data)
+        profile = None
+        try:
+            profile = cls(**data) # This is where Pydantic validation happens
+        except ValidationError as e:
+            # Log the full Pydantic validation error for debugging
+            Logger("LinuxCoopGUI", Config.LOG_DIR).error(f"Pydantic Validation Error loading profile {profile_path}: {e.errors()}")
+            raise ValueError(f"Profile data validation failed: {e}") # Re-raise with a more informative message
+        except Exception as e:
+            # Catch any other unexpected errors during instantiation
+            Logger("LinuxCoopGUI", Config.LOG_DIR).error(f"Unexpected error during GameProfile instantiation for {profile_path}: {e}")
+            raise
+
         # Cache the loaded profile
         cache.set_profile(profile_key, profile)
         return profile

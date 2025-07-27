@@ -12,11 +12,16 @@ from typing import Dict, List, Tuple
 import subprocess
 import shutil
 import cairo # Import cairo here for drawing
+# REMOVED: import sys # Added for Gdk.Display.get_default()
 
 class ProfileEditorWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title="Linux Coop Profile Editor")
         self.set_default_size(1000, 700)
+
+        # Create the main vertical box which will hold the notebook and statusbar
+        main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(main_vbox) # Add main_vbox as the single child of the window
 
         # Initialize configuration widgets early
         self.num_players_spin = Gtk.SpinButton.new_with_range(1, 4, 1)
@@ -40,11 +45,12 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.device_manager = DeviceManager()
         self.detected_input_devices = self.device_manager.get_input_devices()
         self.detected_audio_devices = self.device_manager.get_audio_devices()
+        self.detected_display_outputs = self.device_manager.get_display_outputs() # Adicionado para seleção de monitor
         self.logger = Logger(name="LinuxCoopGUI", log_dir=Path("./logs"))
         self.proton_service = ProtonService(self.logger)
 
         self.notebook = Gtk.Notebook()
-        self.add(self.notebook)
+        main_vbox.pack_start(self.notebook, True, True, 0) # Empacota o notebook no main_vbox
 
         # Initialize player config entries list
         self.player_config_entries = []
@@ -125,6 +131,16 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.splitscreen_orientation_combo.hide()
         preview_row += 1
 
+        # REMOVED: Primary Monitor Entry (NEW)
+        # self.primary_monitor_label = Gtk.Label(label="Primary Monitor (Fullscreen):", xalign=0)
+        # self.preview_settings_grid.attach(self.primary_monitor_label, 0, preview_row, 1, 1)
+        # self.primary_monitor_entry = Gtk.Entry()
+        # self.primary_monitor_entry.set_placeholder_text("Ex: DP-1, HDMI-A-1 (leave blank for default)")
+        # self.preview_settings_grid.attach(self.primary_monitor_entry, 1, preview_row, 1, 1)
+        # self.primary_monitor_label.hide() # Hide by default, show only in non-splitscreen mode
+        # self.primary_monitor_entry.hide() # Hide by default
+        # preview_row += 1
+
         self.drawing_area = Gtk.DrawingArea()
         self.drawing_area.connect("draw", self.on_draw_window_layout)
         self.window_layout_page.pack_start(self.drawing_area, True, True, 0)
@@ -144,9 +160,6 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
 
         # Add a Statusbar at the bottom
         self.statusbar = Gtk.Statusbar()
-        main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.add(main_vbox)
-        main_vbox.pack_start(self.notebook, True, True, 0)
         main_vbox.pack_end(self.statusbar, False, False, 0)
 
         self.show_all()
@@ -390,10 +403,11 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                     model = widget.get_model()
                     active_iter = widget.get_active_iter()
                     if active_iter:
-                        selected_id = model.get_value(active_iter, 0)
-                        config[key] = selected_id if selected_id != "" else None
+                        selected_value = model.get_value(active_iter, 0)
+                        # Certifica-se de que a string vazia seja salva como None se for a opção "None"
+                        config[key] = selected_value if selected_value != "" else None
                     else:
-                        config[key] = None
+                        config[key] = None # Define explicitamente como None se nada estiver selecionado
                 else:
                     config[key] = ""
             player_configs_data.append(config)
@@ -437,7 +451,8 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                 "physical_device_id": Gtk.ComboBox.new_with_model(self._create_device_list_store(self.detected_input_devices["joystick"])),
                 "mouse_event_path": Gtk.ComboBox.new_with_model(self._create_device_list_store(self.detected_input_devices["mouse"])),
                 "keyboard_event_path": Gtk.ComboBox.new_with_model(self._create_device_list_store(self.detected_input_devices["keyboard"])),
-                "audio_device_id": Gtk.ComboBox.new_with_model(self._create_device_list_store(self.detected_audio_devices))
+                "audio_device_id": Gtk.ComboBox.new_with_model(self._create_device_list_store(self.detected_audio_devices)),
+                "MONITOR_ID": Gtk.ComboBox.new_with_model(self._create_device_list_store(self.detected_display_outputs)), # Corrigido para MONITOR_ID (maiúsculo)
             }
             self.player_device_combos.append(player_combos)
 
@@ -505,6 +520,16 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             player_grid.attach(audio_device_id_combo, 1, p_row, 1, 1)
             p_row += 1
 
+            # Monitor Selection
+            player_grid.attach(Gtk.Label(label="Monitor:", xalign=0), 0, p_row, 1, 1)
+            monitor_combo = player_combos["MONITOR_ID"]
+            renderer = Gtk.CellRendererText()
+            monitor_combo.pack_start(renderer, True)
+            monitor_combo.add_attribute(renderer, "text", 1)
+            monitor_combo.set_active(0)
+            player_grid.attach(monitor_combo, 1, p_row, 1, 1)
+            p_row += 1
+
             player_config_widgets = {
                 "ACCOUNT_NAME": player_combos["account_name"],
                 "LANGUAGE": player_combos["language"],
@@ -514,6 +539,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                 "MOUSE_EVENT_PATH": mouse_event_path_combo,
                 "KEYBOARD_EVENT_PATH": keyboard_event_path_combo,
                 "AUDIO_DEVICE_ID": audio_device_id_combo,
+                "MONITOR_ID": monitor_combo, # Adicionado monitor_id
             }
             self.player_config_entries.append((player_frame, player_config_widgets))
         self.player_config_vbox.show_all()
@@ -529,10 +555,14 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         if mode == "splitscreen":
             self.splitscreen_orientation_label.show()
             self.splitscreen_orientation_combo.show()
+            # REMOVED: self.primary_monitor_label.hide()
+            # REMOVED: self.primary_monitor_entry.hide()
             self.statusbar.push(0, "Splitscreen mode activated.")
         else:
             self.splitscreen_orientation_label.hide()
             self.splitscreen_orientation_combo.hide()
+            # REMOVED: self.primary_monitor_label.show()
+            # REMOVED: self.primary_monitor_entry.show()
             self.statusbar.push(0, "Splitscreen mode deactivated.")
 
     def on_save_button_clicked(self, button):
@@ -657,6 +687,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                 PLAYER_MOUSE_EVENT_PATHS=[],
                 PLAYER_KEYBOARD_EVENT_PATHS=[],
                 PLAYER_AUDIO_DEVICE_IDS=[],
+                PLAYER_MONITOR_IDS=[],
                 is_native=False,
             )
         except Exception as e:
@@ -730,6 +761,25 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                 text_y = y_offset_display + pos_y + (draw_h + height_text) / 2
                 cr.move_to(text_x, text_y)
                 cr.show_text(text)
+
+                # Desenha o Monitor ID abaixo do número do jogador
+                monitor_id_text = ""
+                if self.player_config_entries and i < len(self.player_config_entries):
+                    player_config_widgets = self.player_config_entries[i][1]
+                    monitor_combo = player_config_widgets.get("MONITOR_ID")
+                    if monitor_combo:
+                        active_iter = monitor_combo.get_active_iter()
+                        if active_iter:
+                            monitor_id_text = monitor_combo.get_model().get_value(active_iter, 0)
+
+                if monitor_id_text:
+                    cr.set_font_size(font_size * 0.7)
+                    cr.set_source_rgb(0.7, 0.7, 0.7) # Texto cinza para o ID do monitor
+                    xbearing, ybearing, width_text, height_text, xadvance, yadvance = cr.text_extents(monitor_id_text)
+                    text_x = x_offset_display + pos_x + (draw_w - width_text) / 2
+                    text_y = y_offset_display + pos_y + (draw_h + height_text) / 2 + (font_size * 0.8) # Posição abaixo do número do jogador
+                    cr.move_to(text_x, text_y)
+                    cr.show_text(monitor_id_text)
         else:
             instance_w, instance_h = dummy_profile.get_instance_dimensions(1)
             draw_w = instance_w * scale
@@ -766,10 +816,11 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                     model = widget.get_model()
                     active_iter = widget.get_active_iter()
                     if active_iter:
-                        selected_id = model.get_value(active_iter, 0)
-                        config[key] = selected_id if selected_id != "" else None
+                        selected_value = model.get_value(active_iter, 0)
+                        # Certifica-se de que a string vazia seja salva como None se for a opção "None"
+                        config[key] = selected_value if selected_value != "" else None
                     else:
-                        config[key] = None
+                        config[key] = None # Define explicitamente como None se nada estiver selecionado
                 else:
                     config[key] = ""
             player_configs_data.append(config)
@@ -804,7 +855,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             is_native=is_native_value,
             mode=mode,
             splitscreen=splitscreen_config,
-            player_configs=self._get_player_configs_from_ui(), # Adicione esta linha
+            player_configs=self._get_player_configs_from_ui(),
         )
 
         self.logger.info(f"DEBUG: Mode value before GameProfile instantiation: {mode}")
@@ -893,6 +944,26 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                                 if len(player_combos[combo_key].get_model()) > 0:
                                     player_combos[combo_key].set_active(0)
 
+                    # Carrega o Monitor ID para cada jogador
+                    monitor_id = player_config_data.get("MONITOR_ID")
+                    
+                    # Adicionar verificação defensiva para a existência da chave 'MONITOR_ID' no player_combos
+                    if "MONITOR_ID" in player_combos:
+                        monitor_combo = player_combos["MONITOR_ID"]
+                        model = monitor_combo.get_model()
+
+                        # Definir para a opção "None" (índice 0) por padrão
+                        if len(model) > 0:
+                            monitor_combo.set_active(0)
+
+                        if monitor_id is not None and monitor_id != "": # Se um monitor específico for salvo e não for vazio
+                            for j, row in enumerate(model):
+                                if row[0] == monitor_id:
+                                    monitor_combo.set_active(j)
+                                    break
+                    else:
+                        self.logger.warning(f"MONITOR_ID widget not found for player {i+1} in player_combos. Skipping monitor loading for this player.")
+
             selected_players = profile_data.get("selected_players")
             if selected_players is None:
                 for cb in self.player_checkboxes:
@@ -900,6 +971,9 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             else:
                 for i, cb in enumerate(self.player_checkboxes):
                     cb.set_active((i + 1) in selected_players)
+        
+        # REMOVED: Load Primary Monitor
+        # REMOVED: self.primary_monitor_entry.set_text(profile_data.get("PRIMARY_MONITOR", ""))
 
     def _create_device_list_store(self, devices: List[Dict[str, str]]) -> Gtk.ListStore:
         list_store = Gtk.ListStore(str, str)
@@ -926,4 +1000,8 @@ if __name__ == "__main__":
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk, Gdk
     import cairo # Import cairo here for drawing
+    # REMOVED: Initialize Gdk for display operations
+    # REMOVED: if not Gdk.Display.get_default():
+    # REMOVED:     print("Error: Could not get default Gdk Display. Is a display server running?")
+    # REMOVED:     sys.exit(1)
     run_gui()

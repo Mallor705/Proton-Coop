@@ -117,3 +117,22 @@ class DeviceManager:
             audio_sinks.append({"id": current_name, "name": current_description if current_description else current_name})
 
         return sorted(audio_sinks, key=lambda x: x['name']) 
+
+    def get_display_outputs(self) -> List[Dict[str, str]]:
+        """Detects and returns available display outputs (monitors) using xrandr."""
+        display_outputs = []
+        xrandr_output = self._run_command("xrandr --query")
+
+        # Regex to capture display name (e.g., DP-1, HDMI-A-1) and status (connected)
+        # It's important to only capture connected displays
+        connected_pattern = re.compile(r"^(\S+) connected.*")
+
+        for line in xrandr_output.splitlines():
+            match = connected_pattern.match(line)
+            if match:
+                display_name = match.group(1)
+                # Exclude virtual outputs if they appear (e.g., in Wayland with some configurations)
+                if not display_name.startswith("Virtual") and not display_name.startswith("VIRTUAL"):
+                    display_outputs.append({"id": display_name, "name": display_name})
+        
+        return sorted(display_outputs, key=lambda x: x['name']) 

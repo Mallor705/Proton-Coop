@@ -288,6 +288,14 @@ class InstanceService:
             env.pop('PULSE_SINK', None)
             self.logger.info(f"Instance {instance.instance_num}: No specific audio device assigned. PULSE_SINK not set.")
 
+        # Define WAYLANDDRV_PRIMARY_MONITOR com base na configuração do jogador
+        if instance.player_config and instance.player_config.monitor_id:
+            env['WAYLANDDRV_PRIMARY_MONITOR'] = instance.player_config.monitor_id
+            self.logger.info(f"Instance {instance.instance_num}: Setting WAYLANDDRV_PRIMARY_MONITOR to '{instance.player_config.monitor_id}'.")
+        else:
+            env.pop('WAYLANDDRV_PRIMARY_MONITOR', None)
+            self.logger.info(f"Instance {instance.instance_num}: No specific monitor selected for this instance.")
+
         return env
 
     def _get_joystick_for_instance(self, instance: GameInstance, profile: Optional[GameProfile]) -> Optional[str]:
