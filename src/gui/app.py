@@ -360,8 +360,8 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                 self.load_profile_data(profile.model_dump(by_alias=True)) # Use model_dump to convert to dict
                 self.logger.info(f"Profile loaded successfully from {file_path}")
                 self.statusbar.push(0, f"Profile loaded: {file_path.name}")
-                # Select the loaded profile in the listbox
-                self._select_profile_in_list(file_path.name.replace(".json", ""))
+                # Select the loaded profile in the listbox by its filename stem
+                self._select_profile_in_list(file_path.stem)
             except Exception as e:
                 self.logger.error(f"Failed to load profile from {file_path}: {e}")
                 self.statusbar.push(0, f"Error loading profile: {e}")
@@ -1108,7 +1108,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         return list_store
 
     def _populate_profile_list(self):
-        """Populates the ListBox with available game profiles."""
+        """Populates the ListBox with available game profiles, displaying GAME_NAME."""
         for child in self.profile_listbox.get_children():
             self.profile_listbox.remove(child)
 
@@ -1126,36 +1126,49 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             row.set_sensitive(False) # Make it non-selectable
         else:
             for profile_path in profiles:
-                profile_name = profile_path.stem # Get filename without extension
+                profile_name_stem = profile_path.stem # Get filename without extension
+                try:
+                    profile = GameProfile.load_from_file(profile_path) # Load profile, uses cache
+                    display_name = profile.game_name or profile_name_stem # Use GAME_NAME, fallback to filename
+                except Exception as e:
+                    self.logger.warning(f"Could not load profile {profile_name_stem} for display in list: {e}")
+                    display_name = profile_name_stem + " (Error)" # Indicate error
+
                 row = Gtk.ListBoxRow()
-                label = Gtk.Label(label=profile_name)
+                label = Gtk.Label(label=display_name)
                 label.set_halign(Gtk.Align.START) # Align text to the start
                 row.add(label)
+                # Store the actual filename stem in the label's name property
+                label.set_name(profile_name_stem)
                 self.profile_listbox.add(row)
 
         self.profile_listbox.show_all()
 
     def _on_profile_selected_from_list(self, listbox, row):
-        """Handles selection of a profile from the sidebar list."""
-        profile_name = row.get_child().get_label() # Get the text from the label in the row
-        profile_path = Config.PROFILE_DIR / f"{profile_name}.json"
-        self.logger.info(f"Loading profile from sidebar: {profile_name}")
+        """Handles selection of a profile from the sidebar list, using stored filename."""
+        profile_name_stem = row.get_child().get_name() # Get the filename stem from the label's name property
+        if not profile_name_stem:
+            self.logger.warning("Attempted to select a profile without a stored filename property.")
+            return
+        
+        profile_path = Config.PROFILE_DIR / f"{profile_name_stem}.json"
+        self.logger.info(f"Loading profile from sidebar: {profile_name_stem}")
         
         try:
             profile = GameProfile.load_from_file(profile_path)
             self.load_profile_data(profile.model_dump(by_alias=True))
-            self.statusbar.push(0, f"Profile loaded: {profile_name}")
+            self.statusbar.push(0, f"Profile loaded: {profile_name_stem}")
             # Switch to General Settings tab after loading
             self.notebook.set_current_page(0) 
         except Exception as e:
-            self.logger.error(f"Failed to load profile {profile_name} from list: {e}")
+            self.logger.error(f"Failed to load profile {profile_name_stem} from list: {e}")
             self.statusbar.push(0, f"Error loading profile: {e}")
             error_dialog = Gtk.MessageDialog(
                 parent=self,
                 flags=Gtk.DialogFlags.MODAL,
                 type=Gtk.MessageType.ERROR,
                 buttons=Gtk.ButtonsType.OK,
-                message_format=f"Error loading profile {profile_name}:\n{e}"
+                message_format=f"Error loading profile {profile_name_stem}:\n{e}"
             )
             error_dialog.run()
             error_dialog.destroy()
@@ -1163,7 +1176,8 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
     # Helper to select a profile in the ListBox programmatically
     def _select_profile_in_list(self, profile_name_to_select: str):
         for i, row in enumerate(self.profile_listbox.get_children()):
-            if isinstance(row.get_child(), Gtk.Label) and row.get_child().get_label() == profile_name_to_select:
+            # Check if the row is a valid Gtk.ListBoxRow and its child (label) has the correct name
+            if isinstance(row, Gtk.ListBoxRow) and isinstance(row.get_child(), Gtk.Label) and row.get_child().get_name() == profile_name_to_select:
                 self.profile_listbox.select_row(row)
                 # self.profile_listbox.row_activated(row) # Não chamar row_activated aqui para evitar loop infinito com on_load_button_clicked
                 break
