@@ -1,0 +1,49 @@
+/* Base CSS - Fundamental styles and resets for Linux-Coop GUI */
+
+/* Global reset and base styling */
+* {
+    font-family:
+        system-ui,
+        -apple-system,
+        sans-serif;
+}
+
+/* Base text elements */
+label {
+    padding-top: 4px;
+    padding-bottom: 4px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    min-height: 20px;
+    line-height: 1.4;
+}
+
+/* Frame labels get special treatment */
+frame > label {
+    padding-top: 4px;
+    padding-bottom: 4px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    font-weight: bold;
+}
+
+/* Base styling for better text rendering */
+label,
+entry,
+button,
+combobox,
+spinbutton,
+dropdown {
+    line-height: 1.4;
+}
+
+/* Ensure consistent text rendering across all elements */
+entry,
+button,
+combobox,
+dropdown,
+spinbutton {
+    font-feature-settings:
+        "kern" 1,
+        "liga" 1;
+}

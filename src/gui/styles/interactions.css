@@ -1,0 +1,419 @@
+/* Interactions CSS - Modern animations and micro-interactions for Linux-Coop GUI */
+
+/* Global Animation Settings */
+* {
+    transition-timing-function: cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Button Interactions */
+button {
+    position: relative;
+    overflow: hidden;
+    transition:
+        all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1),
+        box-shadow 0.3s ease,
+        transform 0.15s ease;
+}
+
+button::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.3s ease, height 0.3s ease;
+    pointer-events: none;
+}
+
+button:active::before {
+    width: 300px;
+    height: 300px;
+}
+
+button:hover {
+    transform: translateY(-1px);
+    box-shadow:
+        0 8px 25px rgba(0, 0, 0, 0.15),
+        0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+button:active {
+    transform: translateY(0) scale(0.98);
+    transition-duration: 0.1s;
+}
+
+/* Suggested Action Button Enhancements */
+.suggested-action {
+    position: relative;
+    background: linear-gradient(135deg, #007acc, #005a9e);
+    box-shadow: 0 2px 8px rgba(0, 122, 204, 0.3);
+}
+
+.suggested-action::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent
+    );
+    transition: left 0.5s ease;
+}
+
+.suggested-action:hover::after {
+    left: 100%;
+}
+
+.suggested-action:hover {
+    background: linear-gradient(135deg, #29b6f6, #007acc);
+    box-shadow:
+        0 8px 25px rgba(0, 122, 204, 0.4),
+        0 4px 10px rgba(0, 122, 204, 0.2);
+    transform: translateY(-2px) scale(1.02);
+}
+
+/* Destructive Button Enhancements */
+.destructive-action {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+.destructive-action:hover {
+    background: linear-gradient(135deg, #e74c3c, #dc3545);
+    box-shadow:
+        0 8px 25px rgba(220, 53, 69, 0.4),
+        0 4px 10px rgba(220, 53, 69, 0.2);
+    transform: translateY(-2px) scale(1.02);
+}
+
+/* Entry Field Interactions */
+entry {
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        background-color 0.2s ease;
+}
+
+entry:focus {
+    transform: scale(1.01);
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        background-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+/* ComboBox and Dropdown Interactions */
+combobox,
+dropdown {
+    transition:
+        all 0.2s ease,
+        box-shadow 0.3s ease;
+}
+
+combobox:hover,
+dropdown:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Frame Animations */
+frame {
+    transition:
+        box-shadow 0.3s ease,
+        transform 0.2s ease;
+}
+
+frame:hover {
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+/* Profile Item Interactions */
+.profile-item {
+    transition:
+        all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    transform-origin: center;
+}
+
+.profile-item:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow:
+        0 12px 30px rgba(0, 0, 0, 0.15),
+        0 6px 15px rgba(0, 0, 0, 0.1);
+}
+
+.profile-item:active {
+    transform: translateY(-2px) scale(1.01);
+    transition-duration: 0.1s;
+}
+
+/* Notebook Tab Interactions */
+notebook > header > tabs > tab {
+    transition:
+        all 0.2s ease,
+        box-shadow 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+notebook > header > tabs > tab::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #007acc, transparent);
+    transition: all 0.3s ease;
+    transform: translateX(-50%);
+}
+
+notebook > header > tabs > tab:hover::before {
+    width: 80%;
+}
+
+notebook > header > tabs > tab:checked::before {
+    width: 100%;
+    background: linear-gradient(90deg, #007acc, #29b6f6, #007acc);
+}
+
+notebook > header > tabs > tab:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ListBox Row Interactions */
+listbox > row {
+    transition:
+        all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+    position: relative;
+}
+
+listbox > row::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #007acc, transparent);
+    transition: width 0.3s ease;
+    border-radius: 4px 0 0 4px;
+}
+
+listbox > row:hover::before {
+    width: 4px;
+}
+
+listbox > row:selected::before {
+    width: 6px;
+    background: linear-gradient(90deg, #29b6f6, #007acc);
+}
+
+listbox > row:hover {
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Scrollbar Interactions */
+scrollbar {
+    transition: opacity 0.3s ease;
+}
+
+scrollbar:hover {
+    opacity: 1;
+}
+
+scrollbar slider {
+    transition:
+        all 0.2s ease,
+        box-shadow 0.3s ease;
+}
+
+scrollbar slider:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Spinner/Loading Animation */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.loading-spinner {
+    animation: spin 1s linear infinite;
+}
+
+/* Fade In Animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease forwards;
+}
+
+/* Slide In Animation */
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.slide-in-left {
+    animation: slideInLeft 0.4s ease forwards;
+}
+
+/* Pulse Animation for Important Elements */
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 122, 204, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(0, 122, 204, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(0, 122, 204, 0);
+    }
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+/* Shake Animation for Errors */
+@keyframes shake {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    10%, 30%, 50%, 70%, 90% {
+        transform: translateX(-2px);
+    }
+    20%, 40%, 60%, 80% {
+        transform: translateX(2px);
+    }
+}
+
+.shake {
+    animation: shake 0.5s ease-in-out;
+}
+
+/* Bounce Animation for Success */
+@keyframes bounce {
+    0%, 20%, 53%, 80%, 100% {
+        transform: translateY(0);
+    }
+    40%, 43% {
+        transform: translateY(-8px);
+    }
+    70% {
+        transform: translateY(-4px);
+    }
+    90% {
+        transform: translateY(-2px);
+    }
+}
+
+.bounce {
+    animation: bounce 1s ease;
+}
+
+/* Focus Ring Enhancement */
+*:focus {
+    outline: none;
+    box-shadow:
+        0 0 0 3px rgba(0, 122, 204, 0.15),
+        0 0 0 1px rgba(0, 122, 204, 0.4);
+    transition: box-shadow 0.2s ease;
+}
+
+/* Smooth State Transitions */
+.state-transition {
+    transition:
+        background-color 0.3s ease,
+        color 0.3s ease,
+        border-color 0.3s ease,
+        box-shadow 0.3s ease,
+        transform 0.2s ease;
+}
+
+/* Micro-interaction for Checkboxes */
+checkbutton {
+    transition: transform 0.1s ease;
+}
+
+checkbutton:active {
+    transform: scale(0.95);
+}
+
+checkbutton:checked {
+    transform: scale(1.05);
+    transition: transform 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Progress Bar Animation */
+@keyframes progress {
+    0% {
+        width: 0%;
+    }
+    100% {
+        width: var(--progress-value, 0%);
+    }
+}
+
+.progress-bar {
+    animation: progress 1s ease-out forwards;
+}
+
+/* Glow Effect for Active Elements */
+.glow {
+    box-shadow:
+        0 0 5px rgba(0, 122, 204, 0.3),
+        0 0 10px rgba(0, 122, 204, 0.2),
+        0 0 15px rgba(0, 122, 204, 0.1);
+}
+
+/* Smooth Layout Shifts */
+.layout-shift {
+    transition:
+        width 0.3s ease,
+        height 0.3s ease,
+        margin 0.3s ease,
+        padding 0.3s ease;
+}
+
+/* Reduced Motion for Accessibility */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

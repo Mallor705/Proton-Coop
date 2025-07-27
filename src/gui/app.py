@@ -9,15 +9,15 @@ from ..models.profile import GameProfile, PlayerInstanceConfig, SplitscreenConfi
 from ..services.proton import ProtonService
 from ..core.logger import Logger
 from ..core.config import Config
-from typing import Dict, List, Tuple, Any
+from .styles import initialize_styles, get_style_manager, StyleManagerError
+from typing import Dict, List, Tuple, Any, Optional
 import subprocess
-import shutil
-import cairo # Import cairo here for drawing
-import sys # Importado para usar sys.executable
 import os # Import os for process management (killpg, getpgid)
 import signal # Import signal for process termination
 import time # Import time for busy-wait in _stop_game
-from gi.repository import GLib # Importado para usar GLib.timeout_add
+import cairo # Import cairo here for drawing
+import sys # Import sys for executable path
+from gi.repository import GLib # Import GLib for timeout_add
 
 class ProfileEditorWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
@@ -371,56 +371,81 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
     def on_exe_path_button_clicked(self, button):
         dialog = Gtk.FileChooserDialog(
             title="Select Game Executable",
-            parent=self,
-            action=Gtk.FileChooserAction.OPEN,
-            buttons=("_Cancel", Gtk.ResponseType.CANCEL, "_Open", Gtk.ResponseType.OK) # Changed from Gtk.STOCK_CANCEL/OPEN
+            action=Gtk.FileChooserAction.OPEN
         )
 
-        response = dialog.run()
-        if response == Gtk.ResponseType.OK:
-            self.exe_path_entry.set_text(dialog.get_filename())
+        # Set parent after creation for GTK4 compatibility
+        dialog.set_transient_for(self)
+        dialog.set_modal(True)
 
+        # Add buttons manually for GTK4 compatibility
+        dialog.add_button("_Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("_Open", Gtk.ResponseType.OK)
+
+        dialog.connect("response", self._on_exe_path_dialog_response)
+        dialog.present()
+
+    def _on_exe_path_dialog_response(self, dialog, response):
+        if response == Gtk.ResponseType.OK:
+            file = dialog.get_file()
+            if file:
+                self.exe_path_entry.set_text(file.get_path())
         dialog.destroy()
         self.statusbar.set_label("Executable path selected.") # Changed from push
 
     def on_load_button_clicked(self, button):
         dialog = Gtk.FileChooserDialog(
             title="Load Game Profile",
-            parent=self,
-            action=Gtk.FileChooserAction.OPEN,
-            buttons=("_Cancel", Gtk.ResponseType.CANCEL, "_Open", Gtk.ResponseType.OK) # Changed from Gtk.STOCK_CANCEL/OPEN
+            action=Gtk.FileChooserAction.OPEN
         )
+
+        # Set parent after creation for GTK4 compatibility
+        dialog.set_transient_for(self)
+        dialog.set_modal(True)
+
+        # Add buttons manually for GTK4 compatibility
+        dialog.add_button("_Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("_Open", Gtk.ResponseType.OK)
 
         try:
             Config.PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-            dialog.set_current_folder(str(Config.PROFILE_DIR))
+            # Use Gio.File for GTK4 compatibility
+            from gi.repository import Gio
+            folder = Gio.File.new_for_path(str(Config.PROFILE_DIR))
+            dialog.set_current_folder(folder)
         except Exception as e:
             self.logger.warning(f"Could not set initial folder for profile loading: {e}")
 
-        response = dialog.run()
+        dialog.connect("response", self._on_load_dialog_response)
+        dialog.present()
+
+    def _on_load_dialog_response(self, dialog, response):
         if response == Gtk.ResponseType.OK:
-            file_path = Path(dialog.get_filename())
-            try:
-                profile = GameProfile.load_from_file(file_path)
-                self.load_profile_data(profile.model_dump(by_alias=True)) # Use model_dump to convert to dict
-                self.logger.info(f"Profile loaded successfully from {file_path}")
-                self.statusbar.set_label(f"Profile loaded: {file_path.name}") # Changed from push
-                # Select the loaded profile in the listbox by its filename stem
-                self._select_profile_in_list(file_path.stem)
-            except Exception as e:
-                self.logger.error(f"Failed to load profile from {file_path}: {e}")
-                self.statusbar.set_label(f"Error loading profile: {e}") # Changed from push
-                error_dialog = Adw.MessageDialog(
-                    heading="Error loading profile", # Adw.MessageDialog uses heading
-                    body=f"Error loading profile:\n{e}", # Adw.MessageDialog uses body
-                    modal=True,
-                )
-                error_dialog.add_response("ok", "Ok")
-                error_dialog.set_response_enabled("ok", True)
-                error_dialog.set_default_response("ok")
-                error_dialog.set_transient_for(self) # Set parent window
-                error_dialog.connect("response", lambda d, r: d.close())
-                error_dialog.present() # Show the dialog
+            file = dialog.get_file()
+            if file:
+                file_path = Path(file.get_path())
+                try:
+                    profile = GameProfile.load_from_file(file_path)
+                    self.load_profile_data(profile.model_dump(by_alias=True)) # Use model_dump to convert to dict
+                    self.logger.info(f"Profile loaded successfully from {file_path}")
+                    self.statusbar.set_label(f"Profile loaded: {file_path.name}") # Changed from push
+                    # Select the loaded profile in the listbox by its filename stem
+                    self._select_profile_in_list(file_path.stem)
+                except Exception as e:
+                    self.logger.error(f"Failed to load profile: {e}")
+                    self.statusbar.set_label(f"Error loading profile: {e}") # Changed from push
+                    # Create an error dialog using Adw.MessageDialog (Gtk4)
+                    error_dialog = Adw.MessageDialog(
+                        heading="Profile Load Error",
+                        body=f"Error loading profile:\n{e}",
+                        modal=True,
+                    )
+                    error_dialog.add_response("ok", "Ok")
+                    error_dialog.set_response_enabled("ok", True)
+                    error_dialog.set_default_response("ok")
+                    error_dialog.set_transient_for(self)
+                    error_dialog.connect("response", lambda d, r: d.close())
+                    error_dialog.present() # Show the dialog
         dialog.destroy()
 
     def _on_add_env_var_clicked(self, button):
@@ -1297,97 +1322,88 @@ class LinuxCoopApp(Adw.Application):
         # Initialize Adwaita
         Adw.init()
 
-        # Apply CSS to fix font clipping issues
-        self._apply_css_fixes()
+        # Configure proper Adwaita style manager to avoid warnings
+        self._configure_adwaita_style()
 
-    def _apply_css_fixes(self):
-        """Apply CSS styling to fix font rendering issues"""
-        css_provider = Gtk.CssProvider()
-        css_data = """
-        /* Fix font clipping issues by adding proper padding and margins */
-        * {
-            font-family: system-ui, -apple-system, sans-serif;
-        }
+        # Initialize styles using the professional StyleManager
+        self._initialize_application_styles()
 
-        label {
-            padding-top: 4px;
-            padding-bottom: 4px;
-            margin-top: 2px;
-            margin-bottom: 2px;
-            min-height: 20px;
-        }
+    def _configure_adwaita_style(self):
+        """Configure Adwaita style manager to follow system theme preference"""
+        try:
+            style_manager = Adw.StyleManager.get_default()
+            # Use PREFER_DARK to automatically follow system theme preference
+            # This will use dark theme when system prefers dark, light when system prefers light
+            style_manager.set_color_scheme(Adw.ColorScheme.PREFER_DARK)
 
-        entry {
-            padding-top: 6px;
-            padding-bottom: 6px;
-            margin-top: 3px;
-            margin-bottom: 3px;
-            min-height: 24px;
-        }
+            # Optional: Connect to theme changes to update custom styles if needed
+            style_manager.connect("notify::dark", self._on_theme_changed)
 
-        button {
-            padding-top: 6px;
-            padding-bottom: 6px;
-            margin-top: 3px;
-            margin-bottom: 3px;
-            min-height: 28px;
-        }
+            # Log current theme state
+            is_dark = style_manager.get_dark()
+            theme_name = "dark" if is_dark else "light"
+            self.logger = Logger(name="LinuxCoopGUI", log_dir=Path("./logs"))
+            self.logger.info(f"Configured Adwaita to follow system theme. Current theme: {theme_name}")
+        except Exception as e:
+            # Fallback if AdwStyleManager is not available
+            self.logger = Logger(name="LinuxCoopGUI", log_dir=Path("./logs"))
+            self.logger.warning(f"Could not configure Adwaita style manager: {e}")
 
-        combobox, dropdown {
-            padding-top: 6px;
-            padding-bottom: 6px;
-            margin-top: 3px;
-            margin-bottom: 3px;
-            min-height: 28px;
-        }
+    def _on_theme_changed(self, style_manager, param):
+        """Handle system theme changes"""
+        try:
+            is_dark = style_manager.get_dark()
+            theme_name = "dark" if is_dark else "light"
+            self.logger.info(f"System theme changed to: {theme_name}")
 
-        spinbutton {
-            padding-top: 6px;
-            padding-bottom: 6px;
-            margin-top: 3px;
-            margin-bottom: 3px;
-            min-height: 28px;
-        }
+            # Trigger StyleManager to reload theme-specific styles
+            from .styles import get_style_manager
+            style_manager_instance = get_style_manager()
+            style_manager_instance._load_theme_specific_styles()
 
-        frame > label {
-            padding-top: 5px;
-            padding-bottom: 5px;
-            margin-top: 3px;
-            margin-bottom: 3px;
-            font-weight: bold;
-        }
+            # Update window styling if needed
+            self._update_window_for_theme(is_dark)
+        except Exception as e:
+            self.logger.warning(f"Error handling theme change: {e}")
 
-        /* Ensure proper line height and text rendering */
-        label, entry, button, combobox, spinbutton, dropdown {
-            line-height: 1.4;
-        }
+    def _update_window_for_theme(self, is_dark: bool):
+        """Update window-specific styling based on theme"""
+        try:
+            # Force refresh of all widgets to apply new theme
+            self.queue_draw()
 
-        /* Fix for checkboxes and radio buttons */
-        checkbutton, radiobutton {
-            padding: 4px;
-            margin: 2px;
-            min-height: 20px;
-        }
+            # Update any theme-sensitive components
+            if hasattr(self, 'drawing_area'):
+                self.drawing_area.queue_draw()
 
-        /* Fix for notebook tabs */
-        notebook > header > tabs > tab {
-            padding: 8px 12px;
-            min-height: 32px;
-        }
+        except Exception as e:
+            self.logger.warning(f"Error updating window for theme: {e}")
 
-        /* Fix for listbox rows */
-        listbox > row {
-            padding: 6px;
-            min-height: 32px;
-        }
-        """
+    def _initialize_application_styles(self):
+        """Initialize application styles using the StyleManager"""
+        try:
+            initialize_styles()
+            self.logger = Logger(name="LinuxCoopGUI", log_dir=Path("./logs"))
+            self.logger.info("Successfully initialized application styles")
+        except StyleManagerError as e:
+            # Fallback to basic styling if StyleManager fails
+            self.logger = Logger(name="LinuxCoopGUI", log_dir=Path("./logs"))
+            self.logger.warning(f"Failed to initialize StyleManager: {e}")
+            self._apply_fallback_styles()
 
-        css_provider.load_from_data(css_data.encode('utf-8'))
-        Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(),
-            css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
+    def _apply_fallback_styles(self):
+        """Apply minimal fallback styles if StyleManager fails"""
+        try:
+            style_manager = get_style_manager()
+            fallback_css = """
+            /* Minimal fallback styles */
+            * { font-family: system-ui, sans-serif; }
+            label { padding: 4px 0; min-height: 20px; }
+            entry, button { padding: 6px; min-height: 28px; }
+            """
+            style_manager.load_css_from_string(fallback_css, "fallback")
+        except Exception as e:
+            self.logger.error(f"Even fallback styles failed: {e}")
 
     def on_activate(self, app):
         window = ProfileEditorWindow(app)

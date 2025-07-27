@@ -1,0 +1,78 @@
+/* Components CSS - Specific widget styles for Linux-Coop GUI */
+
+/* Input Components */
+entry {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    min-height: 24px;
+}
+
+/* Button Components */
+button {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    min-height: 28px;
+}
+
+/* Dropdown and ComboBox Components */
+combobox, dropdown {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    min-height: 28px;
+}
+
+/* SpinButton Components */
+spinbutton {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    min-height: 28px;
+}
+
+/* CheckBox and RadioButton Components */
+checkbutton, radiobutton {
+    padding: 4px;
+    margin: 2px;
+    min-height: 20px;
+}
+
+/* Notebook Tab Components */
+notebook > header > tabs > tab {
+    padding: 8px 12px;
+    min-height: 32px;
+}
+
+/* ListBox Row Components */
+listbox > row {
+    padding: 6px;
+    min-height: 32px;
+}
+
+/* Frame Components */
+frame {
+    margin: 4px;
+    padding: 2px;
+}
+
+/* Grid Components */
+grid {
+    padding: 2px;
+    margin: 1px;
+}
+
+/* ScrolledWindow Components */
+scrolledwindow {
+    margin: 2px;
+}
+
+/* Box Components */
+box {
+    margin: 1px;
+}
