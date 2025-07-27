@@ -174,7 +174,7 @@ class GameProfile(BaseModel):
             return self.instance_width, self.instance_height
 
         orientation = self.splitscreen.orientation
-        num_players = self.effective_num_players
+        num_players = self.effective_num_players()
 
         # Ensure num_players is at least 1 to prevent ZeroDivisionError
         if num_players < 1:
@@ -221,7 +221,7 @@ class GameProfile(BaseModel):
         # indent=4 for formatted and readable JSON output
         json_data = self.model_dump_json(by_alias=True, indent=4)
         profile_path.write_text(json_data, encoding='utf-8')
-        
+
         # Invalidate the cache for this profile after saving
         cache = get_cache()
         cache.invalidate_profile(str(profile_path))

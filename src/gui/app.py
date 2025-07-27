@@ -1,7 +1,7 @@
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")  # Import Adw
-from gi.repository import Gtk, Adw # Adicionado Adw
+from gi.repository import Gtk, Adw, Gdk # Adicionado Adw e Gdk
 from pathlib import Path
 import json
 from ..services.device_manager import DeviceManager
@@ -1293,6 +1293,101 @@ class LinuxCoopApp(Adw.Application):
     def __init__(self):
         super().__init__(application_id="org.linuxcoop.app")
         self.connect("activate", self.on_activate)
+
+        # Initialize Adwaita
+        Adw.init()
+
+        # Apply CSS to fix font clipping issues
+        self._apply_css_fixes()
+
+    def _apply_css_fixes(self):
+        """Apply CSS styling to fix font rendering issues"""
+        css_provider = Gtk.CssProvider()
+        css_data = """
+        /* Fix font clipping issues by adding proper padding and margins */
+        * {
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        label {
+            padding-top: 4px;
+            padding-bottom: 4px;
+            margin-top: 2px;
+            margin-bottom: 2px;
+            min-height: 20px;
+        }
+
+        entry {
+            padding-top: 6px;
+            padding-bottom: 6px;
+            margin-top: 3px;
+            margin-bottom: 3px;
+            min-height: 24px;
+        }
+
+        button {
+            padding-top: 6px;
+            padding-bottom: 6px;
+            margin-top: 3px;
+            margin-bottom: 3px;
+            min-height: 28px;
+        }
+
+        combobox, dropdown {
+            padding-top: 6px;
+            padding-bottom: 6px;
+            margin-top: 3px;
+            margin-bottom: 3px;
+            min-height: 28px;
+        }
+
+        spinbutton {
+            padding-top: 6px;
+            padding-bottom: 6px;
+            margin-top: 3px;
+            margin-bottom: 3px;
+            min-height: 28px;
+        }
+
+        frame > label {
+            padding-top: 5px;
+            padding-bottom: 5px;
+            margin-top: 3px;
+            margin-bottom: 3px;
+            font-weight: bold;
+        }
+
+        /* Ensure proper line height and text rendering */
+        label, entry, button, combobox, spinbutton, dropdown {
+            line-height: 1.4;
+        }
+
+        /* Fix for checkboxes and radio buttons */
+        checkbutton, radiobutton {
+            padding: 4px;
+            margin: 2px;
+            min-height: 20px;
+        }
+
+        /* Fix for notebook tabs */
+        notebook > header > tabs > tab {
+            padding: 8px 12px;
+            min-height: 32px;
+        }
+
+        /* Fix for listbox rows */
+        listbox > row {
+            padding: 6px;
+            min-height: 32px;
+        }
+        """
+
+        css_provider.load_from_data(css_data.encode('utf-8'))
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(),
+            css_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
 
     def on_activate(self, app):
         window = ProfileEditorWindow(app)
