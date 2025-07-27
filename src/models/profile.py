@@ -228,3 +228,7 @@ class GameProfile(BaseModel):
         # indent=4 for formatted and readable JSON output
         json_data = self.model_dump_json(by_alias=True, indent=4)
         profile_path.write_text(json_data, encoding='utf-8')
+        
+        # Invalidate the cache for this profile after saving
+        cache = get_cache()
+        cache.invalidate_profile(str(profile_path))

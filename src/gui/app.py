@@ -21,11 +21,30 @@ from gi.repository import GLib # Importado para usar GLib.timeout_add
 class ProfileEditorWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title="Linux Coop Profile Editor")
-        self.set_default_size(1000, 700)
+        self.set_default_size(1200, 700) # Increased default width for side pane
 
-        # Create the main vertical box which will hold the notebook and statusbar
+        # Create the main vertical box which will hold the main content (paned) and statusbar
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.add(main_vbox) # Add main_vbox as the single child of the window
+        self.add(main_vbox)
+
+        # Create a horizontal Paned widget for the side menu and main content
+        self.main_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        main_vbox.pack_start(self.main_paned, True, True, 0)
+
+        # Left Pane: Profile List
+        self.profile_list_scrolled_window = Gtk.ScrolledWindow()
+        self.profile_list_scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        self.profile_list_scrolled_window.set_size_request(200, -1) # Set a minimum width for the side pane
+        self.main_paned.pack1(self.profile_list_scrolled_window, resize=False, shrink=False)
+
+        self.profile_listbox = Gtk.ListBox()
+        self.profile_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.profile_listbox.connect("row-activated", self._on_profile_selected_from_list)
+        self.profile_list_scrolled_window.add(self.profile_listbox)
+
+        # Right Pane: Existing Notebook
+        self.notebook = Gtk.Notebook()
+        self.main_paned.pack2(self.notebook, resize=True, shrink=True)
 
         # Initialize configuration widgets early
         self.num_players_spin = Gtk.SpinButton.new_with_range(1, 4, 1)
@@ -52,9 +71,6 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.detected_display_outputs = self.device_manager.get_display_outputs() # Adicionado para seleção de monitor
         self.logger = Logger(name="LinuxCoopGUI", log_dir=Path("./logs"))
         self.proton_service = ProtonService(self.logger)
-
-        self.notebook = Gtk.Notebook()
-        main_vbox.pack_start(self.notebook, True, True, 0) # Empacota o notebook no main_vbox
 
         # Initialize player config entries list
         self.player_config_entries = []
@@ -161,6 +177,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
 
         self.show_all()
         self._update_play_button_state() # Set initial button state
+        self._populate_profile_list() # Populate the side profile list on startup
 
     def setup_general_settings(self):
         # Use a main VBox for this page to hold frames
@@ -343,6 +360,8 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                 self.load_profile_data(profile.model_dump(by_alias=True)) # Use model_dump to convert to dict
                 self.logger.info(f"Profile loaded successfully from {file_path}")
                 self.statusbar.push(0, f"Profile loaded: {file_path.name}")
+                # Select the loaded profile in the listbox
+                self._select_profile_in_list(file_path.name.replace(".json", ""))
             except Exception as e:
                 self.logger.error(f"Failed to load profile from {file_path}: {e}")
                 self.statusbar.push(0, f"Error loading profile: {e}")
@@ -593,7 +612,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             self.statusbar.push(0, "Error: Game name is empty.")
             return
 
-        profile_dir = Path.home() / ".config/linux-coop/profiles"
+        profile_dir = Config.PROFILE_DIR
         profile_dir.mkdir(parents=True, exist_ok=True)
         profile_path = profile_dir / f"{profile_name}.json"
 
@@ -601,6 +620,18 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             with open(profile_path, "w", encoding="utf-8") as f:
                 json.dump(profile_data_dumped, f, indent=2)
             self.statusbar.push(0, f"Profile saved successfully to: {profile_path.name}")
+
+            # NEW: Invalidate the cache for this profile after saving
+            from ..core.cache import get_cache # Import here to ensure it's available
+            cache = get_cache()
+            cache.invalidate_profile(str(profile_path))
+
+            # Reload the just-saved profile to ensure GUI and cache are updated
+            reloaded_profile = GameProfile.load_from_file(profile_path)
+            self.load_profile_data(reloaded_profile.model_dump(by_alias=True))
+
+            self._populate_profile_list() # Refresh the profile list after saving
+            self._select_profile_in_list(profile_name) # Select the newly saved/updated profile
         except Exception as e:
             self.logger.error(f"Failed to save profile to {profile_path}: {e}")
             self.statusbar.push(0, f"Error saving profile: {e}")
@@ -650,8 +681,13 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         except Exception as e:
             self.logger.error(f"Failed to launch game: {e}")
             self.statusbar.push(0, f"Error launching game: {e}")
-            dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR, Gtk.ButtonsType.OK,
-                                       f"Error launching game:\n{e}")
+            dialog = Gtk.MessageDialog(
+                    parent=self,
+                    flags=Gtk.DialogFlags.MODAL,
+                    type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.OK,
+                    message_format=f"Error launching game:\n{e}"
+            )
             dialog.run()
             dialog.destroy()
             self.cli_process_pid = None # Reset PID on error
@@ -716,7 +752,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             self._update_play_button_state()
             self.statusbar.push(0, "Game process terminated.")
             if self.monitoring_timeout_id:
-                GLib.source_remove(self.monitoring_timeout_id) # Corrigido para GLib.source_remove
+                GLib.source_remove(self.monitoring_timeout_id)
                 self.monitoring_timeout_id = None
             return False # Stop the timeout
         return True # Continue monitoring
@@ -754,10 +790,8 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         try:
             # Create dummy player configs for the dummy profile to ensure effective_num_players is correct
             dummy_player_configs = []
-            # NEW: dummy_player_monitor_ids = []
             for _ in range(num_players):
                 dummy_player_configs.append(PlayerInstanceConfig())
-                # NEW: dummy_player_monitor_ids.append(None) # Initialize with None
 
             dummy_profile = GameProfile(
                 GAME_NAME="Preview",
@@ -827,8 +861,6 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
                         pos_y = i * draw_h
                     else: # vertical (Side by side)
                         pos_x = i * draw_w
-
-                # print(f"DEBUG LAYOUT: P{i+1} - Unscaled: {instance_w}x{instance_h}, Scaled: {draw_w:.2f}x{draw_h:.2f}, Pos: ({pos_x:.2f}, {pos_y:.2f}), Rect: ({x_offset_display + pos_x:.2f}, {y_offset_display + pos_y:.2f}, {draw_w:.2f}, {draw_h:.2f})")
 
                 cr.rectangle(x_offset_display + pos_x, y_offset_display + pos_y, draw_w, draw_h)
                 cr.set_source_rgb(1.0, 1.0, 1.0) # White border
@@ -1075,6 +1107,67 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             list_store.append([device["id"], device["name"]])
         return list_store
 
+    def _populate_profile_list(self):
+        """Populates the ListBox with available game profiles."""
+        for child in self.profile_listbox.get_children():
+            self.profile_listbox.remove(child)
+
+        profile_dir = Config.PROFILE_DIR
+        profile_dir.mkdir(parents=True, exist_ok=True)
+
+        profiles = sorted(profile_dir.glob("*.json"))
+
+        if not profiles:
+            label = Gtk.Label(label="No profiles found.\nCreate one and save it!")
+            label.set_halign(Gtk.Align.CENTER)
+            row = Gtk.ListBoxRow()
+            row.add(label)
+            self.profile_listbox.add(row)
+            row.set_sensitive(False) # Make it non-selectable
+        else:
+            for profile_path in profiles:
+                profile_name = profile_path.stem # Get filename without extension
+                row = Gtk.ListBoxRow()
+                label = Gtk.Label(label=profile_name)
+                label.set_halign(Gtk.Align.START) # Align text to the start
+                row.add(label)
+                self.profile_listbox.add(row)
+
+        self.profile_listbox.show_all()
+
+    def _on_profile_selected_from_list(self, listbox, row):
+        """Handles selection of a profile from the sidebar list."""
+        profile_name = row.get_child().get_label() # Get the text from the label in the row
+        profile_path = Config.PROFILE_DIR / f"{profile_name}.json"
+        self.logger.info(f"Loading profile from sidebar: {profile_name}")
+        
+        try:
+            profile = GameProfile.load_from_file(profile_path)
+            self.load_profile_data(profile.model_dump(by_alias=True))
+            self.statusbar.push(0, f"Profile loaded: {profile_name}")
+            # Switch to General Settings tab after loading
+            self.notebook.set_current_page(0) 
+        except Exception as e:
+            self.logger.error(f"Failed to load profile {profile_name} from list: {e}")
+            self.statusbar.push(0, f"Error loading profile: {e}")
+            error_dialog = Gtk.MessageDialog(
+                parent=self,
+                flags=Gtk.DialogFlags.MODAL,
+                type=Gtk.MessageType.ERROR,
+                buttons=Gtk.ButtonsType.OK,
+                message_format=f"Error loading profile {profile_name}:\n{e}"
+            )
+            error_dialog.run()
+            error_dialog.destroy()
+
+    # Helper to select a profile in the ListBox programmatically
+    def _select_profile_in_list(self, profile_name_to_select: str):
+        for i, row in enumerate(self.profile_listbox.get_children()):
+            if isinstance(row.get_child(), Gtk.Label) and row.get_child().get_label() == profile_name_to_select:
+                self.profile_listbox.select_row(row)
+                # self.profile_listbox.row_activated(row) # Não chamar row_activated aqui para evitar loop infinito com on_load_button_clicked
+                break
+
 class LinuxCoopApp(Gtk.Application):
     def __init__(self):
         super().__init__(application_id="org.linuxcoop.app")
@@ -1094,4 +1187,5 @@ if __name__ == "__main__":
     from gi.repository import Gtk, Gdk
     import cairo # Import cairo here for drawing
     import time # Import time for busy-wait in _stop_game
+    from gi.repository import GLib # Importado para usar GLib.timeout_add
     run_gui()

@@ -42,7 +42,12 @@ class ProfileCache:
         """Stores a profile in the cache."""
         self._profile_cache[profile_key] = profile
         self._cache_timestamps[profile_key] = time.time()
-    
+
+    def invalidate_profile(self, profile_key: str) -> None:
+        """Invalidates a specific profile entry from the cache."""
+        self._profile_cache.pop(profile_key, None)
+        self._cache_timestamps.pop(profile_key, None)
+
     def clear_expired(self) -> None:
         """Removes expired entries from the cache."""
         current_time = time.time()
