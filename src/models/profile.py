@@ -49,10 +49,11 @@ class GameProfile(BaseModel):
     mode: Optional[str] = Field(default=None, alias="MODE")
     splitscreen: Optional[SplitscreenConfig] = Field(default=None, alias="SPLITSCREEN")
     env_vars: Optional[Dict[str, str]] = Field(default=None, alias="ENV_VARS")
-    primary_monitor: Optional[str] = Field(default=None, alias="PRIMARY_MONITOR") # Novo campo para o monitor principal
+    # primary_monitor: Optional[str] = Field(default=None, alias="PRIMARY_MONITOR") # Novo campo para o monitor principal
 
     # New field for player configurations, using "PLAYERS" alias for JSON
     player_configs: Optional[List[PlayerInstanceConfig]] = Field(default=None, alias="PLAYERS")
+    selected_players: Optional[List[int]] = Field(default=None, alias="selected_players") # Readded for GUI selection
 
     @validator('num_players')
     def validate_num_players(cls, v):
@@ -151,28 +152,20 @@ class GameProfile(BaseModel):
         if 'NUM_PLAYERS' not in data and 'PLAYERS' in data and isinstance(data['PLAYERS'], list):
             data['NUM_PLAYERS'] = len(data['PLAYERS'])
 
-    selected_players: Optional[List[int]] = Field(default=None, alias="selected_players")
-
     # Add getter for num_players to ensure consistency in case player_configs is the source of truth
-    @property
     def effective_num_players(self) -> int:
         """Returns the number of players that will actually be launched."""
-        return len(self.players_to_launch)
+        # Since selected_players is removed, we always launch all configured players
+        return len(self.player_configs) if self.player_configs else 0
 
     @property
     def players_to_launch(self) -> List[PlayerInstanceConfig]:
-        """Returns the players that should be launched based on the selection.
-        If no specific players are selected (selected_players is None or empty),
-        all available player configurations will be launched.
+        """Returns the players that should be launched.
+        Since specific player selection is removed from the GUI, this always returns all configured players.
         """
         if not self.player_configs:
             return []
-
-        if not self.selected_players: # If no specific players are selected, launch all
-            return self.player_configs
-
-        # Filters players based on the selected_players list (1-based index)
-        return [p for i, p in enumerate(self.player_configs) if (i + 1) in self.selected_players]
+        return self.player_configs # Always return all players now
 
     def get_instance_dimensions(self, instance_num: int) -> Tuple[int, int]:
         """Returns the dimensions (width, height) for a specific instance."""

@@ -109,9 +109,6 @@ class InstanceService:
     def _create_instances(self, profile: GameProfile, profile_name: str) -> List[GameInstance]:
         """Creates instance models for each player."""
         instances = []
-        if not profile.player_configs:
-            return instances
-
         # Iterates over the complete list of player configurations with its index
         for i, player_config in enumerate(profile.player_configs):
             instance_num = i + 1
@@ -119,6 +116,7 @@ class InstanceService:
             # Checks if this instance is in the list of selected players to launch.
             # If the selection list is empty or None, all players are launched.
             if profile.selected_players and instance_num not in profile.selected_players:
+                self.logger.info(f"Skipping instance {instance_num} as it's not selected by the user.")
                 continue  # Skip to the next player if not selected
 
             # Organizes prefixes by game and by instance
