@@ -56,14 +56,14 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.instance_height_spin.set_value(1080) # Default from example.json
 
         self.mode_combo = Gtk.ComboBoxText()
-        self.mode_combo.append_text("None")
-        self.mode_combo.append_text("splitscreen")
+        self.mode_combo.append("None", "None")
+        self.mode_combo.append("splitscreen", "splitscreen")
         self.mode_combo.set_active(0) # Default to None
 
         self.splitscreen_orientation_label = Gtk.Label(label="Splitscreen Orientation:", xalign=0)
         self.splitscreen_orientation_combo = Gtk.ComboBoxText()
-        self.splitscreen_orientation_combo.append_text("horizontal")
-        self.splitscreen_orientation_combo.append_text("vertical")
+        self.splitscreen_orientation_combo.append("horizontal", "horizontal")
+        self.splitscreen_orientation_combo.append("vertical", "vertical")
         self.splitscreen_orientation_combo.set_active(0) # Default to horizontal
 
         self.device_manager = DeviceManager()
@@ -1122,6 +1122,15 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         if current_mode == "splitscreen":
             self.splitscreen_orientation_label.show()
             self.splitscreen_orientation_combo.show()
+
+            # Carregar a orientação do splitscreen do perfil
+            splitscreen_data = profile_data.get("SPLITSCREEN")
+            if splitscreen_data and isinstance(splitscreen_data, dict):
+                orientation = splitscreen_data.get("ORIENTATION", "horizontal")
+                self.splitscreen_orientation_combo.set_active_id(orientation)
+            else:
+                # Valor padrão se não houver dados de splitscreen
+                self.splitscreen_orientation_combo.set_active_id("horizontal")
         else:
             self.splitscreen_orientation_label.hide()
             self.splitscreen_orientation_combo.hide()
@@ -1219,6 +1228,9 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         else:
             self._add_env_var_row("WINEDLLOVERRIDES", "")
             self._add_env_var_row("MANGOHUD", "1")
+
+        # Atualizar o preview do layout após carregar todos os dados do perfil
+        self.drawing_area.queue_draw()
 
 
     def _get_dropdown_index_for_name(self, dropdown: Gtk.DropDown, name: str) -> int:
