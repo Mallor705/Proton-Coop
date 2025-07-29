@@ -9,8 +9,9 @@ setup(
     python_requires=">=3.8",
     install_requires=[
         "psutil>=5.9.0",
-        "click>=8.0.0", 
+        "click>=8.0.0",
         "pydantic>=2.0.0",
+        "pygobject>=3.52.0",
     ],
     entry_points={
         "console_scripts": [
