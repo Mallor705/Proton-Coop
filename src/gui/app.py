@@ -1483,66 +1483,44 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
     def _create_new_profile(self):
         """Create a new profile with default values."""
         # Create dialog to get profile name
-        dialog = Gtk.Dialog(
-            title="New Profile",
+        dialog = Adw.MessageDialog(
+            heading="New Profile",
+            body="Enter a name for your new game profile:",
             transient_for=self,
             modal=True
         )
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Create", Gtk.ResponseType.OK)
-        dialog.set_default_response(Gtk.ResponseType.OK)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("create", "Create")
+        dialog.set_response_appearance("create", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("create")
+        dialog.set_close_response("cancel")
 
-        # Create content area
-        content_area = dialog.get_content_area()
-        content_area.set_spacing(10)
-        content_area.set_margin_start(10)
-        content_area.set_margin_end(10)
-        content_area.set_margin_top(10)
-        content_area.set_margin_bottom(10)
-
-        # Add instruction label
-        instruction_label = Gtk.Label(label="Enter a name for your new game profile:")
-        instruction_label.set_halign(Gtk.Align.START)
-        instruction_label.set_margin_bottom(5)
-        content_area.append(instruction_label)
-
-        # Add label and entry for profile name
-        label = Gtk.Label(label="Profile Name:")
-        label.set_halign(Gtk.Align.START)
-        content_area.append(label)
-
+        # Create entry for profile name
         entry = Gtk.Entry()
         entry.set_placeholder_text("e.g., Palworld, Elden Ring, Enshrouded...")
-        entry.set_activates_default(True)  # Press Enter to create
-        entry.grab_focus()  # Focus on entry when dialog opens
-        content_area.append(entry)
-
-        # Add example text
-        example_label = Gtk.Label(label="💡 Tip: Use descriptive names like the game title")
-        example_label.set_halign(Gtk.Align.START)
-        example_label.set_margin_top(5)
-        example_label.add_css_class("dim-label")
-        content_area.append(example_label)
-
-        # Show dialog and handle response
-        dialog.present()
+        entry.set_margin_start(10)
+        entry.set_margin_end(10)
+        entry.set_margin_top(10)
+        entry.set_margin_bottom(10)
+        dialog.set_extra_child(entry)
 
         def on_response(dialog, response_id):
-            if response_id == Gtk.ResponseType.OK:
+            if response_id == "create":
                 profile_name = entry.get_text().strip()
                 if profile_name:
-                    # Validate profile name
                     if self._validate_profile_name(profile_name):
                         self._create_profile_with_name(profile_name)
-                    else:
-                        # Don't close dialog on validation error
-                        return
+                        dialog.close()
+                    # If validation fails, don't close dialog, let user try again
+                    return
                 else:
                     self.statusbar.set_label("❌ Profile name cannot be empty")
                     return
-            dialog.destroy()
+            dialog.close()
 
         dialog.connect("response", on_response)
+        dialog.present()
+        entry.grab_focus()  # Focus on entry when dialog opens
 
     def _validate_profile_name(self, profile_name):
         """Validate the profile name and show error if invalid."""
