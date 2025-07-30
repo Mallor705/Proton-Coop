@@ -32,16 +32,33 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.main_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         main_vbox.append(self.main_paned) # Changed from pack_start
 
-        # Left Pane: Profile List
+        # Left Pane: Profile List with Add Button
+        # Create a vertical container for the sidebar
+        self.sidebar_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        self.sidebar_vbox.set_size_request(200, -1) # Set a minimum width for the side pane
+        self.main_paned.set_start_child(self.sidebar_vbox)
+
+        # Profile list with scrolled window
         self.profile_list_scrolled_window = Gtk.ScrolledWindow()
         self.profile_list_scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        self.profile_list_scrolled_window.set_size_request(200, -1) # Set a minimum width for the side pane
-        self.main_paned.set_start_child(self.profile_list_scrolled_window) # Changed from pack1
+        self.profile_list_scrolled_window.set_vexpand(True)  # Expand to fill available space
+        self.sidebar_vbox.append(self.profile_list_scrolled_window)
 
         self.profile_listbox = Gtk.ListBox()
         self.profile_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.profile_listbox.connect("row-activated", self._on_profile_selected_from_list)
-        self.profile_list_scrolled_window.set_child(self.profile_listbox) # Changed from add
+        self.profile_list_scrolled_window.set_child(self.profile_listbox)
+
+        # Add Profile Button
+        self.add_profile_button = Gtk.Button(label="🎮 Add New Profile")
+        self.add_profile_button.set_margin_start(8)
+        self.add_profile_button.set_margin_end(8)
+        self.add_profile_button.set_margin_bottom(8)
+        self.add_profile_button.set_margin_top(8)
+        self.add_profile_button.add_css_class("suggested-action")  # Makes it blue/prominent
+        self.add_profile_button.set_tooltip_text("Create a new game profile with default settings")
+        self.add_profile_button.connect("clicked", self._on_add_profile_clicked)
+        self.sidebar_vbox.append(self.add_profile_button)
 
         # Right Pane: Existing Notebook
         self.notebook = Gtk.Notebook()
@@ -1398,6 +1415,174 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
             error_dialog.set_transient_for(self)
             error_dialog.connect("response", lambda d, r: d.close())
             error_dialog.present()
+
+    def _on_add_profile_clicked(self, button):
+        """Handle add new profile button click."""
+        self._create_new_profile()
+
+    def _create_new_profile(self):
+        """Create a new profile with default values."""
+        # Create dialog to get profile name
+        dialog = Gtk.Dialog(
+            title="New Profile",
+            transient_for=self,
+            modal=True
+        )
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Create", Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+
+        # Create content area
+        content_area = dialog.get_content_area()
+        content_area.set_spacing(10)
+        content_area.set_margin_start(10)
+        content_area.set_margin_end(10)
+        content_area.set_margin_top(10)
+        content_area.set_margin_bottom(10)
+
+        # Add instruction label
+        instruction_label = Gtk.Label(label="Enter a name for your new game profile:")
+        instruction_label.set_halign(Gtk.Align.START)
+        instruction_label.set_margin_bottom(5)
+        content_area.append(instruction_label)
+
+        # Add label and entry for profile name
+        label = Gtk.Label(label="Profile Name:")
+        label.set_halign(Gtk.Align.START)
+        content_area.append(label)
+
+        entry = Gtk.Entry()
+        entry.set_placeholder_text("e.g., Palworld, Elden Ring, Enshrouded...")
+        entry.set_activates_default(True)  # Press Enter to create
+        entry.grab_focus()  # Focus on entry when dialog opens
+        content_area.append(entry)
+
+        # Add example text
+        example_label = Gtk.Label(label="💡 Tip: Use descriptive names like the game title")
+        example_label.set_halign(Gtk.Align.START)
+        example_label.set_margin_top(5)
+        example_label.add_css_class("dim-label")
+        content_area.append(example_label)
+
+        # Show dialog and handle response
+        dialog.present()
+
+        def on_response(dialog, response_id):
+            if response_id == Gtk.ResponseType.OK:
+                profile_name = entry.get_text().strip()
+                if profile_name:
+                    # Validate profile name
+                    if self._validate_profile_name(profile_name):
+                        self._create_profile_with_name(profile_name)
+                    else:
+                        # Don't close dialog on validation error
+                        return
+                else:
+                    self.statusbar.set_label("❌ Profile name cannot be empty")
+                    return
+            dialog.destroy()
+
+        dialog.connect("response", on_response)
+
+    def _validate_profile_name(self, profile_name):
+        """Validate the profile name and show error if invalid."""
+        # Check for invalid characters
+        invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '/', '\\']
+        for char in invalid_chars:
+            if char in profile_name:
+                self.statusbar.set_label(f"❌ Profile name cannot contain '{char}'")
+                return False
+
+        # Check length
+        if len(profile_name) > 50:
+            self.statusbar.set_label("❌ Profile name too long (max 50 characters)")
+            return False
+
+        # Check if already exists
+        profile_path = Config.PROFILE_DIR / f"{profile_name}.json"
+        if profile_path.exists():
+            self.statusbar.set_label(f"❌ Profile '{profile_name}' already exists")
+            return False
+
+        return True
+
+    def _create_profile_with_name(self, profile_name):
+        """Create a new profile file with the given name."""
+        try:
+            # Ensure profile directory exists
+            Config.PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+
+            # Create profile path
+            profile_path = Config.PROFILE_DIR / f"{profile_name}.json"
+
+            # Profile validation is now done in _validate_profile_name
+
+            # Create default profile data
+            default_profile_data = {
+                "GAME_NAME": profile_name,
+                "EXE_PATH": "",
+                "NUM_PLAYERS": 2,
+                "INSTANCE_WIDTH": 1920,
+                "INSTANCE_HEIGHT": 1080,
+                "APP_ID": "",
+                "GAME_ARGS": "",
+                "IS_NATIVE": False,
+                "MODE": "None",
+                "SPLITSCREEN": None,
+                "PROTON_VERSION": None,
+                "PLAYERS": [
+                    {
+                        "ACCOUNT_NAME": "Player1",
+                        "LANGUAGE": "english",
+                        "LISTEN_PORT": "",
+                        "USER_STEAM_ID": "",
+                        "PHYSICAL_DEVICE_ID": "",
+                        "MOUSE_EVENT_PATH": "",
+                        "KEYBOARD_EVENT_PATH": "",
+                        "AUDIO_DEVICE_ID": "",
+                        "MONITOR_ID": ""
+                    },
+                    {
+                        "ACCOUNT_NAME": "Player2",
+                        "LANGUAGE": "english",
+                        "LISTEN_PORT": "",
+                        "USER_STEAM_ID": "",
+                        "PHYSICAL_DEVICE_ID": "",
+                        "MOUSE_EVENT_PATH": "",
+                        "KEYBOARD_EVENT_PATH": "",
+                        "AUDIO_DEVICE_ID": "",
+                        "MONITOR_ID": ""
+                    }
+                ],
+                "ENV_VARS": {
+                    "WINEDLLOVERRIDES": "",
+                    "MANGOHUD": "1"
+                }
+            }
+
+            # Save the profile
+            with open(profile_path, 'w', encoding='utf-8') as f:
+                json.dump(default_profile_data, f, indent=4)
+
+            # Refresh the profile list
+            self._populate_profile_list()
+
+            # Load the new profile
+            self.load_profile_data(default_profile_data)
+
+            # Select the new profile in the list
+            self._select_profile_in_list(profile_name)
+
+            # Switch to General Settings tab
+            self.notebook.set_current_page(0)
+
+            self.statusbar.set_label(f"✅ Profile '{profile_name}' created successfully!")
+            self.logger.info(f"Created new profile: {profile_name}")
+
+        except Exception as e:
+            error_msg = f"❌ Error creating profile '{profile_name}': {e}"
+            self.statusbar.set_label(error_msg)
+            self.logger.error(error_msg)
 
     def _select_profile_in_list(self, profile_name_to_select: str):
         current_row = self.profile_listbox.get_first_child()
