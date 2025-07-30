@@ -178,6 +178,17 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.general_settings_page.set_margin_bottom(10) # Changed from set_border_width
         self.notebook.append_page(self.general_settings_page, Gtk.Label(label="General Settings"))
 
+        # Create a ScrolledWindow for general settings
+        general_scrolled_window = Gtk.ScrolledWindow()
+        general_scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        general_scrolled_window.set_vexpand(True)
+        general_scrolled_window.set_hexpand(True)
+        self.general_settings_page.append(general_scrolled_window)
+
+        # Create a container for the general settings content
+        self.general_settings_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        general_scrolled_window.set_child(self.general_settings_container)
+
         self.general_settings_grid = Gtk.Grid()
         self.general_settings_grid.set_column_spacing(10)
         self.general_settings_grid.set_row_spacing(10)
@@ -291,7 +302,12 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
     def setup_general_settings(self):
         # Use a main VBox for this page to hold frames
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
-        self.general_settings_page.append(main_vbox) # Changed from pack_start
+        main_vbox.set_margin_start(10)
+        main_vbox.set_margin_end(10)
+        main_vbox.set_margin_top(10)
+        main_vbox.set_margin_bottom(10)
+        self.general_settings_container.append(main_vbox) # Changed to use scrolled container
+
 
         # Frame 1: Game Details
         game_details_frame = Gtk.Frame(label="Game Details")
