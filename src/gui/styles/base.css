@@ -31,8 +31,8 @@ frame > label {
 label,
 entry,
 button,
-combobox,
-spinbutton,
+/* combobox, */
+/* spinbutton, */
 dropdown {
     line-height: 1.4;
 }
@@ -40,8 +40,8 @@ dropdown {
 /* Ensure consistent text rendering across all elements */
 entry,
 button,
-combobox,
-dropdown,
+/* combobox, */
+/* dropdown, */
 spinbutton {
     font-feature-settings:
         "kern" 1,

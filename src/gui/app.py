@@ -127,7 +127,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.instance_height_spin.set_value(1080) # Default from example.json
 
         self.mode_combo = Gtk.ComboBoxText()
-        self.mode_combo.append("None", "None")
+        self.mode_combo.append("fullscreen", "fullscreen")
         self.mode_combo.append("splitscreen", "splitscreen")
         self.mode_combo.set_active(0) # Default to None
 
@@ -217,21 +217,43 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.setup_player_configs()
 
         # Tab 3: Window Layout Preview
-        self.window_layout_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.window_layout_page = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.window_layout_page.set_vexpand(True)
         self.window_layout_page.set_hexpand(True)
         self.notebook.append_page(self.window_layout_page, Gtk.Label(label="Window Layout Preview"))
+
+        # Left side: Settings panel
+        settings_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        settings_panel.set_margin_start(5)
+        settings_panel.set_margin_end(5)
+        settings_panel.set_margin_top(5)
+        settings_panel.set_margin_bottom(5)
+        settings_panel.set_size_request(300, -1)  # Fixed width for settings
+        self.window_layout_page.append(settings_panel)
 
         # Add a grid for layout settings in the preview tab
         self.preview_settings_grid = Gtk.Grid()
         self.preview_settings_grid.set_column_spacing(10)
         self.preview_settings_grid.set_row_spacing(10)
-        self.preview_settings_grid.set_margin_start(5) # Changed from set_border_width
-        self.preview_settings_grid.set_margin_end(5)   # Changed from set_border_width
-        self.preview_settings_grid.set_margin_top(5)   # Changed from set_border_width
-        self.preview_settings_grid.set_margin_bottom(5) # Changed from set_border_width
         self.preview_settings_grid.set_hexpand(False)
-        self.window_layout_page.append(self.preview_settings_grid) # Changed from pack_start
+        settings_panel.append(self.preview_settings_grid)
+
+        # Right side: Preview area
+        preview_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        preview_panel.set_margin_start(5)
+        preview_panel.set_margin_end(5)
+        preview_panel.set_margin_top(5)
+        preview_panel.set_margin_bottom(5)
+        preview_panel.set_hexpand(True)
+        preview_panel.set_vexpand(True)
+        self.window_layout_page.append(preview_panel)
+
+        # Add a label for the preview area
+        preview_label = Gtk.Label(label="Window Layout Preview")
+        preview_label.set_halign(Gtk.Align.START)
+        preview_label.set_margin_bottom(5)
+        preview_label.add_css_class("heading")
+        preview_panel.append(preview_label)
 
         # Num Players
         preview_row = 0
@@ -266,7 +288,7 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         self.drawing_area.set_hexpand(True) # Ensure drawing area expands horizontally
         self.drawing_area.set_vexpand(True) # Ensure drawing area expands vertically
         self.drawing_area.set_size_request(200, 200) # Set minimum size for drawing area
-        self.window_layout_page.append(self.drawing_area) # Changed from pack_start
+        preview_panel.append(self.drawing_area)
 
         # Connect signals for redraw
         self.instance_width_spin.connect("value-changed", self.on_layout_setting_changed)

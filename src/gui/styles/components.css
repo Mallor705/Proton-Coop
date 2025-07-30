@@ -19,13 +19,14 @@ button {
 }
 
 /* Dropdown and ComboBox Components */
-combobox, dropdown {
+/* combobox, */
+/* dropdown {
     padding-top: 6px;
     padding-bottom: 6px;
     margin-top: 3px;
     margin-bottom: 3px;
     min-height: 28px;
-}
+} */
 
 /* SpinButton Components */
 spinbutton {
@@ -37,7 +38,8 @@ spinbutton {
 }
 
 /* CheckBox and RadioButton Components */
-checkbutton, radiobutton {
+checkbutton,
+radiobutton {
     padding: 4px;
     margin: 2px;
     min-height: 20px;

@@ -115,7 +115,7 @@ entry:focus {
 }
 
 /* ComboBox and Dropdown Interactions */
-/* combobox,
+combobox,
 dropdown {
     transition:
         all 0.2s ease,
@@ -126,7 +126,7 @@ combobox:hover,
 dropdown:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-} */
+}
 
 /* Frame Animations */
 frame {
@@ -365,6 +365,8 @@ scrollbar slider:hover {
         0 0 0 3px rgba(0, 122, 204, 0.15),
         0 0 0 1px rgba(0, 122, 204, 0.4);
     transition: box-shadow 0.2s ease;
+    border-radius: 6px;
+    margin: -6px;
 } */
 
 /* Smooth State Transitions */
@@ -425,8 +427,8 @@ checkbutton:checked {
 /* Reduced Motion for Accessibility */
 @media (prefers-reduced-motion: reduce) {
     * {
-        animation-duration: 0.01ms !important;
+        animation-duration: 0.02ms !important;
         animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
+        transition-duration: 0.02ms !important;
     }
 }
