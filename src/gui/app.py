@@ -808,21 +808,25 @@ class ProfileEditorWindow(Gtk.ApplicationWindow):
         selected_players_indices = [i + 1 for i, cb in enumerate(self.player_checkboxes) if cb.get_active()]
         profile_data_dumped['selected_players'] = selected_players_indices
 
-        profile_name = self.game_name_entry.get_text().replace(" ", "_").lower()
-        if not profile_name:
-            dialog = Adw.MessageDialog(
-                heading="Save Error",
-                body="Game name cannot be empty.",
-                modal=True,
-            )
-            dialog.add_response("ok", "Ok")
-            dialog.set_response_enabled("ok", True)
-            dialog.set_default_response("ok")
-            dialog.set_transient_for(self)
-            dialog.connect("response", lambda d, r: d.close())
-            dialog.present()
-            self.statusbar.set_label("Error: Game name is empty.") # Changed from push
-            return
+        # Use existing profile name if we're editing, otherwise use game name field
+        if hasattr(self, 'selected_profile_name') and self.selected_profile_name:
+            profile_name = self.selected_profile_name
+        else:
+            profile_name = self.game_name_entry.get_text().replace(" ", "_").lower()
+            if not profile_name:
+                dialog = Adw.MessageDialog(
+                    heading="Save Error",
+                    body="Game name cannot be empty.",
+                    modal=True,
+                )
+                dialog.add_response("ok", "Ok")
+                dialog.set_response_enabled("ok", True)
+                dialog.set_default_response("ok")
+                dialog.set_transient_for(self)
+                dialog.connect("response", lambda d, r: d.close())
+                dialog.present()
+                self.statusbar.set_label("Error: Game name is empty.") # Changed from push
+                return
 
         profile_dir = Config.PROFILE_DIR
         profile_dir.mkdir(parents=True, exist_ok=True)
