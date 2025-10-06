@@ -210,6 +210,7 @@ bwrap --version
 
 -   **Controles não reconhecidos:** Verifique as permissões em `/dev/input/by-id/` e confirme se os IDs dos dispositivos estão corretos no seu arquivo de perfil.
 -   **Proton não encontrado:** Certifique-se de que o nome da versão do Proton em seu perfil corresponde exatamente ao nome de instalação no Steam.
+-   **Problemas com Elden Ring:** Consulte o [guia específico de troubleshooting para Elden Ring](TROUBLESHOOTING_ELDEN_RING.pt.md) para soluções detalhadas de erros como page fault e problemas com EasyAntiCheat.
 -   **Instâncias no mesmo monitor:** As instâncias do jogo podem abrir no mesmo monitor. Para movê-las e organizá-las, você pode usar os seguintes atalhos de teclado. **Observe que os atalhos podem variar dependendo do seu ambiente de desktop Linux e das configurações personalizadas:**
       *   `Super + W` (ou `Ctrl + F9` / `Ctrl + F10`): Exibe uma visão geral de todos os espaços de trabalho e janelas abertas (Atividades/Visão Geral), semelhante a pairar o mouse no canto superior esquerdo.
       *   `Super + Setas (↑ ↓ ← →)`: Move e ajusta a janela ativa para um lado da tela.
