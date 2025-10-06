@@ -48,6 +48,14 @@ class InstanceService:
                 if not shutil.which('gamescope'):
                     raise DependencyError("Gamescope is enabled for this profile but 'gamescope' command not found. Please install gamescope or disable it in the profile settings.")
                 self.logger.info("Gamescope is enabled and available for this profile.")
+            
+            # Validate bwrap if needed
+            if not profile.disable_bwrap:
+                if not shutil.which('bwrap'):
+                    raise DependencyError("bwrap is required but not found. Please install bubblewrap or enable 'Disable bwrap' in the profile settings (not recommended).")
+                self.logger.info("bwrap is enabled and available for this profile.")
+            else:
+                self.logger.warning("⚠️  bwrap is disabled for this profile. Input device isolation will NOT work!")
 
             # Cache proton lookup
             proton_cache_key = f"{profile.is_native}_{profile.proton_version}"
@@ -335,8 +343,12 @@ class InstanceService:
         # Build base game command
         base_cmd = self._build_base_game_command(profile, proton_path, symlinked_exe_path, gamescope_cmd, instance.instance_num)
 
-        # Build bwrap command with devices
-        bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num)
+        # Build bwrap command with devices (only if not disabled)
+        if profile.disable_bwrap:
+            bwrap_cmd = []
+            self.logger.info(f"Instance {instance.instance_num}: bwrap is disabled for this profile.")
+        else:
+            bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num)
 
         # Add taskset at the beginning of the final command to ensure affinity for the entire process
         taskset_cmd = ["taskset", "-c", cpu_affinity]
