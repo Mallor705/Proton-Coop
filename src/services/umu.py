@@ -36,18 +36,18 @@ class UmuService:
         self,
         base_env: dict,
         wineprefix: Path,
+        proton_version: Optional[str] = None,
         umu_id: Optional[str] = None,
-        umu_store: Optional[str] = None,
-        umu_proton_path: Optional[str] = None
+        umu_store: Optional[str] = None
     ) -> dict:
         """Prepares environment variables for umu-run execution.
         
         Args:
             base_env: Base environment variables to extend
             wineprefix: Path to the Wine prefix directory
+            proton_version: Proton version to use (same as traditional Proton selection)
             umu_id: Game ID from umu-database (defaults to umu-default)
             umu_store: Store identifier (egs, gog, steam, etc.)
-            umu_proton_path: Path to specific Proton version or "GE-Proton" for latest
             
         Returns:
             Updated environment dictionary
@@ -74,10 +74,10 @@ class UmuService:
             env['STORE'] = 'none'
             self.logger.info("UMU: Using default STORE (none)")
         
-        # Set PROTONPATH if provided
-        if umu_proton_path:
-            env['PROTONPATH'] = umu_proton_path
-            self.logger.info(f"UMU: Setting PROTONPATH to {umu_proton_path}")
+        # Set PROTONPATH if provided (uses the same Proton version as traditional mode)
+        if proton_version:
+            env['PROTONPATH'] = proton_version
+            self.logger.info(f"UMU: Setting PROTONPATH to {proton_version}")
         else:
             # Use UMU-Proton (default)
             self.logger.info("UMU: Using default UMU-Proton")

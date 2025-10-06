@@ -294,9 +294,9 @@ class InstanceService:
                 env = self.umu_service.prepare_umu_environment(
                     base_env=env,
                     wineprefix=wineprefix,
+                    proton_version=profile.proton_version if profile else None,
                     umu_id=profile.umu_id if profile else None,
-                    umu_store=profile.umu_store if profile else None,
-                    umu_proton_path=profile.umu_proton_path if profile else None
+                    umu_store=profile.umu_store if profile else None
                 )
             else:
                 # Standard Proton environment

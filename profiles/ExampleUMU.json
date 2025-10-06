@@ -4,7 +4,7 @@
   "use_umu": true,
   "umu_id": "umu-default",
   "umu_store": "none",
-  "umu_proton_path": "GE-Proton",
+  "proton_version": "GE-Proton10-4",
   "players": [
     {
       "account_name": "Player1",

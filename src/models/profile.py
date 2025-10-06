@@ -55,7 +55,6 @@ class GameProfile(BaseModel):
     use_umu: bool = Field(default=False, alias="USE_UMU")
     umu_id: Optional[str] = Field(default=None, alias="UMU_ID")
     umu_store: Optional[str] = Field(default=None, alias="UMU_STORE")
-    umu_proton_path: Optional[str] = Field(default=None, alias="UMU_PROTON_PATH")
 
     # New field for player configurations, using "PLAYERS" alias for JSON
     player_configs: Optional[List[PlayerInstanceConfig]] = Field(default=None, alias="PLAYERS")
