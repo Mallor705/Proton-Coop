@@ -250,6 +250,11 @@ class InstanceService:
             # Clean up potentially conflicting Python variables
             env.pop('PYTHONHOME', None)
             env.pop('PYTHONPATH', None)
+            
+            # Suppress Python warnings (used by ProtonFixes)
+            env['PYTHONWARNINGS'] = 'ignore'
+            # Set Python logging to ERROR level to suppress ProtonFixes WARN messages
+            env['PROTONFIXES_LOG_LEVEL'] = 'ERROR'
 
             if not (profile.is_native if profile else False):
                 if steam_root:
@@ -257,12 +262,23 @@ class InstanceService:
                 
                 # DXVK configuration
                 env['DXVK_ASYNC'] = '1'
-                env['DXVK_LOG_LEVEL'] = 'warn'  # Changed to 'warn' to reduce log spam
+                env['DXVK_LOG_LEVEL'] = 'none'  # Suppress all DXVK logs
                 env['DXVK_HUD'] = '0'  # Disable HUD by default
                 
                 # VKD3D-Proton configuration - suppress unnecessary warnings
                 env['VKD3D_CONFIG'] = 'dxr11,dxr'
                 env['VKD3D_DEBUG'] = 'none'  # Suppress debug messages
+                env['VKD3D_LOG_LEVEL'] = 'none'  # Suppress VKD3D logs
+                
+                # Wine debug channels - suppress specific warnings
+                # Format: +/-channel,+/-channel
+                wine_debug = [
+                    '-all',              # Disable all debug output
+                    '+err',              # Keep errors
+                    '-fixme',            # Disable fixme messages
+                    '-warn'              # Disable warnings
+                ]
+                env['WINEDEBUG'] = ','.join(wine_debug)
                 
                 if profile and profile.app_id:
                     env['SteamAppId'] = profile.app_id
