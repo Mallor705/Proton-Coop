@@ -1,0 +1,113 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║                                                                      ║
+║     ⚠️  AVISO: ISOLAMENTO DE DISPOSITIVOS NO MODO UMU  ⚠️           ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+⚠️ LIMITAÇÃO IMPORTANTE
+═══════════════════════════════════════════════════════════════════════
+
+Quando você usa o MODO UMU:
+  ❌ Isolamento de dispositivos NÃO está disponível
+  ❌ Todos os controles visíveis para todas as instâncias
+  ❌ Mouse/teclado não podem ser isolados por jogador
+
+═══════════════════════════════════════════════════════════════════════
+
+🔍 POR QUÊ?
+═══════════════════════════════════════════════════════════════════════
+
+Modo Tradicional:
+  Linux-Coop → bwrap (isola devices) → Proton → Jogo
+  ✅ Cada instância vê apenas seus próprios dispositivos
+
+Modo UMU:
+  Linux-Coop → umu-run → pressure-vessel → Proton → Jogo
+  ❌ pressure-vessel não isola dispositivos de entrada
+  ❌ bwrap não pode ser usado (conflito de containers)
+
+═══════════════════════════════════════════════════════════════════════
+
+📊 COMPARAÇÃO
+═══════════════════════════════════════════════════════════════════════
+
+MODO TRADICIONAL (Proton):
+  ✅ Isolamento de dispositivos
+  ✅ Controles separados por jogador
+  ✅ Mouse/teclado isolados
+  ✅ Ideal para COOP LOCAL
+  ❌ Menos compatível com Epic/GOG
+
+MODO UMU:
+  ✅ Melhor compatibilidade Epic/GOG
+  ✅ Protonfixes automáticos
+  ✅ Não precisa Steam instalado
+  ✅ Ideal para SINGLE-PLAYER
+  ❌ SEM isolamento de dispositivos
+  ❌ NÃO ideal para coop local
+
+═══════════════════════════════════════════════════════════════════════
+
+🎯 RECOMENDAÇÕES
+═══════════════════════════════════════════════════════════════════════
+
+COOP LOCAL (2+ jogadores mesmo PC):
+  → USE MODO TRADICIONAL
+  {
+    "use_umu": false,
+    "proton_version": "GE-Proton10-4"
+  }
+
+SINGLE-PLAYER (Epic/GOG):
+  → USE MODO UMU
+  {
+    "use_umu": true,
+    "umu_store": "egs",
+    "proton_version": "GE-Proton10-4"
+  }
+
+MULTIPLAYER ONLINE:
+  → QUALQUER MODO (devices não precisam isolar)
+
+═══════════════════════════════════════════════════════════════════════
+
+💡 O QUE FUNCIONA NO MODO UMU?
+═══════════════════════════════════════════════════════════════════════
+
+✅ Múltiplas instâncias do jogo
+✅ Prefixes separados (saves independentes)
+✅ Telas divididas (splitscreen)
+✅ Variáveis de ambiente separadas
+✅ Melhor compatibilidade com lojas não-Steam
+
+❌ Isolamento de controles
+❌ Mouse/teclado exclusivos por jogador
+❌ Prevenção de conflito de dispositivos
+
+═══════════════════════════════════════════════════════════════════════
+
+🔮 FUTURO
+═══════════════════════════════════════════════════════════════════════
+
+Investigando possíveis soluções:
+  - Variáveis de ambiente SDL_JOYSTICK_DEVICE
+  - Contribuir para projeto UMU com device isolation
+  - Wrapper customizado para pressure-vessel
+  - Hooks no UMU runtime
+
+═══════════════════════════════════════════════════════════════════════
+
+⚠️ RESUMO
+═══════════════════════════════════════════════════════════════════════
+
+MODO UMU:
+  Melhor para: Single-player, lojas não-Steam, online multiplayer
+  NÃO ideal para: Coop local com múltiplos controles
+
+MODO TRADICIONAL:
+  Melhor para: Coop local splitscreen
+  Funciona para: Qualquer jogo Steam, isolamento completo
+
+ESCOLHA O MODO CERTO PARA SEU USO! 🎮
+
+═══════════════════════════════════════════════════════════════════════
