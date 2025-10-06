@@ -1,0 +1,52 @@
+{
+  "game_name": "Example UMU Game",
+  "exe_path": "/home/user/Games/MyGame/game.exe",
+  "use_umu": true,
+  "umu_id": "umu-default",
+  "umu_store": "none",
+  "umu_proton_path": "GE-Proton",
+  "players": [
+    {
+      "account_name": "Player1",
+      "language": "english",
+      "listen_port": "",
+      "user_steam_id": "76561190000000001"
+    },
+    {
+      "account_name": "Player2",
+      "language": "english",
+      "listen_port": "",
+      "user_steam_id": "76561190000000002"
+    }
+  ],
+  "instance_width": 1920,
+  "instance_height": 1080,
+  "player_physical_device_ids": [
+    "",
+    ""
+  ],
+  "player_mouse_event_paths": [
+    "",
+    ""
+  ],
+  "player_keyboard_event_paths": [
+    "",
+    ""
+  ],
+  "player_audio_device_ids": [
+    "",
+    ""
+  ],
+  "app_id": "12345678",
+  "game_args": "",
+  "env_vars": {
+    "WINEDLLOVERRIDES": "",
+    "MANGOHUD": "1",
+    "DXVK_ASYNC": "1"
+  },
+  "mode": "splitscreen",
+  "splitscreen": {
+    "orientation": "horizontal",
+    "instances": 2
+  }
+}

@@ -11,6 +11,7 @@ Permite jogar títulos Windows em modo cooperativo local no Linux, executando m�
 - **Coop Local Avançado:** Execute até duas instâncias do mesmo jogo simultaneamente para uma experiência cooperativa local perfeita.
 - **Perfis de Jogo Isolados:** Mantenha salvamentos e configurações independentes para cada jogo através de perfis personalizáveis.
 - **Flexibilidade de Execução:** Suporta a seleção de qualquer executável `.exe` e várias versões do Proton, incluindo o GE-Proton.
+- **Suporte ao UMU Launcher:** Opção de usar o launcher UMU para melhor compatibilidade com jogos não-Steam e correções automáticas de jogos.
 - **Resolução Personalizável:** Ajuste a resolução para cada instância do jogo individualmente.
 - **Depuração Simplificada:** Geração automática de logs para facilitar a identificação e correção de problemas.
 - **Mapeamento de Controles:** Configure controles físicos específicos para cada jogador.
@@ -32,8 +33,9 @@ Permite jogar títulos Windows em modo cooperativo local no Linux, executando m�
 
 Para garantir o correto funcionamento do Linux-Coop, os seguintes pré-requisitos são essenciais:
 
-- **Steam:** Deve estar instalado e configurado em seu sistema.
-- **Proton:** Instale o Proton (ou GE-Proton) via Steam.
+- **Steam:** Deve estar instalado e configurado em seu sistema (não é necessário ao usar o UMU launcher).
+- **Proton:** Instale o Proton (ou GE-Proton) via Steam (ou use o UMU launcher como alternativa).
+- **UMU Launcher (Opcional):** Para melhor compatibilidade com jogos não-Steam, instale o [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher).
 - **Gamescope:** Instale o Gamescope seguindo as [instruções oficiais](https://github.com/ValveSoftware/gamescope).
 - **Bubblewrap (`bwrap`):** Ferramenta essencial para isolamento de processos.
 - **Permissões de Dispositivo:** Garanta as permissões de acesso aos dispositivos de controle em `/dev/input/by-id/`.
@@ -63,6 +65,8 @@ Para garantir o correto funcionamento do Linux-Coop, os seguintes pré-requisito
 ### 1. Crie um Perfil de Jogo
 
 Crie um arquivo JSON na pasta `profiles/` com um nome descritivo (ex: `MeuJogo.json`).
+
+**Nota:** Para instruções detalhadas sobre o uso do UMU launcher, veja o [Guia de Uso do UMU](UMU_USAGE.md).
 
 **Exemplo de Conteúdo para Tela Dividida Horizontal:**
 

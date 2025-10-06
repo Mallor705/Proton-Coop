@@ -78,14 +78,17 @@ class LinuxCoopCLI:
 
     def _batch_validate(self, profile_name: str, no_bwrap: bool = False):
         """Executes all necessary validations in batch."""
-        # Validate dependencies (cached in InstanceService), optionally skipping bwrap
-        self.instance_service.validate_dependencies(skip_bwrap=no_bwrap)
-
         # Validate profile exists
         profile_path = Config.PROFILE_DIR / f"{profile_name}.json"
         if not profile_path.exists():
             self.logger.error(f"Profile not found: {profile_path}")
             raise ProfileNotFoundError(f"Profile '{profile_name}' not found")
+        
+        # Load profile to check if UMU is enabled
+        profile = self._load_profile(profile_name)
+        
+        # Validate dependencies (cached in InstanceService), optionally skipping bwrap
+        self.instance_service.validate_dependencies(skip_bwrap=no_bwrap, profile=profile)
 
     @lru_cache(maxsize=16)
     def _load_profile(self, profile_name: str) -> GameProfile:

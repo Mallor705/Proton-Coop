@@ -11,13 +11,15 @@ from ..models.profile import GameProfile, PlayerInstanceConfig
 from ..models.instance import GameInstance
 from .proton import ProtonService
 from .process import ProcessService
+from .umu import UmuService
 
 class InstanceService:
     """Service responsible for managing game instances, including dependency validation, creation, launching, and monitoring."""
     def __init__(self, logger: Logger):
-        """Initializes the instance service with logger, ProtonService, and ProcessService."""
+        """Initializes the instance service with logger, ProtonService, UmuService, and ProcessService."""
         self.logger = logger
         self.proton_service = ProtonService(logger)
+        self.umu_service = UmuService(logger)
         self.process_service = ProcessService(logger)
         self._dependency_cache: Dict[str, bool] = {}
         self._env_cache: Dict[str, dict] = {}
@@ -28,15 +30,22 @@ class InstanceService:
         """Enable or disable bwrap usage for instance launch."""
         self._use_bwrap = use_bwrap
 
-    def validate_dependencies(self, skip_bwrap: bool = False) -> None:
+    def validate_dependencies(self, skip_bwrap: bool = False, profile: Optional[GameProfile] = None) -> None:
         """Validates if all necessary commands are available on the system.
         If skip_bwrap is True, bwrap will not be required.
+        If profile uses umu, validates umu-run availability.
         """
-        if self._dependency_cache:
+        if self._dependency_cache and not (profile and profile.use_umu):
             self.logger.info("Dependencies already validated (cached)")
             return
 
         self.logger.info("Validating dependencies...")
+        
+        # Check if umu is being used
+        if profile and profile.use_umu:
+            self.umu_service.validate_umu_dependency()
+            self.logger.info("UMU mode enabled - umu-run will be used instead of Proton")
+        
         required_cmds = list(Config.REQUIRED_COMMANDS)
         if skip_bwrap and 'bwrap' in required_cmds:
             required_cmds.remove('bwrap')
@@ -54,19 +63,26 @@ class InstanceService:
                 self.logger.error(f"Executable path is not configured for profile '{profile_name}'. Cannot launch.")
                 return
 
-            # Cache proton lookup
-            proton_cache_key = f"{profile.is_native}_{profile.proton_version}"
-            if proton_cache_key not in self._env_cache:
-                if profile.is_native:
-                    proton_path = None
-                    steam_root = None
-                else:
-                    proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version or "Experimental")
-                self._env_cache[proton_cache_key] = {'proton_path': proton_path, 'steam_root': steam_root}
+            # Cache proton/umu lookup
+            if profile.use_umu:
+                # UMU mode - no need for Proton path
+                proton_path = None
+                steam_root = None
+                self.logger.info(f"Using UMU launcher for '{profile_name}'")
             else:
-                cached_data = self._env_cache[proton_cache_key]
-                proton_path = cached_data['proton_path']
-                steam_root = cached_data['steam_root']
+                # Standard Proton mode
+                proton_cache_key = f"{profile.is_native}_{profile.proton_version}"
+                if proton_cache_key not in self._env_cache:
+                    if profile.is_native:
+                        proton_path = None
+                        steam_root = None
+                    else:
+                        proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version or "Experimental")
+                    self._env_cache[proton_cache_key] = {'proton_path': proton_path, 'steam_root': steam_root}
+                else:
+                    cached_data = self._env_cache[proton_cache_key]
+                    proton_path = cached_data['proton_path']
+                    steam_root = cached_data['steam_root']
 
             self.process_service.cleanup_previous_instances(proton_path, profile.exe_path)
 
@@ -239,7 +255,8 @@ class InstanceService:
     def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = {}, cpu_affinity: str = "") -> dict:
         """Prepares environment variables for the game instance, including control isolation, XKB configuration, and CPU affinity for Wine."""
         # Use cache for base environment
-        base_env_key = f"base_{profile.is_native if profile else False}_{steam_root}_{profile.app_id if profile else None}"
+        use_umu = profile.use_umu if profile else False
+        base_env_key = f"base_{profile.is_native if profile else False}_{use_umu}_{steam_root}_{profile.app_id if profile else None}"
         if base_env_key not in self._env_cache:
             env = os.environ.copy()
             env['PATH'] = os.environ['PATH']
@@ -249,7 +266,7 @@ class InstanceService:
             env.pop('PYTHONPATH', None)
 
             if not (profile.is_native if profile else False):
-                if steam_root:
+                if steam_root and not use_umu:
                     env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
                 env['DXVK_ASYNC'] = '1'
                 env['DXVK_LOG_LEVEL'] = 'info'
@@ -270,11 +287,24 @@ class InstanceService:
 
         # Instance-specific environment variables
         if not (profile.is_native if profile else False):
-            env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
-            env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
-            # Add WINE_CPU_TOPOLOGY for CPU affinity
-            env['WINE_CPU_TOPOLOGY'] = f"{self.cpu_count}:{cpu_affinity}"
-            self.logger.info(f"Instance {instance.instance_num}: Setting WINE_CPU_TOPOLOGY to '{env['WINE_CPU_TOPOLOGY']}'.")
+            wineprefix = instance.prefix_dir / 'pfx'
+            
+            if use_umu:
+                # UMU-specific environment setup
+                env = self.umu_service.prepare_umu_environment(
+                    base_env=env,
+                    wineprefix=wineprefix,
+                    umu_id=profile.umu_id if profile else None,
+                    umu_store=profile.umu_store if profile else None,
+                    umu_proton_path=profile.umu_proton_path if profile else None
+                )
+            else:
+                # Standard Proton environment
+                env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
+                env['WINEPREFIX'] = str(wineprefix)
+                # Add WINE_CPU_TOPOLOGY for CPU affinity
+                env['WINE_CPU_TOPOLOGY'] = f"{self.cpu_count}:{cpu_affinity}"
+                self.logger.info(f"Instance {instance.instance_num}: Setting WINE_CPU_TOPOLOGY to '{env['WINE_CPU_TOPOLOGY']}'.")
 
         # Add environment variables defined in the profile
         if profile and profile.env_vars:
@@ -444,7 +474,18 @@ class InstanceService:
             if symlinked_exe_path:
                 base_cmd.append(str(symlinked_exe_path))
                 base_cmd.extend(game_specific_args)
+        elif profile.use_umu:
+            # UMU launcher mode
+            base_cmd = list(base_cmd_prefix)
+            if symlinked_exe_path:
+                umu_cmd = self.umu_service.build_umu_command(
+                    exe_path=symlinked_exe_path,
+                    game_args=profile.game_args
+                )
+                base_cmd.extend(umu_cmd)
+                self.logger.info(f"Instance {instance_num}: Using UMU launcher")
         else:
+            # Standard Proton mode
             base_cmd = list(base_cmd_prefix)
             if proton_path and symlinked_exe_path:
                 base_cmd.extend([str(proton_path), 'run', str(symlinked_exe_path)])

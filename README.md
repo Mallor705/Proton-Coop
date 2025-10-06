@@ -14,6 +14,7 @@ Allows playing Windows titles in local cooperative mode on Linux, running multip
 - **Advanced Local Co-op:** Run up to two instances of the same game simultaneously for a seamless local cooperative experience.
 - **Isolated Game Profiles:** Maintain independent saves and configurations for each game through customizable profiles.
 - **Execution Flexibility:** Supports selecting any `.exe` executable and various Proton versions, including GE-Proton.
+- **UMU Launcher Support:** Choose to use the UMU launcher for improved compatibility with non-Steam games and automatic game fixes.
 - **Customizable Resolution:** Adjust the resolution for each game instance individually.
 - **Simplified Debugging:** Automatic log generation to facilitate problem identification and correction.
 - **Controller Mapping:** Configure specific physical controllers for each player.
@@ -35,8 +36,9 @@ Allows playing Windows titles in local cooperative mode on Linux, running multip
 
 To ensure the correct functioning of Linux-Coop, the following prerequisites are essential:
 
-- **Steam:** Must be installed and configured on your system.
-- **Proton:** Install Proton (or GE-Proton) via Steam.
+- **Steam:** Must be installed and configured on your system (not required if using UMU launcher).
+- **Proton:** Install Proton (or GE-Proton) via Steam (or use UMU launcher as an alternative).
+- **UMU Launcher (Optional):** For improved compatibility with non-Steam games, install [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher).
 - **Gamescope:** Install Gamescope by following the [official instructions](https://github.com/ValveSoftware/gamescope).
 - **Bubblewrap (`bwrap`):** Essential tool for process isolation.
 - **Device Permissions:** Ensure access permissions to control devices in `/dev/input/by-id/`.
@@ -66,6 +68,8 @@ To ensure the correct functioning of Linux-Coop, the following prerequisites are
 ### 1. Create a Game Profile
 
 Create a JSON file in the `profiles/` folder with a descriptive name (e.g., `MyGame.json`).
+
+**Note:** For detailed instructions on using the UMU launcher, see [UMU Usage Guide](docs/UMU_USAGE.md).
 
 **Example Content for Horizontal Splitscreen:**
 
@@ -175,6 +179,59 @@ Create a JSON file in the `profiles/` folder with a descriptive name (e.g., `MyG
   }
 }
 ```
+
+**Example Content for UMU Launcher (Epic Games Store):**
+
+```json
+{
+  "game_name": "Epic Games Game",
+  "exe_path": "/home/user/Games/epic-games-store/drive_c/Program Files/MyGame/game.exe",
+  "use_umu": true,
+  "umu_id": "umu-mygame",
+  "umu_store": "egs",
+  "umu_proton_path": "GE-Proton",
+  "players": [
+    {
+      "account_name": "Player1",
+      "language": "english",
+      "listen_port": "",
+      "user_steam_id": "76561190000000001"
+    },
+    {
+      "account_name": "Player2",
+      "language": "english",
+      "listen_port": "",
+      "user_steam_id": "76561190000000002"
+    }
+  ],
+  "instance_width": 1920,
+  "instance_height": 1080,
+  "player_physical_device_ids": [
+    "",
+    ""
+  ],
+  "player_mouse_event_paths": [
+    "",
+    ""
+  ],
+  "player_keyboard_event_paths": [
+    "",
+    ""
+  ],
+  "app_id": "12345678",
+  "game_args": "",
+  "env_vars": {
+    "MANGOHUD": "1"
+  },
+  "mode": "splitscreen",
+  "splitscreen": {
+    "orientation": "horizontal",
+    "instances": 2
+  }
+}
+```
+
+For more details on UMU configuration options, see the [UMU Usage Guide](docs/UMU_USAGE.md).
 
 ### 2. Run the Main Script
 
