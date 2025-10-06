@@ -4,6 +4,13 @@ from functools import lru_cache
 from ..core.config import Config
 from ..core.exceptions import ProtonNotFoundError
 from ..core.logger import Logger
+from enum import Enum
+
+class SteamRuntimeType(Enum):
+    """Types of Steam Runtime"""
+    PRESSURE_VESSEL = "pressure_vessel"
+    LEGACY = "legacy"
+    NONE = "none"
 
 class ProtonService:
     """Service responsible for locating and validating Proton and Steam directories."""
@@ -82,6 +89,58 @@ class ProtonService:
                     return proton_script
         
         return None
+
+    def find_steam_runtime(self, steam_root: Path) -> Tuple[Optional[Path], SteamRuntimeType]:
+        """Finds the Steam Runtime (Pressure Vessel or legacy runtime) for running Proton.
+        
+        Returns a tuple of (path, runtime_type) where path is the runtime script and
+        runtime_type indicates whether it's Pressure Vessel or legacy runtime.
+        
+        Priority order:
+        1. Pressure Vessel (modern, preferred for Proton 5.13+)
+        2. Steam Runtime v2 (soldier/sniper)
+        3. Legacy Steam Runtime v1 (scout)
+        """
+        self.logger.info("Searching for Steam Runtime...")
+        
+        # Try Pressure Vessel first (modern approach used by Steam client)
+        pressure_vessel_paths = [
+            (steam_root / "steamapps/common/SteamLinuxRuntime_soldier/pressure-vessel/bin/pressure-vessel-wrap", SteamRuntimeType.PRESSURE_VESSEL),
+            (steam_root / "steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap", SteamRuntimeType.PRESSURE_VESSEL),
+        ]
+        
+        for pv_path, runtime_type in pressure_vessel_paths:
+            if pv_path.exists():
+                self.logger.info(f"Found Pressure Vessel Steam Runtime at: {pv_path}")
+                return pv_path, runtime_type
+        
+        # Fallback: Look for legacy steam-runtime script
+        legacy_runtime_paths = [
+            steam_root / "ubuntu12_32/steam-runtime/run.sh",
+            steam_root / "ubuntu12_64/steam-runtime/run.sh",
+        ]
+        
+        for legacy_path in legacy_runtime_paths:
+            if legacy_path.exists():
+                self.logger.info(f"Found legacy Steam Runtime at: {legacy_path}")
+                return legacy_path, SteamRuntimeType.LEGACY
+        
+        # Final fallback: Look for any steam-runtime script
+        runtime_search_paths = [
+            steam_root / "ubuntu12_32/steam-runtime",
+            steam_root / "ubuntu12_64/steam-runtime",
+            steam_root / "steam-runtime",
+        ]
+        
+        for runtime_dir in runtime_search_paths:
+            if runtime_dir.exists():
+                run_script = runtime_dir / "run.sh"
+                if run_script.exists():
+                    self.logger.info(f"Found legacy Steam Runtime at: {run_script}")
+                    return run_script, SteamRuntimeType.LEGACY
+        
+        self.logger.warning("Steam Runtime not found! Games may not work correctly.")
+        return None, SteamRuntimeType.NONE
 
     def list_installed_proton_versions(self) -> List[str]:
         """Lists all installed Proton versions found in Steam directories."""
