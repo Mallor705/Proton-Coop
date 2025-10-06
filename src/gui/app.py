@@ -413,8 +413,18 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         row = 0 # Reset row counter for this grid
 
+        # Use UMU Launcher
+        proton_options_grid.attach(Gtk.Label(label="Use UMU Launcher:", xalign=0), 0, row, 1, 1)
+        self.use_umu_check = Gtk.CheckButton()
+        self.use_umu_check.set_active(False)
+        self.use_umu_check.set_tooltip_text("Enable UMU launcher instead of traditional Proton (requires umu-run installed)")
+        self.use_umu_check.connect("toggled", self._on_use_umu_toggled)
+        proton_options_grid.attach(self.use_umu_check, 1, row, 1, 1)
+        row += 1
+
         # Proton Version
-        proton_options_grid.attach(Gtk.Label(label="Proton Version:", xalign=0), 0, row, 1, 1)
+        self.proton_version_label = Gtk.Label(label="Proton Version:", xalign=0)
+        proton_options_grid.attach(self.proton_version_label, 0, row, 1, 1)
         self.proton_version_combo = Gtk.ComboBoxText()
         proton_versions = self.proton_service.list_installed_proton_versions()
         if not proton_versions:
@@ -427,6 +437,45 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.proton_version_combo.set_active(0)
 
         proton_options_grid.attach(self.proton_version_combo, 1, row, 1, 1)
+        row += 1
+
+        # UMU Game ID (hidden by default)
+        self.umu_id_label = Gtk.Label(label="UMU Game ID:", xalign=0)
+        self.umu_id_label.set_visible(False)
+        proton_options_grid.attach(self.umu_id_label, 0, row, 1, 1)
+        self.umu_id_entry = Gtk.Entry()
+        self.umu_id_entry.set_placeholder_text("umu-default")
+        self.umu_id_entry.set_tooltip_text("Game ID from umu-database (e.g., umu-borderlands3)")
+        self.umu_id_entry.set_visible(False)
+        proton_options_grid.attach(self.umu_id_entry, 1, row, 1, 1)
+        row += 1
+
+        # UMU Store (hidden by default)
+        self.umu_store_label = Gtk.Label(label="UMU Store:", xalign=0)
+        self.umu_store_label.set_visible(False)
+        proton_options_grid.attach(self.umu_store_label, 0, row, 1, 1)
+        self.umu_store_combo = Gtk.ComboBoxText()
+        self.umu_store_combo.append_text("none")
+        self.umu_store_combo.append_text("egs")
+        self.umu_store_combo.append_text("gog")
+        self.umu_store_combo.append_text("steam")
+        self.umu_store_combo.append_text("origin")
+        self.umu_store_combo.append_text("uplay")
+        self.umu_store_combo.set_active(0)
+        self.umu_store_combo.set_tooltip_text("Game store identifier (Epic, GOG, Steam, etc.)")
+        self.umu_store_combo.set_visible(False)
+        proton_options_grid.attach(self.umu_store_combo, 1, row, 1, 1)
+        row += 1
+
+        # UMU Proton Path (hidden by default)
+        self.umu_proton_path_label = Gtk.Label(label="UMU Proton Path:", xalign=0)
+        self.umu_proton_path_label.set_visible(False)
+        proton_options_grid.attach(self.umu_proton_path_label, 0, row, 1, 1)
+        self.umu_proton_path_entry = Gtk.Entry()
+        self.umu_proton_path_entry.set_placeholder_text("GE-Proton or custom path")
+        self.umu_proton_path_entry.set_tooltip_text("Use 'GE-Proton' for auto-download or specify custom Proton path")
+        self.umu_proton_path_entry.set_visible(False)
+        proton_options_grid.attach(self.umu_proton_path_entry, 1, row, 1, 1)
         row += 1
 
         # Disable bwrap option (CLI only)
@@ -470,6 +519,28 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.play_button.set_label("▶️ Launch Game")
             self.play_button.set_css_classes(["suggested-action"]) # Gtk4 CSS class
         self.play_button.set_sensitive(True) # Ensure button is always sensitive initially
+
+    def _on_use_umu_toggled(self, checkbox):
+        """Toggle visibility of UMU-specific fields and Proton fields."""
+        use_umu = checkbox.get_active()
+        
+        # Show/hide UMU-specific fields
+        self.umu_id_label.set_visible(use_umu)
+        self.umu_id_entry.set_visible(use_umu)
+        self.umu_store_label.set_visible(use_umu)
+        self.umu_store_combo.set_visible(use_umu)
+        self.umu_proton_path_label.set_visible(use_umu)
+        self.umu_proton_path_entry.set_visible(use_umu)
+        
+        # Hide traditional Proton version when UMU is enabled
+        if use_umu:
+            self.proton_version_label.set_visible(False)
+            self.proton_version_combo.set_visible(False)
+        else:
+            self.proton_version_label.set_visible(True)
+            self.proton_version_combo.set_visible(True)
+        
+        self.statusbar.set_label("UMU mode " + ("enabled" if use_umu else "disabled"))
 
     def on_exe_path_button_clicked(self, button):
         dialog = Gtk.FileChooserDialog(
@@ -1243,9 +1314,22 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         return ""
 
     def get_profile_data(self):
+        # Get UMU settings
+        use_umu = self.use_umu_check.get_active()
+        
+        # Get Proton version (only relevant if not using UMU)
         proton_version = self.proton_version_combo.get_active_text()
         if proton_version == "None (Use Steam default)" or not proton_version:
             proton_version = None
+
+        # Get UMU-specific fields
+        umu_id = None
+        umu_store = None
+        umu_proton_path = None
+        if use_umu:
+            umu_id = self.umu_id_entry.get_text() or None
+            umu_store = self.umu_store_combo.get_active_text() or None
+            umu_proton_path = self.umu_proton_path_entry.get_text() or None
 
         player_configs_data = self._get_player_configs_from_ui()
 
@@ -1280,6 +1364,10 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             mode=mode,
             splitscreen=splitscreen_config,
             player_configs=player_configs_data, # Use the already collected data
+            use_umu=use_umu,
+            umu_id=umu_id,
+            umu_store=umu_store,
+            umu_proton_path=umu_proton_path,
         )
 
         self.logger.info(f"DEBUG: Mode value before GameProfile instantiation: {mode}")
@@ -1316,18 +1404,41 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.num_players_spin.set_value(profile_data.get("NUM_PLAYERS", 1))
 
     def _load_proton_settings(self, profile_data):
-        """Load Proton version settings."""
-        proton_version = profile_data.get("PROTON_VERSION")
-        if proton_version:
-            model = self.proton_version_combo.get_model()
+        """Load Proton version settings and UMU settings."""
+        # Load UMU settings
+        use_umu = profile_data.get("USE_UMU", False)
+        self.use_umu_check.set_active(use_umu)
+        
+        if use_umu:
+            # Load UMU-specific fields
+            umu_id = profile_data.get("UMU_ID") or ""
+            self.umu_id_entry.set_text(umu_id)
+            
+            umu_store = profile_data.get("UMU_STORE") or "none"
+            # Find and set the active store
+            model = self.umu_store_combo.get_model()
             for i, row in enumerate(model):
-                if row[0] == proton_version:
-                    self.proton_version_combo.set_active(i)
+                if row[0] == umu_store:
+                    self.umu_store_combo.set_active(i)
                     break
             else:
-                self.proton_version_combo.set_active(0)
+                self.umu_store_combo.set_active(0)
+            
+            umu_proton_path = profile_data.get("UMU_PROTON_PATH") or ""
+            self.umu_proton_path_entry.set_text(umu_proton_path)
         else:
-            self.proton_version_combo.set_active(0)
+            # Load traditional Proton version
+            proton_version = profile_data.get("PROTON_VERSION")
+            if proton_version:
+                model = self.proton_version_combo.get_model()
+                for i, row in enumerate(model):
+                    if row[0] == proton_version:
+                        self.proton_version_combo.set_active(i)
+                        break
+                else:
+                    self.proton_version_combo.set_active(0)
+            else:
+                self.proton_version_combo.set_active(0)
 
     def _load_instance_settings(self, profile_data):
         """Load instance-specific settings like dimensions and game configuration."""
@@ -1819,6 +1930,12 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         # Proton version
         self.proton_version_combo.set_active(0)
+        
+        # Reset UMU fields
+        self.use_umu_check.set_active(False)
+        self.umu_id_entry.set_text("")
+        self.umu_store_combo.set_active(0)
+        self.umu_proton_path_entry.set_text("")
 
         # Clear environment variables
         self._clear_environment_variables_ui()
