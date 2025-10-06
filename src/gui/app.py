@@ -398,6 +398,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         game_details_grid.attach(self.is_native_check, 1, row, 1, 1)
         row += 1
 
+        # Use Gamescope Checkbox
+        game_details_grid.attach(Gtk.Label(label="Use Gamescope?", xalign=0), 0, row, 1, 1)
+        self.use_gamescope_check = Gtk.CheckButton()
+        self.use_gamescope_check.set_active(True) # Default to using gamescope
+        self.use_gamescope_check.set_tooltip_text("Enable/disable Gamescope for this profile")
+        game_details_grid.attach(self.use_gamescope_check, 1, row, 1, 1)
+        row += 1
+
         # Frame 2: Proton & Launch Options
         proton_options_frame = Gtk.Frame(label="Launch Options")
         main_vbox.append(proton_options_frame) # Changed from pack_start
@@ -427,6 +435,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.proton_version_combo.set_active(0)
 
         proton_options_grid.attach(self.proton_version_combo, 1, row, 1, 1)
+        row += 1
+
+        # Disable bwrap option (CLI only)
+        proton_options_grid.attach(Gtk.Label(label="Disable bwrap (CLI only):", xalign=0), 0, row, 1, 1)
+        self.disable_bwrap_check = Gtk.CheckButton()
+        self.disable_bwrap_check.set_active(False)
+        self.disable_bwrap_check.set_tooltip_text("Disable bwrap isolation when launching via CLI (not recommended)")
+        proton_options_grid.attach(self.disable_bwrap_check, 1, row, 1, 1)
         row += 1
 
         # Environment Variables
@@ -911,6 +927,12 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         else:
             # Normal Python execution
             command = [python_exec, str(script_path), profile_name]
+        
+        # Append --no-bwrap if requested via GUI
+        if getattr(self, 'disable_bwrap_check', None) and self.disable_bwrap_check.get_active():
+            command.append("--no-bwrap")
+            self.logger.info("Disabling bwrap as requested by user")
+        
         self.logger.info(f"Executing command: {' '.join(command)}")
 
         self.play_button.set_sensitive(False)
@@ -1267,6 +1289,8 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             game_args=self.game_args_entry.get_text(),
             env_vars=self._get_env_vars_from_ui(),
             is_native=is_native_value,
+            use_gamescope=self.use_gamescope_check.get_active(),
+            disable_bwrap=self.disable_bwrap_check.get_active(),
             mode=mode,
             splitscreen=splitscreen_config,
             player_configs=player_configs_data, # Use the already collected data
@@ -1279,6 +1303,8 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         profile_dumped = profile_data.model_dump(by_alias=True, exclude_unset=False, exclude_defaults=False, mode='json')
         self.logger.info(f"DEBUG: Collecting {len(profile_dumped.get('PLAYERS') or [])} player configs for saving.")
+        self.logger.info(f"DEBUG: USE_GAMESCOPE value being saved: {profile_dumped.get('USE_GAMESCOPE', 'NOT FOUND')}")
+        self.logger.info(f"DEBUG: DISABLE_BWRAP value being saved: {profile_dumped.get('DISABLE_BWRAP', 'NOT FOUND')}")
         return profile_dumped
 
     def load_profile_data(self, profile_data):
@@ -1318,6 +1344,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
                 self.proton_version_combo.set_active(0)
         else:
             self.proton_version_combo.set_active(0)
+        
+        # Load disable_bwrap setting
+        self.disable_bwrap_check.set_active(profile_data.get("DISABLE_BWRAP", False))
 
     def _load_instance_settings(self, profile_data):
         """Load instance-specific settings like dimensions and game configuration."""
@@ -1326,6 +1355,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         # self.app_id_entry.set_text(str(profile_data.get("APP_ID") or ""))
         self.game_args_entry.set_text(str(profile_data.get("GAME_ARGS") or ""))
         self.is_native_check.set_active(profile_data.get("IS_NATIVE", False))
+        self.use_gamescope_check.set_active(profile_data.get("USE_GAMESCOPE", True))
 
     def _load_mode_and_splitscreen_settings(self, profile_data):
         """Load mode and splitscreen configuration."""
