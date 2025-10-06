@@ -43,6 +43,12 @@ class InstanceService:
                 self.logger.error(f"Executable path is not configured for profile '{profile_name}'. Cannot launch.")
                 return
 
+            # Validate gamescope if needed
+            if profile.use_gamescope:
+                if not shutil.which('gamescope'):
+                    raise DependencyError("Gamescope is enabled for this profile but 'gamescope' command not found. Please install gamescope or disable it in the profile settings.")
+                self.logger.info("Gamescope is enabled and available for this profile.")
+
             # Cache proton lookup
             proton_cache_key = f"{profile.is_native}_{profile.proton_version}"
             if proton_cache_key not in self._env_cache:
@@ -319,8 +325,12 @@ class InstanceService:
         # Validate input devices
         device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
 
-        # Build Gamescope command
-        gamescope_cmd = self._build_gamescope_command(profile, device_info['should_add_grab_flags'], instance.instance_num)
+        # Build Gamescope command only if enabled
+        if profile.use_gamescope:
+            gamescope_cmd = self._build_gamescope_command(profile, device_info['should_add_grab_flags'], instance.instance_num)
+        else:
+            gamescope_cmd = []
+            self.logger.info(f"Instance {instance.instance_num}: Gamescope is disabled for this profile.")
 
         # Build base game command
         base_cmd = self._build_base_game_command(profile, proton_path, symlinked_exe_path, gamescope_cmd, instance.instance_num)
@@ -424,7 +434,11 @@ class InstanceService:
             game_specific_args = profile.game_args.split()
             self.logger.info(f"Instance {instance_num}: Adding game arguments: {game_specific_args}")
 
-        base_cmd_prefix = gamescope_cmd + ['--']  # Separator for the command to be executed
+        # Only add gamescope prefix and separator if gamescope is enabled
+        if gamescope_cmd:
+            base_cmd_prefix = gamescope_cmd + ['--']  # Separator for the command to be executed
+        else:
+            base_cmd_prefix = []
 
         if profile.is_native:
             base_cmd = list(base_cmd_prefix)

@@ -398,6 +398,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         game_details_grid.attach(self.is_native_check, 1, row, 1, 1)
         row += 1
 
+        # Use Gamescope Checkbox
+        game_details_grid.attach(Gtk.Label(label="Use Gamescope?", xalign=0), 0, row, 1, 1)
+        self.use_gamescope_check = Gtk.CheckButton()
+        self.use_gamescope_check.set_active(True) # Default to using gamescope
+        self.use_gamescope_check.set_tooltip_text("Enable/disable Gamescope for this profile")
+        game_details_grid.attach(self.use_gamescope_check, 1, row, 1, 1)
+        row += 1
+
         # Frame 2: Proton & Launch Options
         proton_options_frame = Gtk.Frame(label="Launch Options")
         main_vbox.append(proton_options_frame) # Changed from pack_start
@@ -1267,6 +1275,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             game_args=self.game_args_entry.get_text(),
             env_vars=self._get_env_vars_from_ui(),
             is_native=is_native_value,
+            use_gamescope=self.use_gamescope_check.get_active(),
             mode=mode,
             splitscreen=splitscreen_config,
             player_configs=player_configs_data, # Use the already collected data
@@ -1326,6 +1335,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         # self.app_id_entry.set_text(str(profile_data.get("APP_ID") or ""))
         self.game_args_entry.set_text(str(profile_data.get("GAME_ARGS") or ""))
         self.is_native_check.set_active(profile_data.get("IS_NATIVE", False))
+        self.use_gamescope_check.set_active(profile_data.get("USE_GAMESCOPE", True))
 
     def _load_mode_and_splitscreen_settings(self, profile_data):
         """Load mode and splitscreen configuration."""

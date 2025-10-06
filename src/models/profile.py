@@ -50,6 +50,7 @@ class GameProfile(BaseModel):
     splitscreen: Optional[SplitscreenConfig] = Field(default=None, alias="SPLITSCREEN")
     env_vars: Optional[Dict[str, str]] = Field(default=None, alias="ENV_VARS")
     # primary_monitor: Optional[str] = Field(default=None, alias="PRIMARY_MONITOR") # Novo campo para o monitor principal
+    use_gamescope: bool = Field(default=True, alias="USE_GAMESCOPE")  # New field to enable/disable gamescope
 
     # New field for player configurations, using "PLAYERS" alias for JSON
     player_configs: Optional[List[PlayerInstanceConfig]] = Field(default=None, alias="PLAYERS")
