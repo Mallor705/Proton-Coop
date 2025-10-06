@@ -254,22 +254,31 @@ class InstanceService:
             if not (profile.is_native if profile else False):
                 if steam_root:
                     env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
+                
+                # DXVK configuration
                 env['DXVK_ASYNC'] = '1'
-                env['DXVK_LOG_LEVEL'] = 'info'
-
+                env['DXVK_LOG_LEVEL'] = 'warn'  # Changed to 'warn' to reduce log spam
+                env['DXVK_HUD'] = '0'  # Disable HUD by default
+                
+                # VKD3D-Proton configuration - suppress unnecessary warnings
+                env['VKD3D_CONFIG'] = 'dxr11,dxr'
+                env['VKD3D_DEBUG'] = 'none'  # Suppress debug messages
+                
                 if profile and profile.app_id:
                     env['SteamAppId'] = profile.app_id
                     env['SteamGameId'] = profile.app_id
                 
-                # Fix ProtonFixes warning about unit test detection
-                # ProtonFixes requires PROTON_LOG to be set to avoid being skipped
+                # ProtonFixes configuration
+                # PROTON_LOG enables logging and helps ProtonFixes recognize valid game environment
                 env['PROTON_LOG'] = '1'
                 
-                # Disable OpenXR to prevent warnings when not needed
-                env['PROTON_ENABLE_OPENXR'] = '0'
+                # Suppress VR-related warnings and features when not needed
+                env['PROTON_ENABLE_NVAPI'] = '0'
+                env['WINE_ENABLE_PIPE_SYNC_FOR_APP'] = '1'
                 
-                # Suppress DXGI warnings
-                env['DXVK_FILTER_DEVICE_NAME'] = ''  # Empty to use default device
+                # Disable unused features to reduce warnings
+                env['PROTON_NO_ESYNC'] = '0'  # Enable ESYNC for better performance
+                env['PROTON_NO_FSYNC'] = '0'  # Enable FSYNC if available
 
             # XKB configuration for keyboard layout (cache values)
             xkb_vars = ['XKB_DEFAULT_LAYOUT', 'XKB_DEFAULT_VARIANT', 'XKB_DEFAULT_RULES', 'XKB_DEFAULT_MODEL', 'XKB_DEFAULT_OPTIONS']
@@ -285,6 +294,11 @@ class InstanceService:
         if not (profile.is_native if profile else False):
             env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
             env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
+            
+            # These variables help ProtonFixes recognize this is NOT a unit test
+            env['WINE'] = 'wine'  # Dummy value to indicate we're running Wine
+            env['PROTON_CRASH_REPORT_DIR'] = str(instance.prefix_dir / 'crash_reports')
+            
             # Add WINE_CPU_TOPOLOGY for CPU affinity
             env['WINE_CPU_TOPOLOGY'] = f"{self.cpu_count}:{cpu_affinity}"
             self.logger.info(f"Instance {instance.instance_num}: Setting WINE_CPU_TOPOLOGY to '{env['WINE_CPU_TOPOLOGY']}'.")
