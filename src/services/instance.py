@@ -260,6 +260,16 @@ class InstanceService:
                 if profile and profile.app_id:
                     env['SteamAppId'] = profile.app_id
                     env['SteamGameId'] = profile.app_id
+                
+                # Fix ProtonFixes warning about unit test detection
+                # ProtonFixes requires PROTON_LOG to be set to avoid being skipped
+                env['PROTON_LOG'] = '1'
+                
+                # Disable OpenXR to prevent warnings when not needed
+                env['PROTON_ENABLE_OPENXR'] = '0'
+                
+                # Suppress DXGI warnings
+                env['DXVK_FILTER_DEVICE_NAME'] = ''  # Empty to use default device
 
             # XKB configuration for keyboard layout (cache values)
             xkb_vars = ['XKB_DEFAULT_LAYOUT', 'XKB_DEFAULT_VARIANT', 'XKB_DEFAULT_RULES', 'XKB_DEFAULT_MODEL', 'XKB_DEFAULT_OPTIONS']
