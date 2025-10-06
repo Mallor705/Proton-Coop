@@ -69,6 +69,13 @@ class InstanceService:
                 proton_path = None
                 steam_root = None
                 self.logger.info(f"Using UMU launcher for '{profile_name}'")
+                
+                # IMPORTANT: Disable bwrap when using UMU to avoid container-in-container conflicts
+                # UMU already uses pressure-vessel (based on bubblewrap) for containerization
+                if self._use_bwrap:
+                    self.logger.warning("UMU mode detected: Automatically disabling bwrap to avoid conflicts.")
+                    self.logger.warning("UMU already provides containerization via pressure-vessel.")
+                    self._use_bwrap = False
             else:
                 # Standard Proton mode
                 proton_cache_key = f"{profile.is_native}_{profile.proton_version}"
