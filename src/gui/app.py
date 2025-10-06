@@ -437,6 +437,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         proton_options_grid.attach(self.proton_version_combo, 1, row, 1, 1)
         row += 1
 
+        # Disable bwrap option (CLI only)
+        proton_options_grid.attach(Gtk.Label(label="Disable bwrap (CLI only):", xalign=0), 0, row, 1, 1)
+        self.disable_bwrap_check = Gtk.CheckButton()
+        self.disable_bwrap_check.set_active(False)
+        self.disable_bwrap_check.set_tooltip_text("Disable bwrap isolation when launching via CLI (not recommended)")
+        proton_options_grid.attach(self.disable_bwrap_check, 1, row, 1, 1)
+        row += 1
+
         # Environment Variables
         env_vars_frame = Gtk.Frame(label="Custom Environment Variables")
         main_vbox.append(env_vars_frame) # Changed from pack_start
@@ -919,6 +927,12 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         else:
             # Normal Python execution
             command = [python_exec, str(script_path), profile_name]
+        
+        # Append --no-bwrap if requested via GUI
+        if getattr(self, 'disable_bwrap_check', None) and self.disable_bwrap_check.get_active():
+            command.append("--no-bwrap")
+            self.logger.info("Disabling bwrap as requested by user")
+        
         self.logger.info(f"Executing command: {' '.join(command)}")
 
         self.play_button.set_sensitive(False)
