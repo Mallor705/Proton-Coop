@@ -9,7 +9,7 @@ from ..core.exceptions import DependencyError
 from ..core.logger import Logger
 from ..models.profile import GameProfile, PlayerInstanceConfig
 from ..models.instance import GameInstance
-from .proton import ProtonService, SteamRuntimeType
+from .proton import ProtonService
 from .process import ProcessService
 
 class InstanceService:
@@ -224,25 +224,20 @@ class InstanceService:
             profile # Passing the complete profile object
         )
 
-        # Find Steam Runtime if using Proton
-        steam_runtime_path = None
-        steam_runtime_type = SteamRuntimeType.NONE
-        if not profile.is_native and steam_root:
-            steam_runtime_path, steam_runtime_type = self.proton_service.find_steam_runtime(steam_root)
-            if steam_runtime_path:
-                self.logger.info(f"Instance {instance.instance_num}: Using Steam Runtime: {steam_runtime_path} (Type: {steam_runtime_type.value})")
-            else:
-                self.logger.warning(f"Instance {instance.instance_num}: Steam Runtime not found. Game may not work correctly!")
-
         # Validate devices for this instance
         instance_idx = instance.instance_num - 1
         device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
 
         env = self._prepare_environment(instance, steam_root, profile, device_info, cpu_affinity)
-        cmd = self._build_command(profile, proton_path, steam_runtime_path, steam_runtime_type, instance, symlinked_executable_path, cpu_affinity)
+        cmd = self._build_command(profile, proton_path, instance, symlinked_executable_path, cpu_affinity)
 
+        # CRITICAL: Use the ORIGINAL game directory as working directory, not the symlink directory
+        # Some games (like Elden Ring) expect to be run from their actual installation directory
+        game_working_dir = original_game_path
+        self.logger.info(f"Instance {instance.instance_num}: Working directory set to: {game_working_dir}")
+        
         self.logger.info(f"Launching instance {instance.instance_num} (Log: {instance.log_file})")
-        pid = self.process_service.launch_instance(cmd, instance.log_file, env, cwd=symlinked_executable_path.parent)
+        pid = self.process_service.launch_instance(cmd, instance.log_file, env, cwd=game_working_dir)
         instance.pid = pid
         self.logger.info(f"Instance {instance.instance_num} started with PID: {pid}")
 
@@ -261,9 +256,6 @@ class InstanceService:
             if not (profile.is_native if profile else False):
                 if steam_root:
                     env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
-                    # Add Steam Runtime environment variables
-                    env['STEAM_RUNTIME'] = '1'
-                    env['STEAM_RUNTIME_LIBRARY_PATH'] = str(steam_root / 'ubuntu12_32/steam-runtime/lib/i386-linux-gnu') + ':' + str(steam_root / 'ubuntu12_64/steam-runtime/lib/x86_64-linux-gnu')
                 env['DXVK_ASYNC'] = '1'
                 env['DXVK_LOG_LEVEL'] = 'info'
 
@@ -288,6 +280,17 @@ class InstanceService:
             # Add WINE_CPU_TOPOLOGY for CPU affinity
             env['WINE_CPU_TOPOLOGY'] = f"{self.cpu_count}:{cpu_affinity}"
             self.logger.info(f"Instance {instance.instance_num}: Setting WINE_CPU_TOPOLOGY to '{env['WINE_CPU_TOPOLOGY']}'.")
+            
+            # Enable Proton logs for debugging (useful for troubleshooting)
+            env['PROTON_LOG'] = '1'
+            env['PROTON_LOG_DIR'] = str(Config.LOG_DIR)
+            
+            # Disable ESYNC/FSYNC if causing issues (some games have problems with these)
+            # Users can override this in profile env_vars if needed
+            if 'PROTON_NO_ESYNC' not in env:
+                env['PROTON_NO_ESYNC'] = '0'  # Keep esync enabled by default
+            if 'PROTON_NO_FSYNC' not in env:
+                env['PROTON_NO_FSYNC'] = '0'  # Keep fsync enabled by default
 
         # Add environment variables defined in the profile
         if profile and profile.env_vars:
@@ -336,7 +339,7 @@ class InstanceService:
             return device_from_profile
         return None
 
-    def _build_command(self, profile: GameProfile, proton_path: Optional[Path], steam_runtime_path: Optional[Path], steam_runtime_type: SteamRuntimeType, instance: GameInstance, symlinked_exe_path: Path, cpu_affinity: str) -> List[str]:
+    def _build_command(self, profile: GameProfile, proton_path: Optional[Path], instance: GameInstance, symlinked_exe_path: Path, cpu_affinity: str) -> List[str]:
         """Builds the command to run gamescope and the game (native or via Proton). If enabled, uses bwrap to isolate input devices."""
         instance_idx = instance.instance_num - 1
 
@@ -347,7 +350,7 @@ class InstanceService:
         gamescope_cmd = self._build_gamescope_command(profile, device_info['should_add_grab_flags'], instance.instance_num)
 
         # Build base game command
-        base_cmd = self._build_base_game_command(profile, proton_path, steam_runtime_path, steam_runtime_type, symlinked_exe_path, gamescope_cmd, instance.instance_num)
+        base_cmd = self._build_base_game_command(profile, proton_path, symlinked_exe_path, gamescope_cmd, instance.instance_num)
 
         # Optionally build bwrap command with devices
         sandbox_cmd: List[str] = []
@@ -442,8 +445,12 @@ class InstanceService:
 
         return gamescope_cli_options
 
-    def _build_base_game_command(self, profile: GameProfile, proton_path: Optional[Path], steam_runtime_path: Optional[Path], steam_runtime_type: SteamRuntimeType, symlinked_exe_path: Path, gamescope_cmd: List[str], instance_num: int) -> List[str]:
-        """Builds the base game command."""
+    def _build_base_game_command(self, profile: GameProfile, proton_path: Optional[Path], symlinked_exe_path: Path, gamescope_cmd: List[str], instance_num: int) -> List[str]:
+        """Builds the base game command.
+        
+        NOTE: Modern Proton (8.0+, GE-Proton) already includes the Steam Runtime embedded.
+        We should NOT try to wrap Proton with the runtime - Proton handles this internally.
+        """
         # Add game arguments defined in the profile, if any
         game_specific_args = []
         if profile.game_args:
@@ -460,20 +467,10 @@ class InstanceService:
         else:
             base_cmd = list(base_cmd_prefix)
             if proton_path and symlinked_exe_path:
-                # Use Steam Runtime if available (this is the correct way to run Proton!)
-                if steam_runtime_path and steam_runtime_type != SteamRuntimeType.NONE:
-                    self.logger.info(f"Instance {instance_num}: Running Proton through Steam Runtime ({steam_runtime_type.value})")
-                    
-                    if steam_runtime_type == SteamRuntimeType.PRESSURE_VESSEL:
-                        # Pressure Vessel syntax: pressure-vessel-wrap -- proton run game.exe
-                        base_cmd.extend([str(steam_runtime_path), '--', str(proton_path), 'run', str(symlinked_exe_path)])
-                    else:  # LEGACY runtime
-                        # Legacy runtime syntax: run.sh -- proton run game.exe
-                        base_cmd.extend([str(steam_runtime_path), '--', str(proton_path), 'run', str(symlinked_exe_path)])
-                else:
-                    # Fallback: Run Proton directly (may not work for all games)
-                    self.logger.warning(f"Instance {instance_num}: Running Proton directly without Steam Runtime!")
-                    base_cmd.extend([str(proton_path), 'run', str(symlinked_exe_path)])
+                # Modern Proton already includes the appropriate Steam Runtime
+                # Just execute: proton run game.exe
+                self.logger.info(f"Instance {instance_num}: Running via Proton (runtime is embedded in Proton)")
+                base_cmd.extend([str(proton_path), 'run', str(symlinked_exe_path)])
                 base_cmd.extend(game_specific_args)
 
         return base_cmd
