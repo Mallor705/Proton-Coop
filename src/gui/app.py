@@ -1290,6 +1290,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             env_vars=self._get_env_vars_from_ui(),
             is_native=is_native_value,
             use_gamescope=self.use_gamescope_check.get_active(),
+            disable_bwrap=self.disable_bwrap_check.get_active(),
             mode=mode,
             splitscreen=splitscreen_config,
             player_configs=player_configs_data, # Use the already collected data
@@ -1303,6 +1304,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         profile_dumped = profile_data.model_dump(by_alias=True, exclude_unset=False, exclude_defaults=False, mode='json')
         self.logger.info(f"DEBUG: Collecting {len(profile_dumped.get('PLAYERS') or [])} player configs for saving.")
         self.logger.info(f"DEBUG: USE_GAMESCOPE value being saved: {profile_dumped.get('USE_GAMESCOPE', 'NOT FOUND')}")
+        self.logger.info(f"DEBUG: DISABLE_BWRAP value being saved: {profile_dumped.get('DISABLE_BWRAP', 'NOT FOUND')}")
         return profile_dumped
 
     def load_profile_data(self, profile_data):
@@ -1342,6 +1344,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
                 self.proton_version_combo.set_active(0)
         else:
             self.proton_version_combo.set_active(0)
+        
+        # Load disable_bwrap setting
+        self.disable_bwrap_check.set_active(profile_data.get("DISABLE_BWRAP", False))
 
     def _load_instance_settings(self, profile_data):
         """Load instance-specific settings like dimensions and game configuration."""
