@@ -1302,6 +1302,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         profile_dumped = profile_data.model_dump(by_alias=True, exclude_unset=False, exclude_defaults=False, mode='json')
         self.logger.info(f"DEBUG: Collecting {len(profile_dumped.get('PLAYERS') or [])} player configs for saving.")
+        self.logger.info(f"DEBUG: USE_GAMESCOPE value being saved: {profile_dumped.get('USE_GAMESCOPE', 'NOT FOUND')}")
         return profile_dumped
 
     def load_profile_data(self, profile_data):
