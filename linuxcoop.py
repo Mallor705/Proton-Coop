@@ -11,7 +11,21 @@ def main():
         run_gui()
         return # Exit after launching GUI
 
-    command = args[0]
+    # Simple flag parsing
+    no_bwrap = False
+    filtered_args = []
+    for a in args:
+        if a == "--no-bwrap":
+            no_bwrap = True
+        else:
+            filtered_args.append(a)
+
+    if not filtered_args:
+        # Only flags were provided; default to GUI if none specify CLI action
+        run_gui()
+        return
+
+    command = filtered_args[0]
 
     # Handle help and version commands
     if command in ["--help", "-h", "help"]:
@@ -21,6 +35,7 @@ def main():
         print("  linux-coop                    # Open GUI")
         print("  linux-coop gui                # Open GUI")
         print("  linux-coop <profile_name>     # Run profile in CLI mode")
+        print("  linux-coop <profile_name> --no-bwrap  # Run without bwrap (CLI only)")
         print("  linux-coop edit <profile_name> # Edit profile")
         print("  linux-coop --help             # Show this help")
         print("  linux-coop --version          # Show version")
@@ -28,6 +43,7 @@ def main():
         print("Examples:")
         print("  linux-coop                    # Open GUI")
         print("  linux-coop Palworld           # Run Palworld profile")
+        print("  linux-coop Palworld --no-bwrap # Run Palworld without bwrap")
         print("  linux-coop edit Palworld      # Edit Palworld profile")
         return
     elif command in ["--version", "-v", "version"]:
@@ -40,16 +56,19 @@ def main():
             sys.exit(1)
         run_gui()
     elif command == "edit":
-        if len(args) < 2:
+        if len(filtered_args) < 2:
             print("Error: The 'edit' command requires the profile name. Usage: linuxcoop.py edit <PROFILE_NAME>", file=sys.stderr)
             sys.exit(1)
-        profile_name = args[1]
-        cli_main(profile_name, edit_mode=True) # Pass a flag to indicate edit mode
+        profile_name = filtered_args[1]
+        cli_main(profile_name, edit_mode=True, no_bwrap=no_bwrap) # Pass a flag to indicate edit mode
     else:
         # Assume it's a profile name for CLI mode
-        if len(args) > 1:
-            print(f"Warning: Additional arguments ignored for profile '{command}'.", file=sys.stderr)
-        cli_main(command)
+        if len(filtered_args) > 1:
+            # Only allow known flags; warn about unknown extras
+            unknown = [a for a in filtered_args[1:] if a != "--no-bwrap"]
+            if unknown:
+                print(f"Warning: Additional arguments ignored for profile '{command}': {' '.join(unknown)}.", file=sys.stderr)
+        cli_main(command, edit_mode=False, no_bwrap=no_bwrap)
 
 if __name__ == "__main__":
     main()

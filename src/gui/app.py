@@ -429,6 +429,13 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         proton_options_grid.attach(self.proton_version_combo, 1, row, 1, 1)
         row += 1
 
+        # Disable bwrap option (CLI only)
+        proton_options_grid.attach(Gtk.Label(label="Disable bwrap (CLI only):", xalign=0), 0, row, 1, 1)
+        self.disable_bwrap_check = Gtk.CheckButton()
+        self.disable_bwrap_check.set_active(False)
+        proton_options_grid.attach(self.disable_bwrap_check, 1, row, 1, 1)
+        row += 1
+
         # Environment Variables
         env_vars_frame = Gtk.Frame(label="Custom Environment Variables")
         main_vbox.append(env_vars_frame) # Changed from pack_start
@@ -918,6 +925,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         try:
             # Launch the CLI script as a separate process group
+            # Append --no-bwrap if requested via GUI
+            if getattr(self, 'disable_bwrap_check', None) and self.disable_bwrap_check.get_active():
+                command.append("--no-bwrap")
             process = subprocess.Popen(command, preexec_fn=os.setsid)
             self.cli_process_pid = process.pid
             self.statusbar.set_label(f"Game '{profile_name}' launched successfully with PID: {self.cli_process_pid}.") # Changed from push

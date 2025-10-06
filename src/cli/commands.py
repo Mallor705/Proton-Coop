@@ -39,7 +39,7 @@ class LinuxCoopCLI:
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
 
-    def run(self, profile_name: str, edit_mode: bool = False):
+    def run(self, profile_name: str, edit_mode: bool = False, no_bwrap: bool = False):
         """Main execution flow of the CLI."""
         if not profile_name or not profile_name.strip():
             self.logger.error("The profile name cannot be empty.")
@@ -56,7 +56,7 @@ class LinuxCoopCLI:
 
         try:
             # Batch validations
-            self._batch_validate(profile_name)
+            self._batch_validate(profile_name, no_bwrap=no_bwrap)
 
             # Load profile (with cache)
             profile = self._load_profile(profile_name)
@@ -64,6 +64,8 @@ class LinuxCoopCLI:
 
             self.logger.info(f"Loading profile: {profile.game_name} for {profile.effective_num_players} players")
 
+            # Configure instance service according to flags
+            self.instance_service.set_use_bwrap(not no_bwrap)
             self.instance_service.launch_instances(profile, profile_name)
             self.instance_service.monitor_and_wait()
             self.logger.info("Script completed")
@@ -74,10 +76,10 @@ class LinuxCoopCLI:
             self.logger.error(f"Unexpected error: {e}")
             raise TerminateCLI()
 
-    def _batch_validate(self, profile_name: str):
+    def _batch_validate(self, profile_name: str, no_bwrap: bool = False):
         """Executes all necessary validations in batch."""
-        # Validate dependencies (cached in InstanceService)
-        self.instance_service.validate_dependencies()
+        # Validate dependencies (cached in InstanceService), optionally skipping bwrap
+        self.instance_service.validate_dependencies(skip_bwrap=no_bwrap)
 
         # Validate profile exists
         profile_path = Config.PROFILE_DIR / f"{profile_name}.json"
@@ -112,10 +114,10 @@ class LinuxCoopCLI:
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while trying to open the profile: {e}")
 
-def main(profile_name, edit_mode=False):
+def main(profile_name, edit_mode=False, no_bwrap=False):
     """Launches game instances using the specified profile or edits it."""
     cli = LinuxCoopCLI()
     try:
-        cli.run(profile_name, edit_mode)
+        cli.run(profile_name, edit_mode, no_bwrap)
     except TerminateCLI:
         pass

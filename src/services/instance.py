@@ -22,15 +22,26 @@ class InstanceService:
         self._dependency_cache: Dict[str, bool] = {}
         self._env_cache: Dict[str, dict] = {}
         self.cpu_count = psutil.cpu_count(logical=True) # Get the number of logical CPU cores (includes threads)
+        self._use_bwrap: bool = True
 
-    def validate_dependencies(self) -> None:
-        """Validates if all necessary commands are available on the system."""
+    def set_use_bwrap(self, use_bwrap: bool) -> None:
+        """Enable or disable bwrap usage for instance launch."""
+        self._use_bwrap = use_bwrap
+
+    def validate_dependencies(self, skip_bwrap: bool = False) -> None:
+        """Validates if all necessary commands are available on the system.
+        If skip_bwrap is True, bwrap will not be required.
+        """
         if self._dependency_cache:
             self.logger.info("Dependencies already validated (cached)")
             return
 
         self.logger.info("Validating dependencies...")
-        for cmd in Config.REQUIRED_COMMANDS:
+        required_cmds = list(Config.REQUIRED_COMMANDS)
+        if skip_bwrap and 'bwrap' in required_cmds:
+            required_cmds.remove('bwrap')
+
+        for cmd in required_cmds:
             if cmd not in self._dependency_cache:
                 self._dependency_cache[cmd] = shutil.which(cmd) is not None
             if not self._dependency_cache[cmd]:
@@ -313,7 +324,7 @@ class InstanceService:
         return None
 
     def _build_command(self, profile: GameProfile, proton_path: Optional[Path], instance: GameInstance, symlinked_exe_path: Path, cpu_affinity: str) -> List[str]:
-        """Builds the command to run gamescope and the game (native or via Proton), using bwrap to isolate the control."""
+        """Builds the command to run gamescope and the game (native or via Proton). If enabled, uses bwrap to isolate input devices."""
         instance_idx = instance.instance_num - 1
 
         # Validate input devices
@@ -325,12 +336,14 @@ class InstanceService:
         # Build base game command
         base_cmd = self._build_base_game_command(profile, proton_path, symlinked_exe_path, gamescope_cmd, instance.instance_num)
 
-        # Build bwrap command with devices
-        bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num)
+        # Optionally build bwrap command with devices
+        sandbox_cmd: List[str] = []
+        if self._use_bwrap:
+            sandbox_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num)
 
         # Add taskset at the beginning of the final command to ensure affinity for the entire process
         taskset_cmd = ["taskset", "-c", cpu_affinity]
-        final_cmd = taskset_cmd + bwrap_cmd + base_cmd
+        final_cmd = taskset_cmd + sandbox_cmd + base_cmd
         final_bwrap_cmd_str = ' '.join(final_cmd)
         self.logger.info(f"Instance {instance.instance_num}: Full command: {final_bwrap_cmd_str}")
 
