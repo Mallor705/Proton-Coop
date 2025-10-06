@@ -139,10 +139,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.splitscreen_orientation_combo.append("vertical", "vertical")
         self.splitscreen_orientation_combo.set_active(0) # Default to horizontal
 
-        # Initialize use_gamescope checkbox early to avoid AttributeError
-        self.use_gamescope_check = Gtk.CheckButton()
-        self.use_gamescope_check.set_active(True)
-
         self.device_manager = DeviceManager()
         self.detected_input_devices = self.device_manager.get_input_devices()
         self.detected_audio_devices = self.device_manager.get_audio_devices()
@@ -403,8 +399,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         row += 1
 
         # Use Gamescope Checkbox
-        gamescope_label = Gtk.Label(label="Use Gamescope?", xalign=0)
-        game_details_grid.attach(gamescope_label, 0, row, 1, 1)
+        game_details_grid.attach(Gtk.Label(label="Use Gamescope?", xalign=0), 0, row, 1, 1)
+        self.use_gamescope_check = Gtk.CheckButton()
+        self.use_gamescope_check.set_active(True) # Default to using gamescope
         self.use_gamescope_check.set_tooltip_text("Enable/disable Gamescope for this profile")
         game_details_grid.attach(self.use_gamescope_check, 1, row, 1, 1)
         row += 1
