@@ -251,14 +251,14 @@ class InstanceService:
             env.pop('PYTHONHOME', None)
             env.pop('PYTHONPATH', None)
             
-            # Suppress Python warnings (used by ProtonFixes)
-            env['PYTHONWARNINGS'] = 'ignore'
-            # Set Python logging to ERROR level to suppress ProtonFixes WARN messages
-            env['PROTONFIXES_LOG_LEVEL'] = 'ERROR'
+            # Keep ProtonFixes warnings visible for debugging (don't suppress them)
+            # env['PYTHONWARNINGS'] = 'ignore'  # Commented out to see ProtonFixes output
 
             if not (profile.is_native if profile else False):
                 if steam_root:
                     env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
+                    # Tell ProtonFixes where Steam is installed
+                    env['HOME'] = str(Path.home())  # Ensure HOME is set correctly
                 
                 # DXVK configuration
                 env['DXVK_ASYNC'] = '1'
@@ -287,6 +287,12 @@ class InstanceService:
                 # ProtonFixes configuration
                 # PROTON_LOG enables logging and helps ProtonFixes recognize valid game environment
                 env['PROTON_LOG'] = '1'
+                env['PROTON_LOG_DIR'] = str(Config.LOG_DIR)  # Where to save Proton logs
+                
+                # CRITICAL: Set PROTON_USE_WINED3D to trigger ProtonFixes check
+                # Setting this to 0 means "use DXVK" which is what we want
+                # But the presence of this variable helps ProtonFixes recognize valid environment
+                env['PROTON_USE_WINED3D'] = '0'
                 
                 # Suppress VR-related warnings and features when not needed
                 env['PROTON_ENABLE_NVAPI'] = '0'
@@ -311,9 +317,14 @@ class InstanceService:
             env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
             env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
             
-            # These variables help ProtonFixes recognize this is NOT a unit test
-            env['WINE'] = 'wine'  # Dummy value to indicate we're running Wine
+            # Critical: Tell ProtonFixes this is NOT a unit test
+            # ProtonFixes checks for the presence of these environment variables
+            env['WINE'] = 'wine'  # Indicate we're running Wine
             env['PROTON_CRASH_REPORT_DIR'] = str(instance.prefix_dir / 'crash_reports')
+            
+            # Set the user name for ProtonFixes
+            if 'USER' not in env:
+                env['USER'] = os.getenv('USER', 'linuxcoop')
             
             # Add WINE_CPU_TOPOLOGY for CPU affinity
             env['WINE_CPU_TOPOLOGY'] = f"{self.cpu_count}:{cpu_affinity}"
