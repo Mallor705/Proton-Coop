@@ -14,7 +14,6 @@ class DependencyManager:
     def __init__(self, logger: Logger, proton_path: Path, steam_root: Path):
         """
         Initializes the DependencyManager.
-
         Args:
             logger: The logger instance.
             proton_path: The path to the Proton executable script.
@@ -23,10 +22,8 @@ class DependencyManager:
         self.logger = logger
         self.proton_path = proton_path
         self.steam_root = steam_root
-        # The directory containing wine, wineserver, etc.
-        self.proton_bin_path = self.proton_path.parent / "dist/bin"
-        # The directory containing dxvk, vkd3d libs
-        self.proton_dist_path = self.proton_path.parent / "dist"
+        self.proton_root_dir = self.proton_path.parent
+        self.proton_bin_path = self.proton_root_dir / "dist/bin"
 
     def _get_custom_env(self, prefix_path: Path) -> Dict[str, str]:
         """
@@ -34,23 +31,48 @@ class DependencyManager:
         This modifies the PATH to ensure the correct Proton version is used.
         """
         env = os.environ.copy()
-
-        # Prepend Proton's bin directory to PATH
         env["PATH"] = f"{self.proton_bin_path}:{env.get('PATH', '')}"
-
-        # Set Wine-specific environment variables
         env["WINEPREFIX"] = str(prefix_path / "pfx")
-
-        # Explicitly point to the wine binary for tools like Winetricks
         env["WINE"] = str(self.proton_bin_path / "wine")
         env["WINESERVER"] = str(self.proton_bin_path / "wineserver")
-
-        # Set other common Proton/Steam environment variables
         env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = str(self.steam_root)
         env["DXVK_ASYNC"] = "1"
         env["DXVK_LOG_LEVEL"] = "info"
-
         return env
+
+    def _find_dll_paths(self, lib_name: str) -> Optional[Dict[str, Path]]:
+        """
+        Dynamically finds the library paths for a given library name (e.g., 'dxvk').
+        It searches within the Proton installation directory for common structures.
+        """
+        self.logger.info(f"Searching for '{lib_name}' library in '{self.proton_root_dir}'...")
+
+        # First, try the standard Valve Proton structure
+        std_x64_path = self.proton_root_dir / f"dist/lib64/wine/{lib_name}"
+        std_x86_path = self.proton_root_dir / f"dist/lib/wine/{lib_name}"
+
+        if std_x64_path.exists() and std_x86_path.exists():
+            self.logger.info(f"Found '{lib_name}' using standard Proton 'dist' structure.")
+            return {"x64": std_x64_path, "x86": std_x86_path}
+
+        # If not found, try a broader search for GE-Proton and other custom versions
+        self.logger.warning(f"Standard paths not found for '{lib_name}'. Trying broader search for custom Proton versions...")
+
+        found_base_dirs = list(self.proton_root_dir.rglob(lib_name))
+
+        for base_dir in found_base_dirs:
+            if not base_dir.is_dir():
+                continue
+
+            x64_dir = base_dir / 'x64' if (base_dir / 'x64').exists() else base_dir / 'lib64'
+            x86_dir = base_dir / 'x86' if (base_dir / 'x86').exists() else base_dir / 'lib'
+
+            if x64_dir.exists() and x86_dir.exists():
+                self.logger.info(f"Found '{lib_name}' paths in custom structure: {base_dir}")
+                return {"x64": x64_dir, "x86": x86_dir}
+
+        self.logger.error(f"Failed to find any valid directory structure for '{lib_name}' in {self.proton_root_dir}.")
+        return None
 
     def apply_dxvk_vkd3d(self, prefix_path: Path):
         """
@@ -61,24 +83,23 @@ class DependencyManager:
         system32_path = prefix_path / "pfx/system32"
         syswow64_path = prefix_path / "pfx/syswow64"
 
-        dll_map = {
-            "dxvk": {
-                "x64": self.proton_dist_path / "lib64/wine/dxvk",
-                "x86": self.proton_dist_path / "lib/wine/dxvk",
-            },
-            "vkd3d": {
-                "x64": self.proton_dist_path / "lib64/wine/vkd3d-proton",
-                "x86": self.proton_dist_path / "lib/wine/vkd3d-proton",
-            },
+        dll_sources = {
+            "dxvk": self._find_dll_paths("dxvk"),
+            "vkd3d-proton": self._find_dll_paths("vkd3d-proton"),
         }
 
-        for lib, paths in dll_map.items():
+        for lib_name, paths in dll_sources.items():
+            if not paths:
+                self.logger.warning(f"Skipping '{lib_name}' as its paths were not found.")
+                continue
+
             for arch, src_path in paths.items():
                 dest_path = syswow64_path if arch == "x86" else system32_path
                 if not src_path.exists():
-                    self.logger.warning(f"Source path for {lib} ({arch}) not found: {src_path}")
+                    self.logger.warning(f"Source path for {lib_name} ({arch}) not found: {src_path}")
                     continue
 
+                self.logger.info(f"Copying DLLs for {lib_name} ({arch}) from {src_path} to {dest_path}")
                 for dll in src_path.glob("*.dll"):
                     self.logger.info(f"Copying {dll.name} to {dest_path}")
                     shutil.copy(dll, dest_path)
@@ -103,6 +124,7 @@ class DependencyManager:
                         check=True,
                         capture_output=True,
                         text=True,
+                        errors='replace',
                     )
                     self.logger.info(f"Successfully set registry key: {key}\\{value_name} = {value_data}")
                 except subprocess.CalledProcessError as e:
@@ -133,6 +155,7 @@ class DependencyManager:
                 check=True,
                 capture_output=True,
                 text=True,
+                errors='replace',
             )
             self.logger.info(f"Successfully applied Winetricks verbs: {verbs}")
         except subprocess.CalledProcessError as e:
