@@ -148,6 +148,10 @@ class InstanceService:
             (prefix_dir / "pfx").mkdir(exist_ok=True)
 
             if dependency_manager:
+                # Initialize the prefix first. This is a crucial, one-time setup.
+                dependency_manager.initialize_prefix(prefix_dir)
+
+                # Now, apply dependencies if configured
                 if profile.apply_dxvk_vkd3d:
                     dependency_manager.apply_dxvk_vkd3d(prefix_dir)
                 if profile.winetricks_verbs:
