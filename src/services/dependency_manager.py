@@ -23,8 +23,8 @@ class DependencyManager:
         self.logger = logger
         self.proton_path = proton_path
         self.steam_root = steam_root
-        self.wine_path = self.proton_path.parent / "bin/wine"
-        self.wineserver_path = self.proton_path.parent / "bin/wineserver"
+        self.wine_path = self.proton_path.parent / "dist/bin/wine"
+        self.wineserver_path = self.proton_path.parent / "dist/bin/wineserver"
         self.proton_dist_path = self.proton_path.parent / "dist"
 
     def apply_dxvk_vkd3d(self, prefix_path: Path):
