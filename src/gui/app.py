@@ -819,7 +819,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.statusbar.set_label("Splitscreen mode deactivated.") # Changed from push
 
     def on_save_button_clicked(self, button):
-        self.statusbar.set_label("Saving profile...") # Changed from push
+        self.statusbar.set_label("Saving profile...")
         profile_data_dumped = self.get_profile_data()
 
         # Collect selected players based on checkbox states
@@ -833,17 +833,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             game_name = self.game_name_entry.get_text().strip()
             if not game_name:
                 dialog = Adw.MessageDialog(
-                    heading="Save Error",
-                    body="Game name cannot be empty.",
-                    modal=True,
+                    heading="Save Error", body="Game name cannot be empty.", modal=True,
                 )
                 dialog.add_response("ok", "Ok")
-                dialog.set_response_enabled("ok", True)
                 dialog.set_default_response("ok")
                 dialog.set_transient_for(self)
                 dialog.connect("response", lambda d, r: d.close())
                 dialog.present()
-                self.statusbar.set_label("Error: Game name is empty.") # Changed from push
+                self.statusbar.set_label("Error: Game name is empty.")
                 return
             profile_name = game_name.replace(" ", "_").lower()
 
@@ -853,11 +850,11 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         try:
             with open(profile_path, "w", encoding="utf-8") as f:
-                json.dump(profile_data_dumped, f, indent=2)
-            self.statusbar.set_label(f"Profile saved successfully to: {profile_path.name}") # Changed from push
+                json.dump(profile_data_dumped, f, indent=4)
+            self.statusbar.set_label(f"Profile saved successfully to: {profile_path.name}")
 
             # Invalidate the cache for this profile after saving
-            from ..core.cache import get_cache # Import here to ensure it's available
+            from ..core.cache import get_cache
             cache = get_cache()
             cache.invalidate_profile(str(profile_path))
 
@@ -865,18 +862,15 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             reloaded_profile = GameProfile.load_from_file(profile_path)
             self.load_profile_data(reloaded_profile.model_dump(by_alias=True))
 
-            self._populate_profile_list() # Refresh the profile list after saving
-            self._select_profile_in_list(profile_name) # Select the newly saved/updated profile
+            self._populate_profile_list()
+            self._select_profile_in_list(profile_name)
         except Exception as e:
             self.logger.error(f"Failed to save profile to {profile_path}: {e}")
-            self.statusbar.set_label(f"Error saving profile: {e}") # Changed from push
+            self.statusbar.set_label(f"Error saving profile: {e}")
             error_dialog = Adw.MessageDialog(
-                heading="Error saving profile",
-                body=f"Error saving profile:\n{e}",
-                modal=True,
+                heading="Error saving profile", body=f"Error saving profile:\n{e}", modal=True,
             )
             error_dialog.add_response("ok", "Ok")
-            error_dialog.set_response_enabled("ok", True)
             error_dialog.set_default_response("ok")
             error_dialog.set_transient_for(self)
             error_dialog.connect("response", lambda d, r: d.close())
@@ -1736,7 +1730,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
                 "ENV_VARS": {
                     "WINEDLLOVERRIDES": "",
                     "MANGOHUD": "1"
-                }
+                },
+                "APPLY_DXVK_VKD3D": True,
+                "WINETRICKS_VERBS": None
             }
 
             # Save the profile

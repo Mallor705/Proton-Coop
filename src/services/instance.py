@@ -108,7 +108,7 @@ class InstanceService:
                 core_assignments.append(",".join(cores_list))
                 current_core_start += num_cores_for_instance
 
-            self.logger.info(f"Launching {profile.effective_num_players} instance(s) of '{profile.game_name}'...")
+            self.logger.info(f"Launching {profile.effective_num_players()} instance(s) of '{profile.game_name}'...")
 
             original_game_path = profile.exe_path.parent
 
