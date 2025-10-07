@@ -80,5 +80,5 @@ class Config:
         """
         Returns the base prefix directory for a specific game, replacing spaces with hyphens.
         """
-        safe_game_name = game_name.replace(" ", "-")
+        safe_game_name = game_name.replace(" ", "_")
         return Config.PREFIX_BASE_DIR / safe_game_name
