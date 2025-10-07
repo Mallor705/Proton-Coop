@@ -45,21 +45,24 @@ class LinuxCoopCLI:
             self.logger.error("The profile name cannot be empty.")
             raise TerminateCLI()
 
-        profile_path = Config.PROFILE_DIR / f"{profile_name}.json"
+        # Sanitize profile name to match the filesystem convention (spaces -> hyphens)
+        sanitized_profile_name = profile_name.replace(' ', '-')
+        profile_path = Config.PROFILE_DIR / f"{sanitized_profile_name}.json"
+
         if not profile_path.exists():
             self.logger.error(f"Profile not found: {profile_path}")
-            raise ProfileNotFoundError(f"Profile '{profile_name}' not found")
+            raise ProfileNotFoundError(f"Profile '{profile_name}' not found. Searched for '{sanitized_profile_name}.json'.")
 
         if edit_mode:
             self.edit_profile(profile_path)
             return # Exit after editing
 
         try:
-            # Batch validations
-            self._batch_validate(profile_name)
+            # Batch validations using the sanitized name
+            self._batch_validate(sanitized_profile_name)
 
-            # Load profile (with cache)
-            profile = self._load_profile(profile_name)
+            # Load profile (with cache) using the sanitized name
+            profile = self._load_profile(sanitized_profile_name)
             self.logger.info(f"Loaded profile env_vars: {profile.env_vars}")
 
             self.logger.info(f"Loading profile: {profile.game_name} for {profile.effective_num_players} players")

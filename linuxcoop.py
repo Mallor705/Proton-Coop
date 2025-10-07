@@ -5,8 +5,8 @@ from src.gui.app import run_gui
 from src.core.config import Config
 
 def main():
-    # Run migration at startup to handle existing directories with spaces
-    Config.migrate_prefix_directories()
+    # Run comprehensive migration at startup for all legacy paths (profiles and prefixes)
+    Config.migrate_legacy_paths()
 
     args = sys.argv[1:] # Get arguments excluding the script name
 
