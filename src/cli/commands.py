@@ -64,7 +64,8 @@ class LinuxCoopCLI:
 
             self.logger.info(f"Loading profile: {profile.game_name} for {profile.effective_num_players} players")
 
-            self.instance_service.launch_instances(profile, profile_name)
+            # Pass the sanitized game_name from the profile to ensure consistency
+            self.instance_service.launch_instances(profile, profile.game_name)
             self.instance_service.monitor_and_wait()
             self.logger.info("Script completed")
         except LinuxCoopError as e:
