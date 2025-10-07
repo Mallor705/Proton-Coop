@@ -45,8 +45,8 @@ class LinuxCoopCLI:
             self.logger.error("The profile name cannot be empty.")
             raise TerminateCLI()
 
-        # Sanitize profile name to match the filesystem convention (spaces -> hyphens)
-        sanitized_profile_name = profile_name.replace(' ', '-')
+        # Sanitize profile name to match the filesystem convention (spaces -> underscores)
+        sanitized_profile_name = profile_name.replace(' ', '_')
         profile_path = Config.PROFILE_DIR / f"{sanitized_profile_name}.json"
 
         if not profile_path.exists():

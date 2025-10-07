@@ -42,43 +42,44 @@ class Config:
     @staticmethod
     def migrate_legacy_paths() -> None:
         """
-        Comprehensive migration for legacy paths. Renames prefix directories and profile
-        .json files from using spaces to hyphens.
+        Definitive migration for legacy paths. Renames prefix directories and profile
+        .json files from using spaces or hyphens to underscores.
         """
+        def _migrate_and_rename(path: Path):
+            original_name = path.name
+            # Standardize to underscores, cleaning up spaces and previous hyphen mistakes
+            new_name = original_name.replace(" ", "_").replace("-", "_")
+
+            if original_name == new_name:
+                return  # No migration needed for this path
+
+            new_path = path.parent / new_name
+            if new_path.exists():
+                print(f"Warning: Cannot migrate '{original_name}' because target '{new_name}' already exists. Skipping.", file=sys.stderr)
+                return
+
+            try:
+                path.rename(new_path)
+                print(f"Info: Migrated '{original_name}' to '{new_name}'.")
+            except OSError as e:
+                print(f"Error: Could not migrate '{original_name}'. Error: {e}", file=sys.stderr)
+
         # 1. Migrate Prefix Directories
         if Config.PREFIX_BASE_DIR.exists() and Config.PREFIX_BASE_DIR.is_dir():
-            for path in Config.PREFIX_BASE_DIR.iterdir():
-                if path.is_dir() and " " in path.name:
-                    new_name = path.name.replace(" ", "-")
-                    new_path = path.parent / new_name
-                    if new_path.exists():
-                        print(f"Warning: Cannot migrate prefix '{path.name}' because '{new_name}' already exists. Skipping.", file=sys.stderr)
-                        continue
-                    try:
-                        path.rename(new_path)
-                        print(f"Info: Migrated prefix directory '{path.name}' to '{new_name}'.")
-                    except OSError as e:
-                        print(f"Error: Could not migrate prefix directory '{path.name}'. Error: {e}", file=sys.stderr)
+            # list() creates a snapshot, as we modify the directory while iterating
+            for path in list(Config.PREFIX_BASE_DIR.iterdir()):
+                if path.is_dir():
+                    _migrate_and_rename(path)
 
         # 2. Migrate Profile Filenames
         if Config.PROFILE_DIR.exists() and Config.PROFILE_DIR.is_dir():
-            for path in Config.PROFILE_DIR.glob('*.json'):
-                if " " in path.stem:
-                    new_name = f"{path.stem.replace(' ', '-')}.json"
-                    new_path = path.parent / new_name
-                    if new_path.exists():
-                        print(f"Warning: Cannot migrate profile '{path.name}' because '{new_name}' already exists. Skipping.", file=sys.stderr)
-                        continue
-                    try:
-                        path.rename(new_path)
-                        print(f"Info: Migrated profile file '{path.name}' to '{new_name}'.")
-                    except OSError as e:
-                        print(f"Error: Could not migrate profile file '{path.name}'. Error: {e}", file=sys.stderr)
+            for path in list(Config.PROFILE_DIR.glob('*.json')):
+                _migrate_and_rename(path)
 
     @staticmethod
     def get_prefix_base_dir(game_name: str) -> Path:
         """
-        Returns the base prefix directory for a specific game, replacing spaces with hyphens.
+        Returns the base prefix directory for a specific game, replacing spaces with underscores.
         """
         safe_game_name = game_name.replace(" ", "_")
         return Config.PREFIX_BASE_DIR / safe_game_name

@@ -59,8 +59,8 @@ class GameProfile(BaseModel):
 
     @validator('game_name')
     def sanitize_game_name_for_paths(cls, v):
-        """Replaces spaces with hyphens to ensure it's a valid path component."""
-        return v.replace(' ', '-')
+        """Replaces spaces with underscores to ensure it's a valid path component."""
+        return v.replace(' ', '_')
 
     @validator('num_players')
     def validate_num_players(cls, v):
