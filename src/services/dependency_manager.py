@@ -17,22 +17,44 @@ class DependencyManager:
 
         Args:
             logger: The logger instance.
-            proton_path: The path to the Proton executable.
+            proton_path: The path to the Proton executable script.
             steam_root: The path to the Steam root directory.
         """
         self.logger = logger
         self.proton_path = proton_path
         self.steam_root = steam_root
-        self.wine_path = self.proton_path.parent / "dist/bin/wine"
-        self.wineserver_path = self.proton_path.parent / "dist/bin/wineserver"
+        # The directory containing wine, wineserver, etc.
+        self.proton_bin_path = self.proton_path.parent / "dist/bin"
+        # The directory containing dxvk, vkd3d libs
         self.proton_dist_path = self.proton_path.parent / "dist"
+
+    def _get_custom_env(self, prefix_path: Path) -> Dict[str, str]:
+        """
+        Prepares a custom environment for running Wine/Proton commands.
+        This modifies the PATH to ensure the correct Proton version is used.
+        """
+        env = os.environ.copy()
+
+        # Prepend Proton's bin directory to PATH
+        env["PATH"] = f"{self.proton_bin_path}:{env.get('PATH', '')}"
+
+        # Set Wine-specific environment variables
+        env["WINEPREFIX"] = str(prefix_path / "pfx")
+
+        # Explicitly point to the wine binary for tools like Winetricks
+        env["WINE"] = str(self.proton_bin_path / "wine")
+        env["WINESERVER"] = str(self.proton_bin_path / "wineserver")
+
+        # Set other common Proton/Steam environment variables
+        env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = str(self.steam_root)
+        env["DXVK_ASYNC"] = "1"
+        env["DXVK_LOG_LEVEL"] = "info"
+
+        return env
 
     def apply_dxvk_vkd3d(self, prefix_path: Path):
         """
         Applies DXVK/VKD3D to the given Wine prefix.
-
-        Args:
-            prefix_path: The path to the Wine prefix.
         """
         self.logger.info(f"Applying DXVK/VKD3D to prefix: {prefix_path}")
 
@@ -61,36 +83,23 @@ class DependencyManager:
                     self.logger.info(f"Copying {dll.name} to {dest_path}")
                     shutil.copy(dll, dest_path)
 
-        # Apply registry changes
         reg_commands = {
             'HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides': [
-                ('d3d10', 'native,builtin'),
-                ('d3d10_1', 'native,builtin'),
-                ('d3d10core', 'native,builtin'),
-                ('d3d11', 'native,builtin'),
-                ('d3d9', 'native,builtin'),
-                ('dxgi', 'native,builtin'),
-                ('d3d12', 'native,builtin'),
-                ('d3d12core', 'native,builtin'),
+                ('d3d10', 'native,builtin'), ('d3d10_1', 'native,builtin'),
+                ('d3d10core', 'native,builtin'), ('d3d11', 'native,builtin'),
+                ('d3d9', 'native,builtin'), ('dxgi', 'native,builtin'),
+                ('d3d12', 'native,builtin'), ('d3d12core', 'native,builtin'),
             ]
         }
+
+        custom_env = self._get_custom_env(prefix_path)
 
         for key, values in reg_commands.items():
             for value_name, value_data in values:
                 try:
                     subprocess.run(
-                        [
-                            str(self.wine_path),
-                            "reg",
-                            "add",
-                            key,
-                            "/v",
-                            value_name,
-                            "/d",
-                            value_data,
-                            "/f",
-                        ],
-                        env={"WINEPREFIX": str(prefix_path / "pfx")},
+                        ["wine", "reg", "add", key, "/v", value_name, "/d", value_data, "/f"],
+                        env=custom_env,
                         check=True,
                         capture_output=True,
                         text=True,
@@ -104,10 +113,6 @@ class DependencyManager:
     def apply_winetricks(self, prefix_path: Path, verbs: List[str]):
         """
         Applies Winetricks verbs to the given Wine prefix.
-
-        Args:
-            prefix_path: The path to the Wine prefix.
-            verbs: A list of Winetricks verbs to apply.
         """
         if not verbs:
             return
@@ -119,17 +124,12 @@ class DependencyManager:
             self.logger.error("Winetricks is not installed or not in PATH.")
             return
 
-        env = {
-            **self.get_base_env(),
-            "WINE": str(self.wine_path),
-            "WINESERVER": str(self.wineserver_path),
-            "WINEPREFIX": str(prefix_path / "pfx"),
-        }
+        custom_env = self._get_custom_env(prefix_path)
 
         try:
             subprocess.run(
                 [winetricks_path, *verbs],
-                env=env,
+                env=custom_env,
                 check=True,
                 capture_output=True,
                 text=True,
@@ -139,16 +139,3 @@ class DependencyManager:
             self.logger.error(f"Failed to apply Winetricks verbs: {verbs}")
             self.logger.error(f"Stderr: {e.stderr}")
             self.logger.error(f"Stdout: {e.stdout}")
-
-    def get_base_env(self) -> Dict[str, str]:
-        """
-        Returns a base set of environment variables for running Wine/Proton commands.
-
-        Returns:
-            A dictionary of environment variables.
-        """
-        env = os.environ.copy()
-        env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = str(self.steam_root)
-        env["DXVK_ASYNC"] = "1"
-        env["DXVK_LOG_LEVEL"] = "info"
-        return env
