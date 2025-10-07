@@ -64,7 +64,8 @@ class DependencyManager:
                 timeout=120 # 2 minutes timeout
             )
             self.logger.info("Wine prefix initialized successfully.")
-            self.logger.debug(f"wineboot stdout: {proc.stdout}")
+            # Use info for verbose output as debug is not available
+            self.logger.info(f"wineboot stdout: {proc.stdout}")
         except subprocess.TimeoutExpired:
             self.logger.error("wineboot command timed out after 120 seconds.")
         except subprocess.CalledProcessError as e:
