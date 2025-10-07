@@ -17,7 +17,6 @@ class DependencyManager:
         self.steam_root = steam_root
         self.proton_root_dir = proton_path.parent
 
-        # Detect structure (GE-Proton vs. Valve Proton)
         if (self.proton_root_dir / 'files').exists():
             self.logger.info("Detected GE-Proton-like structure.")
             self.proton_bin_path = self.proton_root_dir / 'files' / 'bin'
@@ -30,9 +29,8 @@ class DependencyManager:
             self.proton_bin_path = self.proton_root_dir / 'dist' / 'bin'
             self.lib_path_x64 = self.proton_root_dir / 'dist' / 'lib64' / 'wine'
             self.lib_path_x86 = self.proton_root_dir / 'dist' / 'lib' / 'wine'
-            self.arch_folder_x64 = '' # In Valve's structure, DLLs are directly in the lib folder
+            self.arch_folder_x64 = ''
             self.arch_folder_x86 = ''
-
 
     def _get_custom_env(self, prefix_path: Path) -> Dict[str, str]:
         """
@@ -47,6 +45,30 @@ class DependencyManager:
         env["DXVK_ASYNC"] = "1"
         env["DXVK_LOG_LEVEL"] = "info"
         return env
+
+    def _initialize_prefix(self, prefix_path: Path):
+        """
+        Initializes the Wine prefix to ensure its structure is created before use.
+        """
+        self.logger.info(f"Initializing Wine prefix at {prefix_path / 'pfx'}...")
+        custom_env = self._get_custom_env(prefix_path)
+        try:
+            # Run wineboot to create the prefix structure. Timeout is added for safety.
+            proc = subprocess.run(
+                ["wineboot", "--init"],
+                env=custom_env,
+                check=True,
+                capture_output=True,
+                text=True,
+                errors='replace',
+                timeout=120 # 2 minutes timeout
+            )
+            self.logger.info("Wine prefix initialized successfully.")
+            self.logger.debug(f"wineboot stdout: {proc.stdout}")
+        except subprocess.TimeoutExpired:
+            self.logger.error("wineboot command timed out after 120 seconds.")
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"Failed to initialize Wine prefix. Stderr: {e.stderr}")
 
     def _get_dll_paths(self, lib_name: str) -> Optional[Dict[str, Path]]:
         """
@@ -69,6 +91,9 @@ class DependencyManager:
         Applies DXVK/VKD3D to the given Wine prefix.
         """
         self.logger.info(f"Applying DXVK/VKD3D to prefix: {prefix_path}")
+
+        # Initialize prefix first to ensure directories exist
+        self._initialize_prefix(prefix_path)
 
         system32_path = prefix_path / "pfx/system32"
         syswow64_path = prefix_path / "pfx/syswow64"
@@ -93,7 +118,6 @@ class DependencyManager:
                 for dll in src_path.glob("*.dll"):
                     shutil.copy(dll, dest_path)
 
-        # Apply registry changes
         custom_env = self._get_custom_env(prefix_path)
         reg_commands = {
             'HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides': [
@@ -119,6 +143,9 @@ class DependencyManager:
         """
         if not verbs:
             return
+
+        # Winetricks also needs an initialized prefix
+        self._initialize_prefix(prefix_path)
 
         self.logger.info(f"Applying Winetricks verbs: {verbs}")
         winetricks_path = shutil.which("winetricks")
