@@ -40,6 +40,35 @@ class Config:
     FILE_IO_TIMEOUT = 5
 
     @staticmethod
+    def migrate_prefix_directories() -> None:
+        """
+        Scans the prefix base directory and renames any subdirectories containing spaces
+        to use hyphens instead. This is a one-time migration for existing setups.
+        """
+        if not Config.PREFIX_BASE_DIR.exists() or not Config.PREFIX_BASE_DIR.is_dir():
+            return  # No prefixes to migrate
+
+        for path in Config.PREFIX_BASE_DIR.iterdir():
+            if path.is_dir() and " " in path.name:
+                new_name = path.name.replace(" ", "-")
+                new_path = path.parent / new_name
+
+                if new_path.exists():
+                    # If a directory with the new name already exists, do not attempt to migrate.
+                    # This avoids overwriting existing prefixes.
+                    print(f"Warning: Cannot migrate '{path.name}' because '{new_name}' already exists. Skipping.", file=sys.stderr)
+                    continue
+
+                try:
+                    path.rename(new_path)
+                    print(f"Info: Migrated prefix directory '{path.name}' to '{new_name}'.")
+                except OSError as e:
+                    print(f"Error: Could not migrate prefix directory '{path.name}'. Error: {e}", file=sys.stderr)
+
+    @staticmethod
     def get_prefix_base_dir(game_name: str) -> Path:
-        """Returns the base prefix directory for a specific game."""
-        return Config.PREFIX_BASE_DIR / game_name
+        """
+        Returns the base prefix directory for a specific game, replacing spaces with hyphens.
+        """
+        safe_game_name = game_name.replace(" ", "-")
+        return Config.PREFIX_BASE_DIR / safe_game_name
