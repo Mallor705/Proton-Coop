@@ -2,7 +2,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 from ..core.config import Config
 from ..core.logger import Logger
@@ -42,41 +42,33 @@ class DependencyManager:
 
     def _find_dll_paths(self, lib_name: str) -> Optional[Dict[str, Path]]:
         """
-        Dynamically finds the library paths for a given library name (e.g., 'dxvk').
-        It searches within the Proton installation directory for common structures.
+        Dynamically finds library paths and version for a given library name.
+        Searches for directories starting with the library name (e.g., 'dxvk-2.3').
         """
-        self.logger.info(f"Searching for '{lib_name}' library in '{self.proton_root_dir}'...")
+        self.logger.info(f"Searching for '{lib_name}*' library in '{self.proton_root_dir}'...")
 
-        # First, try the standard Valve Proton structure
-        std_x64_path = self.proton_root_dir / f"dist/lib64/wine/{lib_name}"
-        std_x86_path = self.proton_root_dir / f"dist/lib/wine/{lib_name}"
-
-        if std_x64_path.exists() and std_x86_path.exists():
-            self.logger.info(f"Found '{lib_name}' using standard Proton 'dist' structure.")
-            return {"x64": std_x64_path, "x86": std_x86_path}
-
-        # If not found, try a broader search for GE-Proton and other custom versions
-        self.logger.warning(f"Standard paths not found for '{lib_name}'. Trying broader search for custom Proton versions...")
-
-        found_base_dirs = list(self.proton_root_dir.rglob(lib_name))
+        # Use rglob to find directories that start with the library name.
+        found_base_dirs = list(self.proton_root_dir.rglob(f"{lib_name}*"))
 
         for base_dir in found_base_dirs:
             if not base_dir.is_dir():
                 continue
 
+            # Heuristics to find 64-bit and 32-bit folders
             x64_dir = base_dir / 'x64' if (base_dir / 'x64').exists() else base_dir / 'lib64'
             x86_dir = base_dir / 'x86' if (base_dir / 'x86').exists() else base_dir / 'lib'
 
             if x64_dir.exists() and x86_dir.exists():
-                self.logger.info(f"Found '{lib_name}' paths in custom structure: {base_dir}")
-                return {"x64": x64_dir, "x86": x86_dir}
+                version = base_dir.name  # e.g., "dxvk-2.3"
+                self.logger.info(f"Found '{lib_name}' version '{version}' in custom structure: {base_dir}")
+                return {"x64": x64_dir, "x86": x86_dir, "version": version}
 
         self.logger.error(f"Failed to find any valid directory structure for '{lib_name}' in {self.proton_root_dir}.")
         return None
 
     def apply_dxvk_vkd3d(self, prefix_path: Path):
         """
-        Applies DXVK/VKD3D to the given Wine prefix.
+        Applies DXVK/VKD3D to the given Wine prefix, checking versions to avoid re-installation.
         """
         self.logger.info(f"Applying DXVK/VKD3D to prefix: {prefix_path}")
 
@@ -88,12 +80,25 @@ class DependencyManager:
             "vkd3d-proton": self._find_dll_paths("vkd3d-proton"),
         }
 
-        for lib_name, paths in dll_sources.items():
-            if not paths:
+        for lib_name, paths_info in dll_sources.items():
+            if not paths_info:
                 self.logger.warning(f"Skipping '{lib_name}' as its paths were not found.")
                 continue
 
-            for arch, src_path in paths.items():
+            version_file = prefix_path / f".{lib_name}.version"
+            available_version = paths_info.get("version")
+
+            if version_file.exists():
+                installed_version = version_file.read_text().strip()
+                if installed_version == available_version:
+                    self.logger.info(f"'{lib_name}' version '{available_version}' is already installed. Skipping.")
+                    continue
+
+            self.logger.info(f"Installing '{lib_name}' version '{available_version}'.")
+
+            for arch, src_path in paths_info.items():
+                if arch == "version": continue # Skip the version key
+
                 dest_path = syswow64_path if arch == "x86" else system32_path
                 if not src_path.exists():
                     self.logger.warning(f"Source path for {lib_name} ({arch}) not found: {src_path}")
@@ -101,9 +106,13 @@ class DependencyManager:
 
                 self.logger.info(f"Copying DLLs for {lib_name} ({arch}) from {src_path} to {dest_path}")
                 for dll in src_path.glob("*.dll"):
-                    self.logger.info(f"Copying {dll.name} to {dest_path}")
                     shutil.copy(dll, dest_path)
 
+            # After successful copy, write the new version to the file
+            version_file.write_text(str(available_version))
+            self.logger.info(f"Wrote version '{available_version}' to '{version_file}'")
+
+        # Registry changes are applied regardless of version, as they are idempotent.
         reg_commands = {
             'HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides': [
                 ('d3d10', 'native,builtin'), ('d3d10_1', 'native,builtin'),
@@ -120,17 +129,10 @@ class DependencyManager:
                 try:
                     subprocess.run(
                         ["wine", "reg", "add", key, "/v", value_name, "/d", value_data, "/f"],
-                        env=custom_env,
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                        errors='replace',
+                        env=custom_env, check=True, capture_output=True, text=True, errors='replace'
                     )
-                    self.logger.info(f"Successfully set registry key: {key}\\{value_name} = {value_data}")
                 except subprocess.CalledProcessError as e:
-                    self.logger.error(f"Failed to set registry key: {key}\\{value_name}")
-                    self.logger.error(f"Stderr: {e.stderr}")
-                    self.logger.error(f"Stdout: {e.stdout}")
+                    self.logger.error(f"Failed to set registry key: {key}\\{value_name}. Stderr: {e.stderr}")
 
     def apply_winetricks(self, prefix_path: Path, verbs: List[str]):
         """
@@ -151,14 +153,8 @@ class DependencyManager:
         try:
             subprocess.run(
                 [winetricks_path, *verbs],
-                env=custom_env,
-                check=True,
-                capture_output=True,
-                text=True,
-                errors='replace',
+                env=custom_env, check=True, capture_output=True, text=True, errors='replace'
             )
             self.logger.info(f"Successfully applied Winetricks verbs: {verbs}")
         except subprocess.CalledProcessError as e:
-            self.logger.error(f"Failed to apply Winetricks verbs: {verbs}")
-            self.logger.error(f"Stderr: {e.stderr}")
-            self.logger.error(f"Stdout: {e.stdout}")
+            self.logger.error(f"Failed to apply Winetricks verbs: {verbs}. Stderr: {e.stderr}")
