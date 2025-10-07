@@ -133,14 +133,15 @@ class InstanceService:
                 self.logger.info(f"Skipping instance {instance_num} as it's not selected by the user.")
                 continue  # Skip to the next player if not selected
 
-            # Organizes prefixes by game and by instance
+            # Organizes prefixes by game and by instance.
+            # Uses the sanitized `profile.game_name` to ensure paths are clean.
             prefix_dir = Config.get_prefix_base_dir(profile.game_name) / f"instance_{instance_num}"
-            log_file = Config.LOG_DIR / f"{profile_name}_instance_{instance_num}.log"
+            log_file = Config.LOG_DIR / f"{profile.game_name}_instance_{instance_num}.log"
             prefix_dir.mkdir(parents=True, exist_ok=True)
             (prefix_dir / "pfx").mkdir(exist_ok=True)
             instance = GameInstance(
                 instance_num=instance_num,
-                profile_name=profile_name,
+                profile_name=profile.game_name,  # Use sanitized name
                 prefix_dir=prefix_dir,
                 log_file=log_file,
                 player_config=player_config

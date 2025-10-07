@@ -57,6 +57,11 @@ class GameProfile(BaseModel):
     player_configs: Optional[List[PlayerInstanceConfig]] = Field(default=None, alias="PLAYERS")
     selected_players: Optional[List[int]] = Field(default=None, alias="selected_players") # Readded for GUI selection
 
+    @validator('game_name')
+    def sanitize_game_name_for_paths(cls, v):
+        """Replaces spaces with underscores to ensure it's a valid path component."""
+        return v.replace(' ', '_')
+
     @validator('num_players')
     def validate_num_players(cls, v):
         """Validates if the number of players is supported (minimum 1, maximum 4)."""
