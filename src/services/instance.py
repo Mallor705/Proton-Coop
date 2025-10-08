@@ -397,7 +397,7 @@ class InstanceService:
 
         gamescope_cli_options = [
             gamescope_path,
-            '-v',
+            '-e', # Enable Steam integration for proper launcher handling
             '-W', str(effective_width),
             '-H', str(effective_height),
             '-w', str(effective_width),
@@ -421,11 +421,6 @@ class InstanceService:
         if should_add_grab_flags:
             self.logger.info(f"Instance {instance_num}: Using dedicated mouse and keyboard. Adding --grab and --force-grab-cursor to Gamescope.")
             gamescope_cli_options.extend(['--grab', '--force-grab-cursor'])
-
-        # Add --wait-for-process if specified in the profile
-        if profile.gamescope_wait_for_process:
-            self.logger.info(f"Instance {instance_num}: Gamescope will wait for process '{profile.gamescope_wait_for_process}'.")
-            gamescope_cli_options.extend(['--wait-for-process', profile.gamescope_wait_for_process])
 
         return gamescope_cli_options
 
