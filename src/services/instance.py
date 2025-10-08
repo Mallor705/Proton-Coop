@@ -233,7 +233,7 @@ class InstanceService:
         instance_idx = instance.instance_num - 1
         device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
 
-        env = self._prepare_environment(instance, steam_root, profile, device_info, cpu_affinity)
+        env = self._prepare_environment(instance, steam_root, proton_path, profile)
         cmd = self._build_command(profile, proton_path, instance, symlinked_executable_path, cpu_affinity)
 
         self.logger.info(f"Launching instance {instance.instance_num} (Log: {instance.log_file})")
@@ -253,68 +253,48 @@ class InstanceService:
         except Exception as e:
             self.logger.error(f"Failed to launch instance {instance.instance_num}: {e}")
 
-    def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = {}, cpu_affinity: str = "") -> dict:
-        """Prepares environment variables for the game instance, including control isolation, XKB configuration, and CPU affinity for Wine."""
+    def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], proton_path: Optional[Path], profile: Optional[GameProfile] = None) -> dict:
+        """Prepares a minimal environment for the game instance, mirroring the user's script."""
         env = os.environ.copy()
-        env['PATH'] = os.environ['PATH']
+        original_path = env.get('PATH', '')
 
         # Clean up potentially conflicting Python variables
         env.pop('PYTHONHOME', None)
         env.pop('PYTHONPATH', None)
 
-        if not (profile.is_native if profile else False):
+        if not (profile and profile.is_native):
+            # --- Essential Proton/Wine variables from user script ---
             if steam_root:
                 env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
-            env['DXVK_ASYNC'] = '1'
-            env['DXVK_LOG_LEVEL'] = 'info'
+                self.logger.info(f"Instance {instance.instance_num}: Setting STEAM_COMPAT_CLIENT_INSTALL_PATH to '{str(steam_root)}'")
 
-            if profile and profile.app_id:
-                env['SteamAppId'] = profile.app_id
-                env['SteamGameId'] = profile.app_id
-
-        # XKB configuration for keyboard layout
-        xkb_vars = ['XKB_DEFAULT_LAYOUT', 'XKB_DEFAULT_VARIANT', 'XKB_DEFAULT_RULES', 'XKB_DEFAULT_MODEL', 'XKB_DEFAULT_OPTIONS']
-        for var in xkb_vars:
-            if var in os.environ:
-                env[var] = os.environ[var]
-
-        # Instance-specific environment variables
-        if not (profile.is_native if profile else False):
             env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
-            env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
-            # Add WINE_CPU_TOPOLOGY for CPU affinity
-            env['WINE_CPU_TOPOLOGY'] = f"{self.cpu_count}:{cpu_affinity}"
-            self.logger.info(f"Instance {instance.instance_num}: Setting WINE_CPU_TOPOLOGY to '{env['WINE_CPU_TOPOLOGY']}'.")
+            self.logger.info(f"Instance {instance.instance_num}: Setting STEAM_COMPAT_DATA_PATH to '{str(instance.prefix_dir)}'")
 
-        # Add environment variables defined in the profile
+            env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
+            self.logger.info(f"Instance {instance.instance_num}: Setting WINEPREFIX to '{str(instance.prefix_dir / 'pfx')}'")
+
+            # --- PATH modification from user script ---
+            if proton_path:
+                proton_bin_dir = proton_path.parent
+                env['PATH'] = f"{str(proton_bin_dir)}:{original_path}"
+                self.logger.info(f"Instance {instance.instance_num}: Prepended '{str(proton_bin_dir)}' to PATH.")
+
+        # --- Add environment variables defined in the profile ---
         if profile and profile.env_vars:
+            self.logger.info(f"Instance {instance.instance_num}: Applying environment variables from profile.")
             for key, value in profile.env_vars.items():
                 env[key] = value
+                self.logger.info(f"  - Set {key}={value}")
 
-        # Handle joystick assignment
-        assigned_joystick_path = self._get_joystick_for_instance(instance, profile)
-        if assigned_joystick_path:
-            env['SDL_JOYSTICK_DEVICE'] = assigned_joystick_path
-        else:
-            env.pop('SDL_JOYSTICK_DEVICE', None)
+        # --- Add sane defaults from user's script if not overridden ---
+        if not (profile and profile.is_native):
+            if 'PROTON_NO_ESYNC' not in env:
+                env['PROTON_NO_ESYNC'] = "0"
+            if 'PROTON_NO_FSYNC' not in env:
+                env['PROTON_NO_FSYNC'] = "0"
 
-        # Handle audio device assignment (PULSE_SINK for PulseAudio)
-        if device_info and device_info.get('audio_device_id_for_instance'):
-            audio_device_id = device_info['audio_device_id_for_instance']
-            env['PULSE_SINK'] = audio_device_id
-            self.logger.info(f"Instance {instance.instance_num}: Setting PULSE_SINK to '{audio_device_id}'.")
-        else:
-            env.pop('PULSE_SINK', None)
-            self.logger.info(f"Instance {instance.instance_num}: No specific audio device assigned. PULSE_SINK not set.")
-
-        # Define WAYLANDDRV_PRIMARY_MONITOR com base na configuração do jogador
-        if instance.player_config and instance.player_config.monitor_id:
-            env['WAYLANDDRV_PRIMARY_MONITOR'] = instance.player_config.monitor_id
-            self.logger.info(f"Instance {instance.instance_num}: Setting WAYLANDDRV_PRIMARY_MONITOR to '{instance.player_config.monitor_id}'.")
-        else:
-            env.pop('WAYLANDDRV_PRIMARY_MONITOR', None)
-            self.logger.info(f"Instance {instance.instance_num}: No specific monitor selected for this instance.")
-
+        self.logger.info(f"Instance {instance.instance_num}: Final environment prepared.")
         return env
 
     def _get_joystick_for_instance(self, instance: GameInstance, profile: Optional[GameProfile]) -> Optional[str]:
@@ -357,9 +337,8 @@ class InstanceService:
         else:
             bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num)
 
-        # Add taskset at the beginning of the final command to ensure affinity for the entire process
-        taskset_cmd = ["taskset", "-c", cpu_affinity]
-        final_cmd = taskset_cmd + bwrap_cmd + base_cmd
+        # Command without taskset for CPU affinity, to mirror user's script
+        final_cmd = bwrap_cmd + base_cmd
         final_bwrap_cmd_str = ' '.join(final_cmd)
         self.logger.info(f"Instance {instance.instance_num}: Full command: {final_bwrap_cmd_str}")
 
