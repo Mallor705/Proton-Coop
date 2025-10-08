@@ -76,8 +76,7 @@ class ProcessService:
                 stdout=log, 
                 stderr=subprocess.STDOUT,
                 env=env,
-                cwd=cwd,
-                preexec_fn=os.setsid
+                cwd=cwd
             )
 
         self.pids.append(process.pid)
@@ -92,31 +91,53 @@ class ProcessService:
         return process.pid
     
     def terminate_all(self) -> None:
-        """Terminates all managed processes."""
+        """Terminates all managed processes and their children."""
         if not self.pids:
             return
-            
+
         self.logger.info(f"Terminating PIDs: {self.pids}")
         
-        # Terminate all processes first
-        for pid in self.pids[:]:
+        procs_to_terminate = []
+        for pid in self.pids:
             try:
-                os.killpg(os.getpgid(pid), signal.SIGTERM)
+                parent = psutil.Process(pid)
+                # Get all children recursively and the parent itself
+                procs_to_terminate.extend(parent.children(recursive=True))
+                procs_to_terminate.append(parent)
+            except psutil.NoSuchProcess:
+                # Process already died, just mark for removal
                 self._terminated_pids.add(pid)
-            except (ProcessLookupError, OSError):
-                self.pids.remove(pid)
+                continue
         
-        # Wait a bit for graceful termination
-        if self.pids:
-            time.sleep(2)
-            
-        # Force kill remaining processes
-        for pid in self.pids[:]:
+        if not procs_to_terminate:
+            self.pids = []
+            return
+
+        # Graceful termination
+        self.logger.info(f"Sending SIGTERM to {len(procs_to_terminate)} processes...")
+        for proc in procs_to_terminate:
             try:
-                os.killpg(os.getpgid(pid), signal.SIGKILL)
-                self.pids.remove(pid)
-            except (ProcessLookupError, OSError):
+                proc.terminate()
+                self._terminated_pids.add(proc.pid)
+            except psutil.NoSuchProcess:
                 pass
+
+        # Wait for processes to terminate gracefully
+        gone, alive = psutil.wait_procs(procs_to_terminate, timeout=2)
+
+        # Force kill any remaining processes
+        if alive:
+            self.logger.info(f"Sending SIGKILL to {len(alive)} remaining processes...")
+            for proc in alive:
+                try:
+                    proc.kill()
+                    self._terminated_pids.add(proc.pid)
+                except psutil.NoSuchProcess:
+                    pass
+
+        # The `monitor_processes` method is responsible for cleaning up the PID list.
+        # This method's only job is to attempt termination.
+        pass
     
     @lru_cache(maxsize=32)
     def _check_pid_exists(self, pid: int) -> bool:
