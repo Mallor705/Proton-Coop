@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field, validator, ConfigDict, ValidationError
 from typing import Optional, List, Dict, Tuple
 
 from ..core.exceptions import ProfileNotFoundError, ExecutableNotFoundError
-from ..core.cache import get_cache
 from ..core.logger import Logger
 from ..core.config import Config
 
@@ -78,8 +77,7 @@ class GameProfile(BaseModel):
             return v
 
         path_v = Path(v)
-        cache = get_cache()
-        if not cache.check_path_exists(path_v):
+        if not path_v.exists():
             # Only raise error if path is not empty and not found
             if str(path_v) != "":
                 raise ExecutableNotFoundError(f"Game executable not found: {path_v}")
@@ -107,13 +105,6 @@ class GameProfile(BaseModel):
     @classmethod
     def load_from_file(cls, profile_path: Path) -> "GameProfile":
         """Loads a game profile from a JSON file."""
-        # Check cache first
-        cache = get_cache()
-        profile_key = str(profile_path)
-        cached_profile = cache.get_profile(profile_key)
-        if cached_profile is not None:
-            return cached_profile
-
         # Batch validations
         if not profile_path.exists():
             raise ProfileNotFoundError(f"Profile not found: {profile_path}")
@@ -143,8 +134,6 @@ class GameProfile(BaseModel):
             Logger("LinuxCoopGUI", Config.LOG_DIR).error(f"Unexpected error during GameProfile instantiation for {profile_path}: {e}")
             raise
 
-        # Cache the loaded profile
-        cache.set_profile(profile_key, profile)
         return profile
 
     @classmethod
@@ -230,7 +219,3 @@ class GameProfile(BaseModel):
         # indent=4 for formatted and readable JSON output
         json_data = self.model_dump_json(by_alias=True, indent=4)
         profile_path.write_text(json_data, encoding='utf-8')
-
-        # Invalidate the cache for this profile after saving
-        cache = get_cache()
-        cache.invalidate_profile(str(profile_path))

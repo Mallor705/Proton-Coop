@@ -869,11 +869,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
                 json.dump(profile_data_dumped, f, indent=4)
             self.statusbar.set_label(f"Profile saved successfully to: {profile_path.name}")
 
-            # Invalidate the cache for this profile after saving
-            from ..core.cache import get_cache
-            cache = get_cache()
-            cache.invalidate_profile(str(profile_path))
-
             # Reload the just-saved profile to ensure GUI and cache are updated
             reloaded_profile = GameProfile.load_from_file(profile_path)
             self.load_profile_data(reloaded_profile.model_dump(by_alias=True))

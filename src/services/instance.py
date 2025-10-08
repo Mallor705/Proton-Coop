@@ -20,21 +20,13 @@ class InstanceService:
         self.logger = logger
         self.proton_service = ProtonService(logger)
         self.process_service = ProcessService(logger)
-        self._dependency_cache: Dict[str, bool] = {}
-        self._env_cache: Dict[str, dict] = {}
         self.cpu_count = psutil.cpu_count(logical=True) # Get the number of logical CPU cores (includes threads)
 
     def validate_dependencies(self) -> None:
         """Validates if all necessary commands are available on the system."""
-        if self._dependency_cache:
-            self.logger.info("Dependencies already validated (cached)")
-            return
-
         self.logger.info("Validating dependencies...")
         for cmd in Config.REQUIRED_COMMANDS:
-            if cmd not in self._dependency_cache:
-                self._dependency_cache[cmd] = shutil.which(cmd) is not None
-            if not self._dependency_cache[cmd]:
+            if not shutil.which(cmd):
                 raise DependencyError(f"Required command '{cmd}' not found")
         self.logger.info("Dependencies validated successfully")
 
@@ -58,19 +50,11 @@ class InstanceService:
             else:
                 self.logger.warning("⚠️  bwrap is disabled for this profile. Input device isolation will NOT work!")
 
-            # Cache proton lookup
-            proton_cache_key = f"{profile.is_native}_{profile.proton_version}"
-            if proton_cache_key not in self._env_cache:
-                if profile.is_native:
-                    proton_path = None
-                    steam_root = None
-                else:
-                    proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version or "Experimental")
-                self._env_cache[proton_cache_key] = {'proton_path': proton_path, 'steam_root': steam_root}
+            if profile.is_native:
+                proton_path = None
+                steam_root = None
             else:
-                cached_data = self._env_cache[proton_cache_key]
-                proton_path = cached_data['proton_path']
-                steam_root = cached_data['steam_root']
+                proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version or "Experimental")
 
             self.process_service.cleanup_previous_instances(proton_path, profile.exe_path)
 
@@ -260,35 +244,28 @@ class InstanceService:
 
     def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = {}, cpu_affinity: str = "") -> dict:
         """Prepares environment variables for the game instance, including control isolation, XKB configuration, and CPU affinity for Wine."""
-        # Use cache for base environment
-        base_env_key = f"base_{profile.is_native if profile else False}_{steam_root}_{profile.app_id if profile else None}"
-        if base_env_key not in self._env_cache:
-            env = os.environ.copy()
-            env['PATH'] = os.environ['PATH']
+        env = os.environ.copy()
+        env['PATH'] = os.environ['PATH']
 
-            # Clean up potentially conflicting Python variables
-            env.pop('PYTHONHOME', None)
-            env.pop('PYTHONPATH', None)
+        # Clean up potentially conflicting Python variables
+        env.pop('PYTHONHOME', None)
+        env.pop('PYTHONPATH', None)
 
-            if not (profile.is_native if profile else False):
-                if steam_root:
-                    env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
-                env['DXVK_ASYNC'] = '1'
-                env['DXVK_LOG_LEVEL'] = 'info'
+        if not (profile.is_native if profile else False):
+            if steam_root:
+                env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
+            env['DXVK_ASYNC'] = '1'
+            env['DXVK_LOG_LEVEL'] = 'info'
 
-                if profile and profile.app_id:
-                    env['SteamAppId'] = profile.app_id
-                    env['SteamGameId'] = profile.app_id
+            if profile and profile.app_id:
+                env['SteamAppId'] = profile.app_id
+                env['SteamGameId'] = profile.app_id
 
-            # XKB configuration for keyboard layout (cache values)
-            xkb_vars = ['XKB_DEFAULT_LAYOUT', 'XKB_DEFAULT_VARIANT', 'XKB_DEFAULT_RULES', 'XKB_DEFAULT_MODEL', 'XKB_DEFAULT_OPTIONS']
-            for var in xkb_vars:
-                if var in os.environ:
-                    env[var] = os.environ[var]
-
-            self._env_cache[base_env_key] = env
-        else:
-            env = self._env_cache[base_env_key].copy()
+        # XKB configuration for keyboard layout
+        xkb_vars = ['XKB_DEFAULT_LAYOUT', 'XKB_DEFAULT_VARIANT', 'XKB_DEFAULT_RULES', 'XKB_DEFAULT_MODEL', 'XKB_DEFAULT_OPTIONS']
+        for var in xkb_vars:
+            if var in os.environ:
+                env[var] = os.environ[var]
 
         # Instance-specific environment variables
         if not (profile.is_native if profile else False):
