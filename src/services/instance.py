@@ -1,6 +1,8 @@
 import os
 import time
 import shutil
+import signal
+import subprocess
 from pathlib import Path
 import psutil
 from typing import List, Optional, Dict
@@ -10,17 +12,16 @@ from ..core.logger import Logger
 from ..models.profile import GameProfile, PlayerInstanceConfig
 from ..models.instance import GameInstance
 from .proton import ProtonService
-from .process import ProcessService
 from .dependency_manager import DependencyManager
 
 class InstanceService:
     """Service responsible for managing game instances, including dependency validation, creation, launching, and monitoring."""
     def __init__(self, logger: Logger):
-        """Initializes the instance service with logger, ProtonService, and ProcessService."""
+        """Initializes the instance service with logger and ProtonService."""
         self.logger = logger
         self.proton_service = ProtonService(logger)
-        self.process_service = ProcessService(logger)
-        self.cpu_count = psutil.cpu_count(logical=True) # Get the number of logical CPU cores (includes threads)
+        self.pids: List[int] = []
+        self.cpu_count = psutil.cpu_count(logical=True)
 
     def validate_dependencies(self) -> None:
         """Validates if all necessary commands are available on the system."""
@@ -55,8 +56,6 @@ class InstanceService:
                 steam_root = None
             else:
                 proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version or "Experimental")
-
-            self.process_service.cleanup_previous_instances(proton_path, profile.exe_path)
 
             # Create directories in batch
             directories = [
@@ -102,7 +101,7 @@ class InstanceService:
                 time.sleep(5)
 
             self.logger.info(f"All {profile.effective_num_players} instances launched")
-            self.logger.info(f"PIDs: {self.process_service.pids}")
+            self.logger.info(f"PIDs: {self.pids}")
             self.logger.info("Press CTRL+C to terminate all instances")
 
     def _create_instances(self, profile: GameProfile, profile_name: str, proton_path: Optional[Path], steam_root: Optional[Path]) -> List[GameInstance]:
@@ -238,9 +237,21 @@ class InstanceService:
         cmd = self._build_command(profile, proton_path, instance, symlinked_executable_path, cpu_affinity)
 
         self.logger.info(f"Launching instance {instance.instance_num} (Log: {instance.log_file})")
-        pid = self.process_service.launch_instance(cmd, instance.log_file, env, cwd=symlinked_executable_path.parent)
-        instance.pid = pid
-        self.logger.info(f"Instance {instance.instance_num} started with PID: {pid}")
+        try:
+            with open(instance.log_file, 'w') as log:
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    env=env,
+                    cwd=symlinked_executable_path.parent
+                )
+            pid = process.pid
+            self.pids.append(pid)
+            instance.pid = pid
+            self.logger.info(f"Instance {instance.instance_num} started with PID: {pid}")
+        except Exception as e:
+            self.logger.error(f"Failed to launch instance {instance.instance_num}: {e}")
 
     def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = {}, cpu_affinity: str = "") -> dict:
         """Prepares environment variables for the game instance, including control isolation, XKB configuration, and CPU affinity for Wine."""
@@ -514,13 +525,36 @@ class InstanceService:
 
         return collected_paths
 
+    def _is_any_process_running(self) -> bool:
+        """Checks if any of the managed PIDs are still running."""
+        if not self.pids:
+            return False
+
+        alive_pids = [pid for pid in self.pids if psutil.pid_exists(pid)]
+        self.pids = alive_pids
+        return len(alive_pids) > 0
+
     def monitor_and_wait(self) -> None:
         """Monitors instances until all are terminated."""
-        while self.process_service.monitor_processes():
+        while self._is_any_process_running():
             time.sleep(5)
 
         self.logger.info("All instances have terminated")
 
     def terminate_all(self) -> None:
-        """Terminates all game instances managed by the service."""
-        self.process_service.terminate_all()
+        """Terminates all game instances managed by the service by killing the bwrap process."""
+        if not self.pids:
+            return
+
+        self.logger.info(f"Terminating PIDs by sending SIGKILL: {self.pids}")
+        for pid in self.pids:
+            try:
+                # Forcefully kill the process. For bwrap, this kills the sandbox and everything inside.
+                os.kill(pid, signal.SIGKILL)
+                self.logger.info(f"Sent SIGKILL to PID {pid}")
+            except ProcessLookupError:
+                self.logger.info(f"PID {pid} not found, likely already terminated.")
+            except Exception as e:
+                self.logger.error(f"Failed to kill PID {pid}: {e}")
+
+        self.pids = [] # Clear the list after attempting termination
