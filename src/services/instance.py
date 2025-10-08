@@ -294,6 +294,13 @@ class InstanceService:
             if 'PROTON_NO_FSYNC' not in env:
                 env['PROTON_NO_FSYNC'] = "0"
 
+            # Add SteamAppId if present in profile, crucial for Gamescope's -e flag
+            if profile and profile.app_id:
+                env['SteamAppId'] = profile.app_id
+                env['SteamGameId'] = profile.app_id
+                self.logger.info(f"Instance {instance.instance_num}: Setting SteamAppId and SteamGameId to '{profile.app_id}' for Gamescope integration.")
+
+
         self.logger.info(f"Instance {instance.instance_num}: Final environment prepared.")
         return env
 
