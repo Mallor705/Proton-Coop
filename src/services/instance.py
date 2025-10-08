@@ -422,6 +422,11 @@ class InstanceService:
             self.logger.info(f"Instance {instance_num}: Using dedicated mouse and keyboard. Adding --grab and --force-grab-cursor to Gamescope.")
             gamescope_cli_options.extend(['--grab', '--force-grab-cursor'])
 
+        # Add --wait-for-process if specified in the profile
+        if profile.gamescope_wait_for_process:
+            self.logger.info(f"Instance {instance_num}: Gamescope will wait for process '{profile.gamescope_wait_for_process}'.")
+            gamescope_cli_options.extend(['--wait-for-process', profile.gamescope_wait_for_process])
+
         return gamescope_cli_options
 
     def _build_base_game_command(self, profile: GameProfile, proton_path: Optional[Path], symlinked_exe_path: Path, gamescope_cmd: List[str], instance_num: int) -> List[str]:

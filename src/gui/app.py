@@ -403,8 +403,19 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.use_gamescope_check = Gtk.CheckButton()
         self.use_gamescope_check.set_active(True) # Default to using gamescope
         self.use_gamescope_check.set_tooltip_text("Enable/disable Gamescope for this profile")
+        self.use_gamescope_check.connect("toggled", self._on_gamescope_toggled)
         game_details_grid.attach(self.use_gamescope_check, 1, row, 1, 1)
         row += 1
+
+        # Gamescope Wait for Process
+        self.gamescope_wait_label = Gtk.Label(label="Gamescope: Wait for Process:", xalign=0)
+        game_details_grid.attach(self.gamescope_wait_label, 0, row, 1, 1)
+        self.gamescope_wait_for_process_entry = Gtk.Entry()
+        self.gamescope_wait_for_process_entry.set_placeholder_text("Optional (e.g., game.exe)")
+        self.gamescope_wait_for_process_entry.set_tooltip_text("The process name Gamescope should wait for after the launcher closes")
+        game_details_grid.attach(self.gamescope_wait_for_process_entry, 1, row, 1, 1)
+        row += 1
+
 
         # Frame 2: Proton & Launch Options
         proton_options_frame = Gtk.Frame(label="Launch Options")
@@ -487,6 +498,12 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         # Buttons are now fixed at the bottom of the main window, so they're removed from this tab
 
     # Add _update_play_button_state method
+    def _on_gamescope_toggled(self, checkbox):
+        """Show/hide the 'Wait for Process' field based on whether Gamescope is enabled."""
+        is_active = checkbox.get_active()
+        self.gamescope_wait_label.set_visible(is_active)
+        self.gamescope_wait_for_process_entry.set_visible(is_active)
+
     def _update_play_button_state(self):
         if self.cli_process_pid:
             self.play_button.set_label("⏹️ Stop Gaming")
@@ -1294,6 +1311,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             env_vars=self._get_env_vars_from_ui(),
             is_native=is_native_value,
             use_gamescope=self.use_gamescope_check.get_active(),
+            gamescope_wait_for_process=self.gamescope_wait_for_process_entry.get_text() or None,
             disable_bwrap=self.disable_bwrap_check.get_active(),
             apply_dxvk_vkd3d=self.apply_dxvk_vkd3d_check.get_active(),
             winetricks_verbs=winetricks_verbs,
@@ -1370,6 +1388,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.game_args_entry.set_text(str(profile_data.get("GAME_ARGS") or ""))
         self.is_native_check.set_active(profile_data.get("IS_NATIVE", False))
         self.use_gamescope_check.set_active(profile_data.get("USE_GAMESCOPE", True))
+        self.gamescope_wait_for_process_entry.set_text(str(profile_data.get("GAMESCOPE_WAIT_FOR_PROCESS") or ""))
+        # Manually trigger the toggle handler to set initial visibility
+        self._on_gamescope_toggled(self.use_gamescope_check)
 
     def _load_mode_and_splitscreen_settings(self, profile_data):
         """Load mode and splitscreen configuration."""

@@ -50,6 +50,7 @@ class GameProfile(BaseModel):
     env_vars: Optional[Dict[str, str]] = Field(default=None, alias="ENV_VARS")
     # primary_monitor: Optional[str] = Field(default=None, alias="PRIMARY_MONITOR") # Novo campo para o monitor principal
     use_gamescope: bool = Field(default=True, alias="USE_GAMESCOPE")  # New field to enable/disable gamescope
+    gamescope_wait_for_process: Optional[str] = Field(default=None, alias="GAMESCOPE_WAIT_FOR_PROCESS")
     disable_bwrap: bool = Field(default=False, alias="DISABLE_BWRAP")  # New field to disable bwrap isolation
 
     # New field for player configurations, using "PLAYERS" alias for JSON
