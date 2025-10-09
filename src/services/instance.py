@@ -193,25 +193,27 @@ class InstanceService:
             if item.is_dir():
                 target_path_for_item.mkdir(parents=True, exist_ok=True)
             else:
-                if not target_path_for_item.exists():
+                # If a file already exists at the target path, log it and skip.
+                # This allows users to place custom/original files that won't be overwritten.
+                if target_path_for_item.exists():
+                    self.logger.info(f"Instance {instance.instance_num}: Skipped symlink, file already exists: {target_path_for_item}")
+                else:
                     try:
                         target_path_for_item.symlink_to(item)
                         self.logger.info(f"Instance {instance.instance_num}: Created symlink: {target_path_for_item} -> {item}")
-                    except FileExistsError:
-                        self.logger.info(f"Instance {instance.instance_num}: File already exists: {target_path_for_item}")
                     except Exception as e:
                         self.logger.warning(f"Instance {instance.instance_num}: Failed to create symlink for {item}: {e}")
 
     def _verify_executable_symlink(self, instance: GameInstance, symlinked_exe_path_target: Path, original_exe_path: Path) -> None:
-        """Verifies if the symlink for the executable was created correctly."""
-        if not symlinked_exe_path_target.exists() or not symlinked_exe_path_target.is_symlink():
-            self.logger.error(f"Instance {instance.instance_num}: Expected symlinked executable at {symlinked_exe_path_target} was not found or is not a symlink.")
-            # Additionally, check if the symlink target is the original executable
-            if symlinked_exe_path_target.is_symlink() and Path(os.readlink(str(symlinked_exe_path_target))) != original_exe_path:
-                 self.logger.error(f"Instance {instance.instance_num}: Symlink {symlinked_exe_path_target} points to {os.readlink(str(symlinked_exe_path_target))}, not {original_exe_path}")
-            raise FileNotFoundError(f"Failed to create or verify symlink for executable {original_exe_path} at {symlinked_exe_path_target}")
+        """Verifies if the executable file exists at the target path, regardless of whether it's a symlink or a regular file."""
+        if not symlinked_exe_path_target.exists():
+            self.logger.error(f"Instance {instance.instance_num}: Executable file not found at the expected path: {symlinked_exe_path_target}")
+            raise FileNotFoundError(f"Executable file not found for instance {instance.instance_num} at {symlinked_exe_path_target}")
 
-        self.logger.info(f"Instance {instance.instance_num}: Executable symlink verified: {symlinked_exe_path_target}")
+        if symlinked_exe_path_target.is_symlink():
+            self.logger.info(f"Instance {instance.instance_num}: Verified symlinked executable: {symlinked_exe_path_target}")
+        else:
+            self.logger.info(f"Instance {instance.instance_num}: Verified executable (not a symlink): {symlinked_exe_path_target}")
 
     def _launch_single_instance(self, instance: GameInstance, profile: GameProfile,
                               proton_path: Optional[Path], steam_root: Optional[Path], original_game_path: Path, cpu_affinity: str) -> None:
