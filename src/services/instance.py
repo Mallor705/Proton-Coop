@@ -233,7 +233,7 @@ class InstanceService:
         instance_idx = instance.instance_num - 1
         device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
 
-        env = self._prepare_environment(instance, steam_root, proton_path, profile)
+        env = self._prepare_environment(instance, steam_root, proton_path, profile, device_info)
         cmd = self._build_command(profile, proton_path, instance, symlinked_executable_path, cpu_affinity)
 
         self.logger.info(f"Launching instance {instance.instance_num} (Log: {instance.log_file})")
@@ -253,8 +253,8 @@ class InstanceService:
         except Exception as e:
             self.logger.error(f"Failed to launch instance {instance.instance_num}: {e}")
 
-    def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], proton_path: Optional[Path], profile: Optional[GameProfile] = None) -> dict:
-        """Prepares a minimal environment for the game instance, mirroring the user's script."""
+    def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], proton_path: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = {}) -> dict:
+        """Prepares a minimal environment for the game instance, plus device-specific vars."""
         env = os.environ.copy()
         original_path = env.get('PATH', '')
 
@@ -263,43 +263,49 @@ class InstanceService:
         env.pop('PYTHONPATH', None)
 
         if not (profile and profile.is_native):
-            # --- Essential Proton/Wine variables from user script ---
+            # --- Essential Proton/Wine variables ---
             if steam_root:
                 env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
-                self.logger.info(f"Instance {instance.instance_num}: Setting STEAM_COMPAT_CLIENT_INSTALL_PATH to '{str(steam_root)}'")
-
             env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
-            self.logger.info(f"Instance {instance.instance_num}: Setting STEAM_COMPAT_DATA_PATH to '{str(instance.prefix_dir)}'")
-
             env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
-            self.logger.info(f"Instance {instance.instance_num}: Setting WINEPREFIX to '{str(instance.prefix_dir / 'pfx')}'")
 
-            # --- PATH modification from user script ---
+            # --- PATH modification ---
             if proton_path:
                 proton_bin_dir = proton_path.parent
                 env['PATH'] = f"{str(proton_bin_dir)}:{original_path}"
-                self.logger.info(f"Instance {instance.instance_num}: Prepended '{str(proton_bin_dir)}' to PATH.")
 
-        # --- Add environment variables defined in the profile ---
-        if profile and profile.env_vars:
-            self.logger.info(f"Instance {instance.instance_num}: Applying environment variables from profile.")
-            for key, value in profile.env_vars.items():
-                env[key] = value
-                self.logger.info(f"  - Set {key}={value}")
-
-        # --- Add sane defaults from user's script if not overridden ---
-        if not (profile and profile.is_native):
+            # --- Sane defaults ---
             if 'PROTON_NO_ESYNC' not in env:
                 env['PROTON_NO_ESYNC'] = "0"
             if 'PROTON_NO_FSYNC' not in env:
                 env['PROTON_NO_FSYNC'] = "0"
 
-            # Add SteamAppId if present in profile, crucial for Gamescope's -e flag
+            # --- Steam Integration ---
             if profile and profile.app_id:
                 env['SteamAppId'] = profile.app_id
                 env['SteamGameId'] = profile.app_id
-                self.logger.info(f"Instance {instance.instance_num}: Setting SteamAppId and SteamGameId to '{profile.app_id}' for Gamescope integration.")
 
+        # --- Add environment variables defined in the profile ---
+        if profile and profile.env_vars:
+            for key, value in profile.env_vars.items():
+                env[key] = value
+
+        # --- Device specific environment variables ---
+        # Handle joystick assignment
+        assigned_joystick_path = self._get_joystick_for_instance(instance, profile)
+        if assigned_joystick_path:
+            env['SDL_JOYSTICK_DEVICE'] = assigned_joystick_path
+            self.logger.info(f"Instance {instance.instance_num}: Setting SDL_JOYSTICK_DEVICE to '{assigned_joystick_path}'.")
+        else:
+            env.pop('SDL_JOYSTICK_DEVICE', None)
+
+        # Handle audio device assignment (PULSE_SINK for PulseAudio)
+        if device_info.get('audio_device_id_for_instance'):
+            audio_device_id = device_info['audio_device_id_for_instance']
+            env['PULSE_SINK'] = audio_device_id
+            self.logger.info(f"Instance {instance.instance_num}: Setting PULSE_SINK to '{audio_device_id}'.")
+        else:
+            env.pop('PULSE_SINK', None)
 
         self.logger.info(f"Instance {instance.instance_num}: Final environment prepared.")
         return env
