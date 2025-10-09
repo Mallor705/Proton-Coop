@@ -236,7 +236,7 @@ class InstanceService:
         device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
 
         env = self._prepare_environment(instance, steam_root, proton_path, profile, device_info)
-        cmd = self._build_command(profile, proton_path, instance, symlinked_executable_path, cpu_affinity)
+        cmd = self._build_command(profile, proton_path, instance, symlinked_executable_path, cpu_affinity, env)
 
         self.logger.info(f"Launching instance {instance.instance_num} (Log: {instance.log_file})")
         try:
@@ -245,7 +245,8 @@ class InstanceService:
                     cmd,
                     stdout=log,
                     stderr=subprocess.STDOUT,
-                    env=env,
+                    # The env is now passed to the sandboxed process via bwrap's --setenv.
+                    # The bwrap process itself runs with the default environment.
                     cwd=symlinked_executable_path.parent
                 )
             pid = process.pid
@@ -286,12 +287,12 @@ class InstanceService:
             if profile and profile.app_id:
                 env['SteamAppId'] = profile.app_id
                 env['SteamGameId'] = profile.app_id
-
+            
             # --- Force Host Network ---
             # This is critical for allowing instances to communicate via localhost (127.0.0.1)
             # by disabling Proton's network namespacing.
             env['PV_NET_SHARE'] = "1"
-
+            
         # --- Add environment variables defined in the profile ---
         if profile and profile.env_vars:
             for key, value in profile.env_vars.items():
@@ -333,7 +334,7 @@ class InstanceService:
             return device_from_profile
         return None
 
-    def _build_command(self, profile: GameProfile, proton_path: Optional[Path], instance: GameInstance, symlinked_exe_path: Path, cpu_affinity: str) -> List[str]:
+    def _build_command(self, profile: GameProfile, proton_path: Optional[Path], instance: GameInstance, symlinked_exe_path: Path, cpu_affinity: str, env: Dict[str, str]) -> List[str]:
         """Builds the command to run gamescope and the game (native or via Proton), using bwrap to isolate the control."""
         instance_idx = instance.instance_num - 1
 
@@ -355,7 +356,7 @@ class InstanceService:
             bwrap_cmd = []
             self.logger.info(f"Instance {instance.instance_num}: bwrap is disabled for this profile.")
         else:
-            bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num)
+            bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num, env)
 
         # Command without taskset for CPU affinity, to mirror user's script
         final_cmd = bwrap_cmd + base_cmd
@@ -469,8 +470,8 @@ class InstanceService:
 
         return base_cmd
 
-    def _build_bwrap_command(self, profile: GameProfile, instance_idx: int, device_info: dict, instance_num: int) -> List[str]:
-        """Builds the bwrap command with input devices."""
+    def _build_bwrap_command(self, profile: GameProfile, instance_idx: int, device_info: dict, instance_num: int, env: Dict[str, str]) -> List[str]:
+        """Builds the bwrap command, including device bindings and environment variables."""
         bwrap_cmd = [
             'bwrap',
             '--dev-bind', '/', '/',
@@ -479,6 +480,10 @@ class InstanceService:
             '--cap-add', 'all',
             '--share-net',
         ]
+
+        # Pass environment variables into the sandbox
+        for key, value in env.items():
+            bwrap_cmd.extend(['--setenv', key, value])
 
         device_paths_to_bind = self._collect_device_paths(profile, instance_idx, device_info, instance_num)
 
