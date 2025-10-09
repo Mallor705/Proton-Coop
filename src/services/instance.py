@@ -404,7 +404,7 @@ class InstanceService:
 
         gamescope_cli_options = [
             gamescope_path,
-            # '-e', # Enable Steam integration for proper launcher handling
+            '-b', # Use borderless instead of fullscreen for better compatibility
             '-W', str(effective_width),
             '-H', str(effective_height),
             '-w', str(effective_width),
@@ -419,11 +419,9 @@ class InstanceService:
         gamescope_cli_options.extend(['-r', '999'])
         self.logger.info(f"Instance {instance_num}: Setting focused FPS limit to 999.")
 
-        # Specific configurations for splitscreen vs normal
-        if profile.is_splitscreen_mode:
-            gamescope_cli_options.append('-b')  # borderless instead of fullscreen
-        else:
-            gamescope_cli_options.extend(['-b', '--adaptive-sync'])
+        # Add adaptive sync if not in splitscreen mode
+        if not profile.is_splitscreen_mode:
+            gamescope_cli_options.append('--adaptive-sync')
 
         if should_add_grab_flags:
             self.logger.info(f"Instance {instance_num}: Using dedicated mouse and keyboard. Adding --grab and --force-grab-cursor to Gamescope.")
