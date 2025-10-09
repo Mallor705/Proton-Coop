@@ -42,7 +42,7 @@ class InstanceService:
                 if not shutil.which('gamescope'):
                     raise DependencyError("Gamescope is enabled for this profile but 'gamescope' command not found. Please install gamescope or disable it in the profile settings.")
                 self.logger.info("Gamescope is enabled and available for this profile.")
-            
+
             # Validate bwrap if needed
             if not profile.disable_bwrap:
                 if not shutil.which('bwrap'):
@@ -404,7 +404,7 @@ class InstanceService:
 
         gamescope_cli_options = [
             gamescope_path,
-            '-e', # Enable Steam integration for proper launcher handling
+            # '-e', # Enable Steam integration for proper launcher handling
             '-W', str(effective_width),
             '-H', str(effective_height),
             '-w', str(effective_width),
@@ -423,7 +423,7 @@ class InstanceService:
         if profile.is_splitscreen_mode:
             gamescope_cli_options.append('-b')  # borderless instead of fullscreen
         else:
-            gamescope_cli_options.extend(['-f', '--adaptive-sync'])
+            gamescope_cli_options.extend(['-b', '--adaptive-sync'])
 
         if should_add_grab_flags:
             self.logger.info(f"Instance {instance_num}: Using dedicated mouse and keyboard. Adding --grab and --force-grab-cursor to Gamescope.")
