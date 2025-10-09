@@ -377,12 +377,12 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         game_details_grid.attach(exe_path_hbox, 1, row, 1, 1)
         row += 1
 
-        # # App ID
-        # game_details_grid.attach(Gtk.Label(label="App ID (Steam):", xalign=0), 0, row, 1, 1)
-        # self.app_id_entry = Gtk.Entry()
-        # self.app_id_entry.set_placeholder_text("Optional (ex: 1621530)")
-        # game_details_grid.attach(self.app_id_entry, 1, row, 1, 1)
-        # row += 1
+        # App ID
+        game_details_grid.attach(Gtk.Label(label="App ID (Steam):", xalign=0), 0, row, 1, 1)
+        self.app_id_entry = Gtk.Entry()
+        self.app_id_entry.set_placeholder_text("Optional (ex: 1621530)")
+        game_details_grid.attach(self.app_id_entry, 1, row, 1, 1)
+        row += 1
 
         # Game Arguments
         game_details_grid.attach(Gtk.Label(label="Game Arguments:", xalign=0), 0, row, 1, 1)
@@ -1289,7 +1289,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             proton_version=proton_version,
             instance_width=self.instance_width_spin.get_value_as_int(),
             instance_height=self.instance_height_spin.get_value_as_int(),
-            # app_id=self.app_id_entry.get_text() or None,
+            app_id=self.app_id_entry.get_text() or None,
             game_args=self.game_args_entry.get_text(),
             env_vars=self._get_env_vars_from_ui(),
             is_native=is_native_value,
@@ -1366,7 +1366,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         """Load instance-specific settings like dimensions and game configuration."""
         self.instance_width_spin.set_value(profile_data.get("INSTANCE_WIDTH", 1920))
         self.instance_height_spin.set_value(profile_data.get("INSTANCE_HEIGHT", 1080))
-        # self.app_id_entry.set_text(str(profile_data.get("APP_ID") or ""))
+        self.app_id_entry.set_text(str(profile_data.get("APP_ID") or ""))
         self.game_args_entry.set_text(str(profile_data.get("GAME_ARGS") or ""))
         self.is_native_check.set_active(profile_data.get("IS_NATIVE", False))
         self.use_gamescope_check.set_active(profile_data.get("USE_GAMESCOPE", True))
@@ -1844,7 +1844,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.num_players_spin.set_value(1)
         self.instance_width_spin.set_value(1920)
         self.instance_height_spin.set_value(1080)
-        # self.app_id_entry.set_text("")
+        self.app_id_entry.set_text("")
         self.game_args_entry.set_text("")
         self.is_native_check.set_active(False)
 
