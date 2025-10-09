@@ -287,6 +287,11 @@ class InstanceService:
                 env['SteamAppId'] = profile.app_id
                 env['SteamGameId'] = profile.app_id
 
+            # --- Force Host Network ---
+            # This is critical for allowing instances to communicate via localhost (127.0.0.1)
+            # by disabling Proton's network namespacing.
+            env['PV_NET_SHARE'] = "1"
+
         # --- Add environment variables defined in the profile ---
         if profile and profile.env_vars:
             for key, value in profile.env_vars.items():
