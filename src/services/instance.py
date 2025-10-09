@@ -470,6 +470,7 @@ class InstanceService:
             '--proc', '/proc',
             '--tmpfs', '/tmp',
             '--cap-add', 'all',
+            '--share-net',
         ]
 
         device_paths_to_bind = self._collect_device_paths(profile, instance_idx, device_info, instance_num)
