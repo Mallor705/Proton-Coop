@@ -907,7 +907,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             python_exec = str(script_path)
         else:
             # Normal Python execution
-            script_path = Path(__file__).parent.parent.parent / "linuxcoop.py"
+            script_path = Path(__file__).parent.parent.parent / "protoncoop.py"
             python_exec = sys.executable # Use o interpretador Python atual do ambiente virtual
 
         if not python_exec:
@@ -931,7 +931,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         else:
             # Normal Python execution
             command = [python_exec, str(script_path), profile_name]
-        
+
         # Append --no-bwrap if requested via GUI
         if getattr(self, 'disable_bwrap_check', None) and self.disable_bwrap_check.get_active():
             command.append("--no-bwrap")
@@ -941,7 +941,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         gui_pid = os.getpid()
         command.extend(["--parent-pid", str(gui_pid)])
         self.logger.info(f"Passing parent PID {gui_pid} to CLI process.")
-        
+
         self.logger.info(f"Executing command: {' '.join(command)}")
 
         self.play_button.set_sensitive(False)
@@ -1358,7 +1358,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
                 self.proton_version_combo.set_active(0)
         else:
             self.proton_version_combo.set_active(0)
-        
+
         # Load disable_bwrap setting
         self.disable_bwrap_check.set_active(profile_data.get("DISABLE_BWRAP", False))
 
@@ -1911,7 +1911,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
 class LinuxCoopApp(Adw.Application):
     def __init__(self):
-        super().__init__(application_id="org.linuxcoop.app")
+        super().__init__(application_id="org.protoncoop.app")
         self.connect("activate", self.on_activate)
 
         # Initialize Adwaita

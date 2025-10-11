@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="linux-coop",
+    name="proton-coop",
     version="2.0.0",
     description="Launch multiple game instances using Proton and Gamescope",
     packages=find_packages(where="src"),
@@ -15,7 +15,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "linux-coop=cli.commands:main",
+            "proton-coop=cli.commands:main",
         ],
     },
     classifiers=[

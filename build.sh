@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Linux-Coop PyInstaller Build Script
-# This script compiles the Linux-Coop project into a standalone executable
+# Proton-Coop PyInstaller Build Script
+# This script compiles the Proton-Coop project into a standalone executable
 
 set -e  # Exit on any error
 
-echo "🚀 Starting Linux-Coop Build Process..."
+echo "🚀 Starting Proton-Coop Build Process..."
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,7 +37,7 @@ rm -rf build/ dist/ *.spec
 
 # Create PyInstaller spec file
 echo "📝 Creating PyInstaller spec file..."
-cat > linux-coop.spec << 'EOF'
+cat > proton-coop.spec << 'EOF'
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
@@ -78,7 +78,7 @@ hidden_imports = [
 block_cipher = None
 
 a = Analysis(
-    ['linuxcoop.py'],
+    ['protoncoop.py'],
     pathex=[str(project_root)],
     binaries=[],
     datas=data_files,
@@ -102,7 +102,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='linux-coop',
+    name='proton-coop',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -120,28 +120,28 @@ EOF
 
 # Build with PyInstaller
 echo "🔨 Building executable with PyInstaller..."
-pyinstaller linux-coop.spec --clean --noconfirm
+pyinstaller proton-coop.spec --clean --noconfirm
 
 # Check if build was successful
-if [ -f "dist/linux-coop" ]; then
+if [ -f "dist/proton-coop" ]; then
     echo "✅ Build successful!"
-    echo "📁 Executable created at: dist/linux-coop"
-    echo "📏 File size: $(du -h dist/linux-coop | cut -f1)"
+    echo "📁 Executable created at: dist/proton-coop"
+    echo "📏 File size: $(du -h dist/proton-coop | cut -f1)"
 
     # Make executable
-    chmod +x dist/linux-coop
+    chmod +x dist/proton-coop
 
     echo ""
-    echo "🎉 Linux-Coop has been successfully compiled!"
+    echo "🎉 Proton-Coop has been successfully compiled!"
     echo ""
     echo "To run the compiled version:"
-    echo "  ./dist/linux-coop"
+    echo "  ./dist/proton-coop"
     echo ""
     echo "To open GUI:"
-    echo "  ./dist/linux-coop gui"
+    echo "  ./dist/proton-coop gui"
     echo ""
     echo "To run a profile:"
-    echo "  ./dist/linux-coop <profile_name>"
+    echo "  ./dist/proton-coop <profile_name>"
     echo ""
 
 else
@@ -150,10 +150,10 @@ else
 fi
 
 # Optional: Create a symlink for easier access
-if [ ! -L "linux-coop" ]; then
+if [ ! -L "proton-coop" ]; then
     echo "🔗 Creating symlink for easier access..."
-    ln -s dist/linux-coop linux-coop
-    echo "   You can now run: ./linux-coop"
+    ln -s dist/proton-coop proton-coop
+    echo "   You can now run: ./proton-coop"
 fi
 
 echo "✨ Build process complete!"

@@ -1,5 +1,5 @@
 class LinuxCoopError(Exception):
-    """Base exception for Linux-Coop"""
+    """Base exception for Proton-Coop"""
     pass
 
 class ProfileNotFoundError(LinuxCoopError):

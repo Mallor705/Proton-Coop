@@ -14,10 +14,10 @@ class TerminateCLI(Exception):
     pass
 
 class LinuxCoopCLI:
-    """Command-line interface for Linux-Coop."""
+    """Command-line interface for Proton-Coop."""
     def __init__(self):
         """Initializes the CLI with logger and signal configuration."""
-        self.logger = Logger("linux-coop", Config.LOG_DIR)
+        self.logger = Logger("proton-coop", Config.LOG_DIR)
         self._instance_service: Optional[InstanceService] = None
         self.setup_signal_handlers()
 
@@ -106,7 +106,7 @@ class LinuxCoopCLI:
         else:
             # Fallback for Linux. For Windows or macOS, different commands might be needed.
             command = ["xdg-open", str(profile_path)]
-        
+
         self.logger.info(f"Opening profile {profile_path} with command: {' '.join(command)}")
         try:
             subprocess.run(command, check=True)

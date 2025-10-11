@@ -1,10 +1,10 @@
-# Linux-Coop
+# Proton-Coop
 
 [Ver en portugués](README.pt.md) | [Ver en inglés](../README.md) | [Ver en francés](README.fr.md)
 
-# Linux-Coop
+# Proton-Coop
 
-![Banner de Linux-Coop](https://github.com/Mallor705/Linux-Coop/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
+![Banner de Proton-Coop](https://github.com/Mallor705/Proton-Coop/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
 
 Permite jugar títulos de Windows en modo cooperativo local en Linux, ejecutando múltiples instancias del mismo juego a través de Proton y Gamescope, con perfiles independientes y soporte para controladores.
 
@@ -32,7 +32,7 @@ Permite jugar títulos de Windows en modo cooperativo local en Linux, ejecutando
 
 ## Requisitos del Sistema
 
-Para asegurar el correcto funcionamiento de Linux-Coop, los siguientes requisitos previos son esenciales:
+Para asegurar el correcto funcionamiento de Proton-Coop, los siguientes requisitos previos son esenciales:
 
 - **Steam:** Debe estar instalado y configurado en tu sistema.
 - **Proton:** Instala Proton (o GE-Proton) a través de Steam.
@@ -46,8 +46,8 @@ Para asegurar el correcto funcionamiento de Linux-Coop, los siguientes requisito
 
 1.  **Clona el repositorio:**
     ```bash
-    git clone https://github.com/Mallor705/Linux-Coop.git
-    cd Linux-Coop
+    git clone https://github.com/Mallor705/Proton-Coop.git
+    cd Proton-Coop
     ```
 2.  **Instala las dependencias:**
     ```bash
@@ -158,8 +158,8 @@ Crea un archivo JSON en la carpeta `profiles/` con un nombre descriptivo (ej: `M
     "",
     ""
   ],
-  
-  
+
+
   "app_id": "12345678",
   "game_args": "",
   "use_goldberg_emu": false,
@@ -181,9 +181,9 @@ Crea un archivo JSON en la carpeta `profiles/` con un nombre descriptivo (ej: `M
 From the project root, execute the command, replacing `<profile_name>` with the name of your profile JSON file (without the `.json` extension):
 
 ```bash
-python ./linuxcoop.py <profile_name>
+python ./protoncoop.py <profile_name>
 # Or, if installed via setuptools:
-linux-coop <profile_name>
+proton-coop <profile_name>
 ```
 
 Upon execution, the script will:
@@ -192,7 +192,7 @@ Upon execution, the script will:
 - Load the specified game profile.
 - Create separate Proton prefixes for each game instance.
 - Launch both game windows via Gamescope.
-- Generate detailed logs in `~/.local/share/linux-coop/logs/` for debugging.
+- Generate detailed logs in `~/.local/share/proton-coop/logs/` for debugging.
 
 ### 3. Controller Mapping
 
@@ -220,7 +220,7 @@ bwrap --version
       *   `Super + PgUp`: Maximizes the active window.
       *   `Alt + Tab`: Switches between open windows of different applications.
       *   `Super + D`: Minimizes all windows and shows the desktop.
--   **Debugging logs:** Consult the `~/.local/share/linux-coop/logs/` directory for detailed information about errors and script behavior.
+-   **Debugging logs:** Consult the `~/.local/share/proton-coop/logs/` directory for detailed information about errors and script behavior.
 
 ## Important Notes
 
@@ -234,4 +234,4 @@ Contributions are welcome! Feel free to open issues or pull requests.
 
 ## License
 
-This project is distributed under the MIT license. Consult the `LICENSE` file in the repository for more details. 
+This project is distributed under the MIT license. Consult the `LICENSE` file in the repository for more details.

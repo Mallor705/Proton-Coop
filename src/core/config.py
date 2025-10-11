@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 class Config:
-    """Global Linux-Coop configurations, including directories, commands, and Steam paths."""
+    """Global Proton-Coop configurations, including directories, commands, and Steam paths."""
 
     @staticmethod
     def _get_script_dir():
@@ -15,9 +15,9 @@ class Config:
             return Path(__file__).parent.parent.parent
 
     SCRIPT_DIR = _get_script_dir()
-    PROFILE_DIR = Path.home() / ".config/linux-coop/profiles"
-    LOG_DIR = Path.home() / ".cache/linux-coop/logs"
-    PREFIX_BASE_DIR = Path.home() / "Games/linux-coop/prefixes/"
+    PROFILE_DIR = Path.home() / ".config/proton-coop/profiles"
+    LOG_DIR = Path.home() / ".cache/proton-coop/logs"
+    PREFIX_BASE_DIR = Path.home() / "Games/proton-coop/prefixes/"
 
     STEAM_PATHS = [
         Path.home() / ".steam/root",

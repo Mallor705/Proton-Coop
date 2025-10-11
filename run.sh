@@ -10,4 +10,4 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 
-python3 linuxcoop.py "$@"
+python3 protoncoop.py "$@"

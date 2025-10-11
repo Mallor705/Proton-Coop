@@ -1,10 +1,10 @@
-# Linux-Coop GUI Styles System
+# Proton-Coop GUI Styles System
 
-A professional, modular CSS styling system for the Linux-Coop GUI application, built following SOLID principles for maintainable and scalable theming with automatic system theme detection.
+A professional, modular CSS styling system for the Proton-Coop GUI application, built following SOLID principles for maintainable and scalable theming with automatic system theme detection.
 
 ## Overview
 
-This styles system provides a centralized way to manage CSS styling across the Linux-Coop application, separating presentation concerns from business logic and enabling easy customization and theming. The system automatically detects your system's theme preference (light/dark) and applies appropriate styling without any user intervention.
+This styles system provides a centralized way to manage CSS styling across the Proton-Coop application, separating presentation concerns from business logic and enabling easy customization and theming. The system automatically detects your system's theme preference (light/dark) and applies appropriate styling without any user intervention.
 
 ## Architecture
 
@@ -234,7 +234,7 @@ To test theme switching manually (for development):
 # Switch to dark theme
 gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'
 
-# Switch to light theme  
+# Switch to light theme
 gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'
 ```
 
@@ -289,4 +289,4 @@ When contributing to the styles system:
 
 ## License
 
-This styles system is part of the Linux-Coop project and follows the same license terms.
+This styles system is part of the Proton-Coop project and follows the same license terms.

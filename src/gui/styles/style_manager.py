@@ -1,5 +1,5 @@
 """
-StyleManager - Professional CSS management for Linux-Coop GUI
+StyleManager - Professional CSS management for Proton-Coop GUI
 
 This module provides a centralized way to manage and apply CSS styles
 following SOLID principles for maintainable and modular styling.
@@ -19,7 +19,7 @@ class StyleManagerError(Exception):
 
 class StyleManager:
     """
-    Manages CSS styling for the Linux-Coop GUI application.
+    Manages CSS styling for the Proton-Coop GUI application.
 
     This class follows the Single Responsibility Principle by handling
     only CSS-related operations and the Dependency Inversion Principle
@@ -336,7 +336,7 @@ class StyleManager:
     def _load_fallback_css(self, filename: str) -> None:
         """Load minimal fallback CSS when resources are not available."""
         fallback_css = """
-        /* Minimal fallback styles for Linux-Coop */
+        /* Minimal fallback styles for Proton-Coop */
         .suggested-action { background: #3584e4; color: white; }
         .destructive-action { background: #e01b24; color: white; }
         .heading { font-weight: bold; font-size: 1.2em; }

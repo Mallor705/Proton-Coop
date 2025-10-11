@@ -1,5 +1,5 @@
 """
-GUI Styles Module for Linux-Coop
+GUI Styles Module for Proton-Coop
 
 This module provides professional CSS styling management following SOLID principles.
 It includes modular CSS files and a centralized StyleManager for maintainable theming.
@@ -36,4 +36,4 @@ __all__ = [
 ]
 
 __version__ = '1.0.0'
-__author__ = 'Linux-Coop Team'
+__author__ = 'Proton-Coop Team'
