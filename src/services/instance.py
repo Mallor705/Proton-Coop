@@ -24,6 +24,7 @@ class InstanceService:
         self.managed_instances: List[GameInstance] = []
         self.cpu_count = psutil.cpu_count(logical=True)
         self.proton_path: Optional[Path] = None
+        self.termination_in_progress = False
 
     def validate_dependencies(self) -> None:
         """Validates if all necessary commands are available on the system."""
@@ -595,61 +596,68 @@ class InstanceService:
 
     def terminate_all(self) -> None:
         """Terminates all managed game instances, process groups, and associated wineserver processes."""
-        self.logger.info("Starting termination of all instances...")
+        if self.termination_in_progress:
+            self.logger.info("Termination already in progress, skipping.")
+            return
+        try:
+            self.termination_in_progress = True
+            self.logger.info("Starting termination of all instances...")
 
-        # Terminate main process groups first
-        if self.pids:
-            self.logger.info(f"Terminating process groups for PIDs: {self.pids}")
-            for pid in self.pids:
-                try:
-                    # Use os.killpg to terminate the entire process group
-                    os.killpg(pid, signal.SIGKILL)
-                    self.logger.info(f"Sent SIGKILL to process group of PID {pid}")
-                except ProcessLookupError:
-                    self.logger.info(f"Process group for PID {pid} not found, likely already terminated.")
-                except Exception as e:
-                    self.logger.error(f"Failed to kill process group for PID {pid}: {e}")
-        else:
-            self.logger.info("No PIDs to terminate.")
+            # Terminate main process groups first
+            if self.pids:
+                self.logger.info(f"Terminating process groups for PIDs: {self.pids}")
+                for pid in self.pids:
+                    try:
+                        # Use os.killpg to terminate the entire process group
+                        os.killpg(pid, signal.SIGKILL)
+                        self.logger.info(f"Sent SIGKILL to process group of PID {pid}")
+                    except ProcessLookupError:
+                        self.logger.info(f"Process group for PID {pid} not found, likely already terminated.")
+                    except Exception as e:
+                        self.logger.error(f"Failed to kill process group for PID {pid}: {e}")
+            else:
+                self.logger.info("No PIDs to terminate.")
 
-        # Gracefully stop the wineserver for each non-native instance
-        if self.managed_instances:
-            self.logger.info(f"Stopping wineserver for {len(self.managed_instances)} instance(s).")
+            # Gracefully stop the wineserver for each non-native instance
+            if self.managed_instances:
+                self.logger.info(f"Stopping wineserver for {len(self.managed_instances)} instance(s).")
 
-            wineserver_executable = None
-            if self.proton_path:
-                proton_bin_dir = self.proton_path.parent
-                wineserver_executable = shutil.which('wineserver', path=str(proton_bin_dir))
+                wineserver_executable = None
+                if self.proton_path:
+                    proton_bin_dir = self.proton_path.parent
+                    wineserver_executable = shutil.which('wineserver', path=str(proton_bin_dir))
 
-            if not wineserver_executable:
-                self.logger.warning("Could not find 'wineserver' executable in Proton directory. Falling back to system 'wineserver'. This may not work as expected.")
-                wineserver_executable = 'wineserver' # Fallback
+                if not wineserver_executable:
+                    self.logger.warning("Could not find 'wineserver' executable in Proton directory. Falling back to system 'wineserver'. This may not work as expected.")
+                    wineserver_executable = 'wineserver' # Fallback
 
-            for instance in self.managed_instances:
-                if not instance.is_native:
-                    wine_prefix_path = instance.prefix_dir / 'pfx'
-                    if wine_prefix_path.is_dir():
-                        try:
-                            self.logger.info(f"Attempting to stop wineserver for prefix: {wine_prefix_path}")
-                            env = os.environ.copy()
-                            env['WINEPREFIX'] = str(wine_prefix_path)
+                for instance in self.managed_instances:
+                    if not instance.is_native:
+                        wine_prefix_path = instance.prefix_dir / 'pfx'
+                        if wine_prefix_path.is_dir():
+                            try:
+                                self.logger.info(f"Attempting to stop wineserver for prefix: {wine_prefix_path}")
+                                env = os.environ.copy()
+                                env['WINEPREFIX'] = str(wine_prefix_path)
 
-                            result = subprocess.run(
-                                [wineserver_executable, "-k"],
-                                env=env, check=False, capture_output=True, text=True, errors='replace'
-                            )
-                            if result.returncode == 0:
-                                self.logger.info(f"Successfully sent 'wineserver -k' for prefix: {wine_prefix_path}")
-                            else:
-                                self.logger.warning(f"'wineserver -k' for prefix {wine_prefix_path} exited with code {result.returncode}. stderr: {result.stderr}")
-                        except FileNotFoundError:
-                            self.logger.warning(f"'{wineserver_executable}' command not found. Cannot stop wineserver for prefix: {wine_prefix_path}")
-                        except Exception as e:
-                            self.logger.error(f"Failed to stop wineserver for prefix {wine_prefix_path}: {e}")
-        else:
-            self.logger.info("No managed instances to clean up wineservers for.")
+                                result = subprocess.run(
+                                    [wineserver_executable, "-k"],
+                                    env=env, check=False, capture_output=True, text=True, errors='replace'
+                                )
+                                if result.returncode == 0:
+                                    self.logger.info(f"Successfully sent 'wineserver -k' for prefix: {wine_prefix_path}")
+                                else:
+                                    self.logger.warning(f"'wineserver -k' for prefix {wine_prefix_path} exited with code {result.returncode}. stderr: {result.stderr}")
+                            except FileNotFoundError:
+                                self.logger.warning(f"'{wineserver_executable}' command not found. Cannot stop wineserver for prefix: {wine_prefix_path}")
+                            except Exception as e:
+                                self.logger.error(f"Failed to stop wineserver for prefix {wine_prefix_path}: {e}")
+            else:
+                self.logger.info("No managed instances to clean up wineservers for.")
 
-        # Clear internal state
-        self.pids = []
-        self.managed_instances = []
-        self.logger.info("Instance termination and cleanup complete.")
+            # Clear internal state
+            self.pids = []
+            self.managed_instances = []
+            self.logger.info("Instance termination and cleanup complete.")
+        finally:
+            self.termination_in_progress = False
