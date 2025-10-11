@@ -401,13 +401,13 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         game_details_grid.attach(self.is_native_check, 1, row, 1, 1)
         row += 1
 
-        # Use Gamescope Checkbox
-        game_details_grid.attach(Gtk.Label(label="Use Gamescope?", xalign=0), 0, row, 1, 1)
-        self.use_gamescope_check = Gtk.CheckButton()
-        self.use_gamescope_check.set_active(True) # Default to using gamescope
-        self.use_gamescope_check.set_tooltip_text("Enable/disable Gamescope for this profile")
-        game_details_grid.attach(self.use_gamescope_check, 1, row, 1, 1)
-        row += 1
+        # # Use Gamescope Checkbox
+        # game_details_grid.attach(Gtk.Label(label="Use Gamescope?", xalign=0), 0, row, 1, 1)
+        # self.use_gamescope_check = Gtk.CheckButton()
+        # self.use_gamescope_check.set_active(True) # Default to using gamescope
+        # self.use_gamescope_check.set_tooltip_text("Enable/disable Gamescope for this profile")
+        # game_details_grid.attach(self.use_gamescope_check, 1, row, 1, 1)
+        # row += 1
 
         # Frame 2: Proton & Launch Options
         proton_options_frame = Gtk.Frame(label="Launch Options")
@@ -440,13 +440,13 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         proton_options_grid.attach(self.proton_version_combo, 1, row, 1, 1)
         row += 1
 
-        # Disable bwrap option (CLI only)
-        proton_options_grid.attach(Gtk.Label(label="Disable bwrap (CLI only):", xalign=0), 0, row, 1, 1)
-        self.disable_bwrap_check = Gtk.CheckButton()
-        self.disable_bwrap_check.set_active(False)
-        self.disable_bwrap_check.set_tooltip_text("Disable bwrap isolation when launching via CLI (not recommended)")
-        proton_options_grid.attach(self.disable_bwrap_check, 1, row, 1, 1)
-        row += 1
+        # # Disable bwrap Checkbox
+        # proton_options_grid.attach(Gtk.Label(label="Disable bwrap:", xalign=0), 0, row, 1, 1)
+        # self.disable_bwrap_check = Gtk.CheckButton()
+        # self.disable_bwrap_check.set_active(False)
+        # self.disable_bwrap_check.set_tooltip_text("Disable bwrap isolation when launching via CLI (not recommended)")
+        # proton_options_grid.attach(self.disable_bwrap_check, 1, row, 1, 1)
+        # row += 1
 
         # Apply DXVK/VKD3D Checkbox
         proton_options_grid.attach(Gtk.Label(label="Apply DXVK/VKD3D:", xalign=0), 0, row, 1, 1)
@@ -932,10 +932,10 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             # Normal Python execution
             command = [python_exec, str(script_path), profile_name]
 
-        # Append --no-bwrap if requested via GUI
-        if getattr(self, 'disable_bwrap_check', None) and self.disable_bwrap_check.get_active():
-            command.append("--no-bwrap")
-            self.logger.info("Disabling bwrap as requested by user")
+        # # Append --no-bwrap if requested via GUI
+        # if getattr(self, 'disable_bwrap_check', None) and self.disable_bwrap_check.get_active():
+        #     command.append("--no-bwrap")
+        #     self.logger.info("Disabling bwrap as requested by user")
 
         # Pass the GUI's PID to the CLI process for monitoring
         gui_pid = os.getpid()
@@ -1301,8 +1301,8 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             game_args=self.game_args_entry.get_text(),
             env_vars=self._get_env_vars_from_ui(),
             is_native=is_native_value,
-            use_gamescope=self.use_gamescope_check.get_active(),
-            disable_bwrap=self.disable_bwrap_check.get_active(),
+            # use_gamescope=self.use_gamescope_check.get_active(),
+            # disable_bwrap=self.disable_bwrap_check.get_active(),
             apply_dxvk_vkd3d=self.apply_dxvk_vkd3d_check.get_active(),
             winetricks_verbs=winetricks_verbs,
             mode=mode,
@@ -1359,8 +1359,8 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         else:
             self.proton_version_combo.set_active(0)
 
-        # Load disable_bwrap setting
-        self.disable_bwrap_check.set_active(profile_data.get("DISABLE_BWRAP", False))
+        # # Load disable_bwrap setting
+        # self.disable_bwrap_check.set_active(profile_data.get("DISABLE_BWRAP", False))
 
         # Load DXVK/VKD3D and Winetricks settings
         self.apply_dxvk_vkd3d_check.set_active(profile_data.get("APPLY_DXVK_VKD3D", True))
@@ -1377,7 +1377,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.app_id_entry.set_text(str(profile_data.get("APP_ID") or ""))
         self.game_args_entry.set_text(str(profile_data.get("GAME_ARGS") or ""))
         self.is_native_check.set_active(profile_data.get("IS_NATIVE", False))
-        self.use_gamescope_check.set_active(profile_data.get("USE_GAMESCOPE", True))
+        # self.use_gamescope_check.set_active(profile_data.get("USE_GAMESCOPE", True))
 
     def _load_mode_and_splitscreen_settings(self, profile_data):
         """Load mode and splitscreen configuration."""

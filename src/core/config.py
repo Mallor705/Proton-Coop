@@ -30,8 +30,8 @@ class Config:
         Path.home() / ".local/share/Steam/steamapps/common",
     ]
 
-    REQUIRED_COMMANDS = ["bwrap"]  # gamescope is now optional, checked per-profile
-    OPTIONAL_COMMANDS = ["gamescope"]
+    REQUIRED_COMMANDS = ["bwrap", "gamescope"]
+    OPTIONAL_COMMANDS = []
 
     # Timeout configurations (in seconds)
     PROCESS_START_TIMEOUT = 30

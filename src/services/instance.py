@@ -39,19 +39,19 @@ class InstanceService:
                 self.logger.error(f"Executable path is not configured for profile '{profile_name}'. Cannot launch.")
                 return
 
-            # Validate gamescope if needed
-            if profile.use_gamescope:
-                if not shutil.which('gamescope'):
-                    raise DependencyError("Gamescope is enabled for this profile but 'gamescope' command not found. Please install gamescope or disable it in the profile settings.")
-                self.logger.info("Gamescope is enabled and available for this profile.")
+            # # Validate gamescope if needed
+            # if profile.use_gamescope:
+            #     if not shutil.which('gamescope'):
+            #         raise DependencyError("Gamescope is enabled for this profile but 'gamescope' command not found. Please install gamescope or disable it in the profile settings.")
+            #     self.logger.info("Gamescope is enabled and available for this profile.")
 
-            # Validate bwrap if needed
-            if not profile.disable_bwrap:
-                if not shutil.which('bwrap'):
-                    raise DependencyError("bwrap is required but not found. Please install bubblewrap or enable 'Disable bwrap' in the profile settings (not recommended).")
-                self.logger.info("bwrap is enabled and available for this profile.")
-            else:
-                self.logger.warning("⚠️  bwrap is disabled for this profile. Input device isolation will NOT work!")
+            # # Validate bwrap if needed
+            # if not profile.disable_bwrap:
+            #     if not shutil.which('bwrap'):
+            #         raise DependencyError("bwrap is required but not found. Please install bubblewrap or enable 'Disable bwrap' in the profile settings (not recommended).")
+            #     self.logger.info("bwrap is enabled and available for this profile.")
+            # else:
+            #     self.logger.warning("⚠️  bwrap is disabled for this profile. Input device isolation will NOT work!")
 
             if profile.is_native:
                 self.proton_path = None
@@ -294,12 +294,12 @@ class InstanceService:
             if profile and profile.app_id:
                 env['SteamAppId'] = profile.app_id
                 env['SteamGameId'] = profile.app_id
-            
+
             # --- Force Host Network ---
             # This is critical for allowing instances to communicate via localhost (127.0.0.1)
             # by disabling Proton's network namespacing.
             env['PV_NET_SHARE'] = "1"
-            
+
         # --- Add environment variables defined in the profile ---
         if profile and profile.env_vars:
             for key, value in profile.env_vars.items():
@@ -348,22 +348,28 @@ class InstanceService:
         # Validate input devices
         device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
 
-        # Build Gamescope command only if enabled
-        if profile.use_gamescope:
-            gamescope_cmd = self._build_gamescope_command(profile, device_info['should_add_grab_flags'], instance.instance_num)
-        else:
-            gamescope_cmd = []
-            self.logger.info(f"Instance {instance.instance_num}: Gamescope is disabled for this profile.")
+        # # Build Gamescope command only if enabled (If Checkbox Active)
+        # if profile.use_gamescope:
+        #     gamescope_cmd = self._build_gamescope_command(profile, device_info['should_add_grab_flags'], instance.instance_num)
+        # else:
+        #     gamescope_cmd = []
+        #     self.logger.info(f"Instance {instance.instance_num}: Gamescope is disabled for this profile.")
+
+        # Build Gamescope command
+        gamescope_cmd = self._build_gamescope_command(profile, device_info['should_add_grab_flags'], instance.instance_num)
 
         # Build base game command
         base_cmd = self._build_base_game_command(profile, proton_path, symlinked_exe_path, gamescope_cmd, instance.instance_num)
 
-        # Build bwrap command with devices (only if not disabled)
-        if profile.disable_bwrap:
-            bwrap_cmd = []
-            self.logger.info(f"Instance {instance.instance_num}: bwrap is disabled for this profile.")
-        else:
-            bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num, env)
+        # # Build bwrap command with devices, only if not disabled (If Checkbox Active)
+        # if profile.disable_bwrap:
+        #     bwrap_cmd = []
+        #     self.logger.info(f"Instance {instance.instance_num}: bwrap is disabled for this profile.")
+        # else:
+        #     bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num, env)
+
+        # Build bwrap command with devices
+        bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num, env)
 
         # Command without taskset for CPU affinity, to mirror user's script
         final_cmd = bwrap_cmd + base_cmd
