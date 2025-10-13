@@ -209,7 +209,13 @@ class GameProfile(BaseModel):
             data['NUM_PLAYERS'] = len(data['PLAYERS'])
 
     def effective_num_players(self) -> int:
-        """Returns the number of players that will actually be launched."""
+        """
+        Returns the number of players that will actually be launched.
+        It's determined by the number of players selected in the GUI. If no players are selected,
+        it defaults to the total number of configured players.
+        """
+        if self.selected_players:
+            return len(self.selected_players)
         return len(self.player_configs) if self.player_configs else 0
 
     @property

@@ -96,7 +96,7 @@ class InstanceService:
                 core_assignments.append(",".join(cores_list))
                 current_core_start += num_cores_for_instance
 
-            self.logger.info(f"Launching {profile.effective_num_players()} instance(s) of '{profile.game_name}'...")
+            self.logger.info(f"Launching {num_instances} instance(s) of '{profile.game_name}'...")
 
             original_game_path = profile.exe_path.parent
 
@@ -105,7 +105,7 @@ class InstanceService:
                 self._launch_single_instance(instance, profile, proton_path, steam_root, original_game_path, cpu_affinity)
                 time.sleep(5)
 
-            self.logger.info(f"All {profile.effective_num_players} instances launched")
+            self.logger.info(f"All {num_instances} instances launched")
             self.logger.info(f"PIDs: {self.pids}")
             self.logger.info("Press CTRL+C to terminate all instances")
 
