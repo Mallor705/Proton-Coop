@@ -167,7 +167,7 @@ class InstanceService:
         """Creates a mirrored directory structure with symlinks for the original game folder.
         Returns the path to the main executable's symlink.
         """
-        instance_game_root = instance.prefix_dir / "game_files"
+        instance_game_root = instance.prefix_dir / "game_files" / original_game_path.name
         instance_game_root.mkdir(parents=True, exist_ok=True)
 
         self.logger.info(f"Instance {instance.instance_num}: Creating symlink structure for {original_game_path} at {instance_game_root}")
