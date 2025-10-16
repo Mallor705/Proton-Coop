@@ -83,18 +83,13 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.sidebar_vbox.append(buttons_hbox)
 
         # Action Buttons
-        self.add_game_button = Gtk.Button(label="➕ Game")
+        self.add_game_button = Gtk.Button(label="➕ Add Game")
         self.add_game_button.set_tooltip_text("Add a new game to the library")
         self.add_game_button.connect("clicked", self._on_add_game_clicked)
+        self.add_game_button.set_hexpand(True)
         buttons_hbox.append(self.add_game_button)
 
-        self.add_profile_button = Gtk.Button(label="➕ Profile")
-        self.add_profile_button.set_tooltip_text("Add a new profile to the selected game")
-        self.add_profile_button.set_sensitive(False)
-        self.add_profile_button.connect("clicked", self._on_add_profile_clicked)
-        buttons_hbox.append(self.add_profile_button)
-
-        self.delete_button = Gtk.Button(label="🗑️ Delete")
+        self.delete_button = Gtk.Button(label="🗑️")
         self.delete_button.add_css_class("destructive-action")
         self.delete_button.set_tooltip_text("Delete selected game or profile")
         self.delete_button.set_sensitive(False)
@@ -199,6 +194,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         # --- Profile Details ---
         self.profile_name_entry = Gtk.Entry(placeholder_text="Ex: Coop Campaign, Modded Playthrough")
+        self.profile_selector_combo = Gtk.ComboBoxText()
+        self.add_profile_button = Gtk.Button(label="➕")
+        self.delete_profile_button = Gtk.Button(label="🗑️")
 
         # --- Launch Options ---
         self.proton_version_combo = Gtk.ComboBoxText()
@@ -274,6 +272,29 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         row += 1
         game_details_grid.attach(Gtk.Label(label="Is Native Game (Linux)?", xalign=0), 0, row, 1, 1)
         game_details_grid.attach(self.is_native_check, 1, row, 1, 1)
+
+        # --- Profiles Frame ---
+        profiles_frame = Gtk.Frame(label="Profiles")
+        page_vbox.append(profiles_frame)
+        profiles_grid = Gtk.Grid(column_spacing=10, row_spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
+        profiles_frame.set_child(profiles_grid)
+
+        profile_selector_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        self.profile_selector_combo.set_hexpand(True)
+        profile_selector_box.append(self.profile_selector_combo)
+
+        self.add_profile_button.set_tooltip_text("Add a new profile")
+        self.add_profile_button.connect("clicked", self._on_add_profile_clicked)
+        profile_selector_box.append(self.add_profile_button)
+
+        self.delete_profile_button.set_tooltip_text("Delete selected profile")
+        self.delete_profile_button.add_css_class("destructive-action")
+        self.delete_profile_button.connect("clicked", self._on_delete_clicked)
+        profile_selector_box.append(self.delete_profile_button)
+
+        profiles_grid.attach(Gtk.Label(label="Select Profile:", xalign=0), 0, 0, 1, 1)
+        profiles_grid.attach(profile_selector_box, 1, 0, 1, 1)
+        self.profile_selector_combo.connect("changed", self._on_profile_selected_from_combo)
 
         # --- Launch Options Frame ---
         launch_options_frame = Gtk.Frame(label="Launch Options")
@@ -379,17 +400,20 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.num_players_spin.connect("value-changed", self.on_num_players_changed)
 
     def _update_action_buttons_state(self):
-        """Updates the sensitivity and appearance of sidebar and bottom-bar buttons."""
+        """Updates the sensitivity of all action buttons based on the current selection."""
         game_selected = self.selected_game is not None
         profile_selected = self.selected_profile is not None
 
         # Sidebar buttons
+        self.delete_button.set_sensitive(game_selected) # The main delete button now only deletes games
+
+        # Game Settings tab buttons
         self.add_profile_button.set_sensitive(game_selected)
-        self.delete_button.set_sensitive(game_selected or profile_selected)
+        self.delete_profile_button.set_sensitive(profile_selected)
 
         # Bottom-bar buttons
-        self.save_button.set_sensitive(game_selected or profile_selected)
-        self.play_button.set_sensitive(profile_selected)
+        self.save_button.set_sensitive(game_selected) # Can always save game settings
+        self.play_button.set_sensitive(profile_selected) # Can only launch with a profile
 
         # Play/Stop button state
         if self.cli_process_pid:
@@ -429,58 +453,77 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.statusbar.set_label("Executable path selected.") # Changed from push
 
     def _populate_game_library(self):
-        """Populates the TreeView with games and their profiles from the GameManager."""
+        """Populates the TreeView with games from the GameManager."""
         self.game_tree_store.clear()
         games = self.game_manager.get_games()
         for game in games:
-            game_iter = self.game_tree_store.append(None, [game.game_name, game, None])
-            profiles = self.game_manager.get_profiles(game)
-            for profile in profiles:
-                self.game_tree_store.append(game_iter, [profile.profile_name, game, profile])
+            self.game_tree_store.append(None, [game.game_name, game, None])
         self.game_tree_view.expand_all()
 
+    def _populate_profile_selector(self, game: Optional[Game]):
+        """Populates the profile selector ComboBox with profiles for the given game."""
+        self.profile_selector_combo.remove_all()
+        if game:
+            profiles = self.game_manager.get_profiles(game)
+            for profile in profiles:
+                self.profile_selector_combo.append(profile.profile_name, profile.profile_name)
+        self.profile_selector_combo.set_active(-1)
+
     def _on_library_selection_changed(self, selection):
-        """Handles selection changes in the game/profile library TreeView."""
+        """Handles selection changes in the game library TreeView."""
         model, tree_iter = selection.get_selected()
         if tree_iter:
-            self.selected_game = model[tree_iter][1]
-            self.selected_profile = model[tree_iter][2]
-
-            if self.selected_profile:
-                self._load_profile_data(self.selected_game, self.selected_profile)
-                self._set_fields_sensitivity(is_profile_selected=True)
-            elif self.selected_game:
-                self._load_game_data(self.selected_game)
-                self._set_fields_sensitivity(is_profile_selected=False)
+            self.selected_game = model.get_value(tree_iter, 1)
+            self._clear_all_fields()
+            self._load_game_data(self.selected_game)
+            self._populate_profile_selector(self.selected_game)
+            self._set_fields_sensitivity(is_game_selected=True, is_profile_selected=False)
         else:
             self.selected_game = None
             self.selected_profile = None
             self._clear_all_fields()
-            self._set_fields_sensitivity(is_profile_selected=False)
+            self._populate_profile_selector(None)
+            self._set_fields_sensitivity(is_game_selected=False, is_profile_selected=False)
+
+        self._update_action_buttons_state()
+
+    def _on_profile_selected_from_combo(self, combo):
+        """Handles selection changes in the profile ComboBox."""
+        profile_name = combo.get_active_text()
+        if profile_name and self.selected_game:
+            profiles = self.game_manager.get_profiles(self.selected_game)
+            self.selected_profile = next((p for p in profiles if p.profile_name == profile_name), None)
+            if self.selected_profile:
+                self._load_profile_data(self.selected_game, self.selected_profile)
+                self._set_fields_sensitivity(is_game_selected=True, is_profile_selected=True)
+        else:
+            self.selected_profile = None
+            # Re-load game data to clear profile-specific fields
+            if self.selected_game:
+                self._load_game_data(self.selected_game)
+            self._set_fields_sensitivity(is_game_selected=(self.selected_game is not None), is_profile_selected=False)
 
         self._update_action_buttons_state()
 
     def _select_item_in_library(self, game_name: str, profile_name: Optional[str] = None):
-        """Programmatically selects an item in the game library TreeView."""
+        """Programmatically selects a game and then defers profile selection."""
         model = self.game_tree_store
         root_iter = model.get_iter_first()
         while root_iter:
             stored_game = model.get_value(root_iter, 1)
             if stored_game and stored_game.game_name == game_name:
-                # Found the game, now decide if we need to find a profile
-                if not profile_name:
-                    self.game_tree_view.get_selection().select_iter(root_iter)
-                    self.game_tree_view.scroll_to_cell(model.get_path(root_iter))
-                    return
+                # This selection will trigger _on_library_selection_changed,
+                # which will correctly populate the profile ComboBox.
+                self.game_tree_view.get_selection().select_iter(root_iter)
+                self.game_tree_view.scroll_to_cell(model.get_path(root_iter))
 
-                child_iter = model.iter_children(root_iter)
-                while child_iter:
-                    stored_profile = model.get_value(child_iter, 2)
-                    if stored_profile and stored_profile.profile_name == profile_name:
-                        self.game_tree_view.get_selection().select_iter(child_iter)
-                        self.game_tree_view.scroll_to_cell(model.get_path(child_iter))
-                        return
-                    child_iter = model.iter_next(child_iter)
+                # Defer the profile selection to the next idle cycle.
+                # This gives the TreeView selection signal handler time to run
+                # and populate the ComboBox before we try to select an item in it.
+                if profile_name:
+                    GLib.idle_add(self.profile_selector_combo.set_active_id, profile_name)
+
+                return
             root_iter = model.iter_next(root_iter)
 
     def _on_add_env_var_clicked(self, button):
@@ -775,7 +818,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
                 self.statusbar.set_label(f"Error saving profile: {e}")
 
         elif self.selected_game:
-            game_to_reselect = self.game_name_entry.get_text() # Get name from entry in case it was changed
+            game_to_reselect = self.game_name_entry.get_text()
             self.statusbar.set_label("Saving game...")
             try:
                 updated_game = self._get_game_from_ui()
@@ -785,7 +828,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
                 self.logger.error(f"Failed to save game: {e}")
                 self.statusbar.set_label(f"Error saving game: {e}")
 
-        # Refresh library and restore selection
         self._populate_game_library()
         if game_to_reselect:
             self._select_item_in_library(game_to_reselect, profile_to_reselect)
@@ -1315,42 +1357,33 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         self.drawing_area.queue_draw()
 
-    def _set_fields_sensitivity(self, is_profile_selected: bool):
-        """Sets the sensitivity of input fields based on selection."""
-        # Game fields are editable only when a game is selected, but not a profile
-        game_editable = self.selected_game is not None and not is_profile_selected
-        self.game_name_entry.set_sensitive(game_editable)
-        self.exe_path_entry.set_sensitive(game_editable)
-        self.app_id_entry.set_sensitive(game_editable)
-        self.game_args_entry.set_sensitive(game_editable)
-        self.is_native_check.set_sensitive(game_editable)
-
-        # Profile fields are editable only when a profile is selected
-        profile_editable = is_profile_selected
+    def _set_fields_sensitivity(self, is_game_selected: bool, is_profile_selected: bool):
+        """Sets the sensitivity of all UI elements based on selection."""
         # Game-level fields are editable when a game is selected
-        self.game_name_entry.set_sensitive(game_editable)
-        self.exe_path_entry.set_sensitive(game_editable)
-        self.app_id_entry.set_sensitive(game_editable)
-        self.game_args_entry.set_sensitive(game_editable)
-        self.is_native_check.set_sensitive(game_editable)
-        self.proton_version_combo.set_sensitive(game_editable)
-        self.apply_dxvk_vkd3d_check.set_sensitive(game_editable)
-        self.winetricks_verbs_entry.set_sensitive(game_editable)
-        self.env_vars_listbox.set_sensitive(game_editable)
+        self.game_name_entry.set_sensitive(is_game_selected)
+        self.exe_path_entry.set_sensitive(is_game_selected)
+        self.app_id_entry.set_sensitive(is_game_selected)
+        self.game_args_entry.set_sensitive(is_game_selected)
+        self.is_native_check.set_sensitive(is_game_selected)
+        self.proton_version_combo.set_sensitive(is_game_selected)
+        self.apply_dxvk_vkd3d_check.set_sensitive(is_game_selected)
+        self.winetricks_verbs_entry.set_sensitive(is_game_selected)
+        self.env_vars_listbox.set_sensitive(is_game_selected)
+        self.profile_selector_combo.set_sensitive(is_game_selected)
 
         # Profile-level fields are editable only when a profile is selected
-        self.profile_name_entry.set_sensitive(profile_editable)
-        self.num_players_spin.set_sensitive(profile_editable)
-        self.instance_width_spin.set_sensitive(profile_editable)
-        self.instance_height_spin.set_sensitive(profile_editable)
-        self.mode_combo.set_sensitive(profile_editable)
-        self.splitscreen_orientation_combo.set_sensitive(profile_editable)
-        self.player_config_vbox.set_sensitive(profile_editable)
+        self.profile_name_entry.set_sensitive(is_profile_selected)
+        self.num_players_spin.set_sensitive(is_profile_selected)
+        self.instance_width_spin.set_sensitive(is_profile_selected)
+        self.instance_height_spin.set_sensitive(is_profile_selected)
+        self.mode_combo.set_sensitive(is_profile_selected)
+        self.splitscreen_orientation_combo.set_sensitive(is_profile_selected)
+        self.player_config_vbox.set_sensitive(is_profile_selected)
 
         # Set sensitivity for the notebook tabs
-        self.notebook.get_nth_page(0).set_sensitive(game_editable or profile_editable) # Game Settings
-        self.notebook.get_nth_page(1).set_sensitive(profile_editable) # Profile Settings
-        self.notebook.get_nth_page(2).set_sensitive(profile_editable) # Window Layout
+        self.notebook.get_nth_page(0).set_sensitive(is_game_selected) # Game Settings
+        self.notebook.get_nth_page(1).set_sensitive(is_profile_selected) # Profile Settings
+        self.notebook.get_nth_page(2).set_sensitive(is_profile_selected) # Window Layout
 
 
     def _load_game_data(self, game: Game):
