@@ -721,23 +721,18 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         """Handles the 'Number of Players' spin button value change."""
         num_players = spin_button.get_value_as_int()
         self._create_player_config_uis(num_players)
-        self.statusbar.set_label(f"Number of players changed to {num_players}.") # Changed from push
+        self.statusbar.set_label(f"Number of players changed to {num_players}.")
 
     def on_mode_changed(self, combo):
-        """Handles the 'Mode' combo box change."""
+        """Shows or hides the splitscreen orientation dropdown based on the selected mode."""
         mode = combo.get_active_text()
-        if mode == "splitscreen":
-            self.splitscreen_orientation_label.show()
-            self.splitscreen_orientation_combo.show()
-            # REMOVED: self.primary_monitor_label.hide()
-            # REMOVED: self.primary_monitor_entry.hide()
-            self.statusbar.set_label("Splitscreen mode activated.") # Changed from push
+        is_splitscreen = (mode == "Splitscreen")
+        self.splitscreen_orientation_label.set_visible(is_splitscreen)
+        self.splitscreen_orientation_combo.set_visible(is_splitscreen)
+        if is_splitscreen:
+            self.statusbar.set_label("Splitscreen mode activated.")
         else:
-            self.splitscreen_orientation_label.hide()
-            self.splitscreen_orientation_combo.hide()
-            # REMOVED: self.primary_monitor_label.show()
-            # REMOVED: self.primary_monitor_entry.show()
-            self.statusbar.set_label("Splitscreen mode deactivated.") # Changed from push
+            self.statusbar.set_label("Splitscreen mode deactivated.")
 
     def on_save_button_clicked(self, button):
         """Handles the 'Save' button click, saving either game or profile data."""
@@ -1014,8 +1009,8 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             'instance_width': self.instance_width_spin.get_value_as_int(),
             'instance_height': self.instance_height_spin.get_value_as_int(),
             'num_players': max(1, self.num_players_spin.get_value_as_int()),
-            'mode': self.mode_combo.get_active_text(),
-            'orientation': self.splitscreen_orientation_combo.get_active_text()
+            'mode': self.mode_combo.get_active_id(),
+            'orientation': self.splitscreen_orientation_combo.get_active_id()
         }
 
     def _validate_layout_data(self, settings):
@@ -1042,7 +1037,13 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     def _create_preview_profile(self, settings):
         """Creates a dummy GameProfile for the layout preview."""
         try:
-            dummy_game = Game(game_name="Preview", exe_path=Path("/tmp/dummy.exe"), is_native=False)
+            # Use model_construct to create the object without running validation,
+            # which would fail on the non-existent dummy executable path.
+            dummy_game = Game.model_construct(
+                game_name="Preview",
+                exe_path=Path("/tmp/dummy.exe"),
+                is_native=False
+            )
             dummy_profile = Profile(
                 profile_name="Preview",
                 num_players=settings['num_players'],
