@@ -51,7 +51,7 @@ class Config:
             return Path(__file__).parent.parent.parent
 
     SCRIPT_DIR: Path = _get_script_dir()
-    PROFILE_DIR: Path = Path.home() / ".config/proton-coop/profiles"
+    GAMES_DIR: Path = Path.home() / ".config/proton-coop/games"
     LOG_DIR: Path = Path.home() / ".cache/proton-coop/logs"
     PREFIX_BASE_DIR: Path = Path.home() / "Games/proton-coop/prefixes/"
 
@@ -115,10 +115,7 @@ class Config:
                 if path.is_dir():
                     _migrate_and_rename(path)
 
-        # 2. Migrate Profile Filenames
-        if Config.PROFILE_DIR.exists() and Config.PROFILE_DIR.is_dir():
-            for path in list(Config.PROFILE_DIR.glob('*.json')):
-                _migrate_and_rename(path)
+        # Legacy profile migration is no longer needed with the new structure.
 
     @staticmethod
     def get_prefix_base_dir(game_name: str) -> Path:

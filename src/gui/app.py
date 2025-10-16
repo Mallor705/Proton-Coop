@@ -1,171 +1,174 @@
 import gi
 gi.require_version("Gtk", "4.0")
-gi.require_version("Adw", "1")  # Import Adw
-from gi.repository import Gtk, Adw, Gdk # Adicionado Adw e Gdk
+gi.require_version("Adw", "1")
+from gi.repository import Gtk, Adw, Gdk, GLib
 from pathlib import Path
 import json
+import subprocess
+import os
+import signal
+import time
+import cairo
+import sys
+from typing import Dict, List, Tuple, Any, Optional
+
 from ..services.device_manager import DeviceManager
-from ..models.profile import GameProfile, PlayerInstanceConfig, SplitscreenConfig
 from ..services.proton import ProtonService
+from ..services.game_manager import GameManager
+from ..models.game import Game
+from ..models.profile import Profile, GameProfile, PlayerInstanceConfig, SplitscreenConfig
 from ..core.logger import Logger
 from ..core.config import Config
 from .styles import initialize_styles, get_style_manager, StyleManagerError
-from typing import Dict, List, Tuple, Any, Optional
-import subprocess
-import os # Import os for process management (killpg, getpgid)
-import signal # Import signal for process termination
-import time # Import time for busy-wait in _stop_game
-import cairo # Import cairo here for drawing
-import sys # Import sys for executable path
-from gi.repository import GLib # Import GLib for timeout_add
-
-
 
 class ProfileEditorWindow(Adw.ApplicationWindow):
     """
-    The main window for the Proton-Coop Profile Editor application.
+    The main window for the Linux Coop application.
 
     This class builds and manages the entire graphical user interface, including
-    the profile list, configuration tabs (General, Player Config, Layout),
-    and all associated widgets and logic for creating, loading, saving,
-    and launching game profiles.
+    the game/profile library view, configuration tabs, and all associated
+
+    widgets and logic for creating, loading, saving, and launching games.
     """
     def __init__(self, app):
-        """
-        Initializes the main application window.
+        super().__init__(application=app, title="Linux Coop")
+        self.set_default_size(1200, 800)
 
-        Args:
-            app (LinuxCoopApp): The parent Adw.Application instance.
-        """
-        super().__init__(application=app, title="Linux Coop Profile Editor")
-        self.set_default_size(1200, 700) # Increased default width for side pane
+        # Services and Managers
+        self.logger = Logger(name="LinuxCoopGUI", log_dir=Config.LOG_DIR)
+        self.game_manager = GameManager(self.logger)
+        self.device_manager = DeviceManager()
+        self.proton_service = ProtonService(self.logger)
 
-        # Create the main vertical box which will hold the main content (paned), buttons, and statusbar
+        # State Tracking
+        self.selected_game: Optional[Game] = None
+        self.selected_profile: Optional[Profile] = None
+        self.cli_process_pid: Optional[int] = None
+        self.monitoring_timeout_id: Optional[int] = None
+
+        # Main Layout
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.set_content(main_vbox) # Changed from self.add(main_vbox)
+        self.set_content(main_vbox)
 
-        # Create a horizontal Paned widget for the side menu and main content
         self.main_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        main_vbox.append(self.main_paned) # Changed from pack_start
+        main_vbox.append(self.main_paned)
 
-
-
-        # Left Pane: Profile List with Add Button
-        # Create a vertical container for the sidebar
+        # --- Left Pane: Game and Profile Library ---
         self.sidebar_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        self.sidebar_vbox.set_size_request(200, -1) # Set a minimum width for the side pane
+        self.sidebar_vbox.set_size_request(250, -1)
         self.main_paned.set_start_child(self.sidebar_vbox)
 
-        # Profile list with scrolled window
-        self.profile_list_scrolled_window = Gtk.ScrolledWindow()
-        self.profile_list_scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        self.profile_list_scrolled_window.set_vexpand(True)  # Expand to fill available space
-        self.sidebar_vbox.append(self.profile_list_scrolled_window)
+        # TreeView for games and profiles
+        scrolled_window = Gtk.ScrolledWindow()
+        scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled_window.set_vexpand(True)
+        self.sidebar_vbox.append(scrolled_window)
 
-        self.profile_listbox = Gtk.ListBox()
-        self.profile_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
-        self.profile_listbox.connect("row-activated", self._on_profile_selected_from_list)
-        self.profile_list_scrolled_window.set_child(self.profile_listbox)
+        # TreeStore model: Name, Game Object, Profile Object
+        self.game_tree_store = Gtk.TreeStore(str, object, object)
+        self.game_tree_view = Gtk.TreeView(model=self.game_tree_store)
+        self.game_tree_view.get_selection().connect("changed", self._on_library_selection_changed)
+        scrolled_window.set_child(self.game_tree_view)
+
+        renderer = Gtk.CellRendererText()
+        column = Gtk.TreeViewColumn("Library", renderer, text=0)
+        self.game_tree_view.append_column(column)
 
         # Buttons container
-        self.buttons_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        self.buttons_hbox.set_margin_start(8)
-        self.buttons_hbox.set_margin_end(8)
-        self.buttons_hbox.set_margin_bottom(8)
-        self.buttons_hbox.set_margin_top(8)
-        self.sidebar_vbox.append(self.buttons_hbox)
+        buttons_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        buttons_hbox.set_margin_start(8)
+        buttons_hbox.set_margin_end(8)
+        buttons_hbox.set_margin_bottom(8)
+        buttons_hbox.set_margin_top(8)
+        self.sidebar_vbox.append(buttons_hbox)
 
-        # Add Profile Button
-        self.add_profile_button = Gtk.Button(label="🎮 Add New Profile")
-        self.add_profile_button.set_hexpand(True)  # Take most of the space
-        self.add_profile_button.add_css_class("suggested-action")  # Makes it blue/prominent
-        self.add_profile_button.set_tooltip_text("Create a new game profile with default settings")
+        # Action Buttons
+        self.add_game_button = Gtk.Button(label="➕ Game")
+        self.add_game_button.set_tooltip_text("Add a new game to the library")
+        self.add_game_button.connect("clicked", self._on_add_game_clicked)
+        buttons_hbox.append(self.add_game_button)
+
+        self.add_profile_button = Gtk.Button(label="➕ Profile")
+        self.add_profile_button.set_tooltip_text("Add a new profile to the selected game")
+        self.add_profile_button.set_sensitive(False)
         self.add_profile_button.connect("clicked", self._on_add_profile_clicked)
-        self.buttons_hbox.append(self.add_profile_button)
+        buttons_hbox.append(self.add_profile_button)
 
-        # Delete Profile Button (initially hidden)
-        self.delete_profile_button = Gtk.Button(label="🗑️")
-        self.delete_profile_button.set_size_request(40, -1)  # Small fixed width
-        self.delete_profile_button.add_css_class("destructive-action")  # Makes it red
-        self.delete_profile_button.set_tooltip_text("Delete selected profile")
-        self.delete_profile_button.connect("clicked", self._on_delete_profile_clicked)
-        self.delete_profile_button.set_visible(False)  # Hidden by default
-        self.buttons_hbox.append(self.delete_profile_button)
+        self.delete_button = Gtk.Button(label="🗑️ Delete")
+        self.delete_button.add_css_class("destructive-action")
+        self.delete_button.set_tooltip_text("Delete selected game or profile")
+        self.delete_button.set_sensitive(False)
+        self.delete_button.connect("clicked", self._on_delete_clicked)
+        buttons_hbox.append(self.delete_button)
 
-        # Track selected profile
-        self.selected_profile_name = None
-
-        # Right Pane: Container with Notebook and Fixed Buttons
+        # --- Right Pane: Configuration Notebook ---
         right_pane_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         right_pane_vbox.set_vexpand(True)
         right_pane_vbox.set_hexpand(True)
         self.main_paned.set_end_child(right_pane_vbox)
 
-        # Notebook with tabs
         self.notebook = Gtk.Notebook()
         self.notebook.set_vexpand(True)
         self.notebook.set_hexpand(True)
         right_pane_vbox.append(self.notebook)
 
-        # Fixed buttons section at the bottom of right pane
+        # --- Action Buttons (Bottom Bar) ---
         button_separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         right_pane_vbox.append(button_separator)
 
         button_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        button_container.set_halign(Gtk.Align.END) # Align buttons to the right
+        button_container.set_halign(Gtk.Align.END)
         button_container.set_margin_start(10)
         button_container.set_margin_end(10)
         button_container.set_margin_top(10)
         button_container.set_margin_bottom(10)
         right_pane_vbox.append(button_container)
 
-        # Create the fixed buttons
-        load_button = Gtk.Button(label="Load Profile")
-        load_button.connect("clicked", self.on_load_button_clicked)
-        button_container.append(load_button)
+        self.save_button = Gtk.Button(label="💾 Save")
+        self.save_button.connect("clicked", self.on_save_button_clicked)
+        self.save_button.set_sensitive(False)
+        button_container.append(self.save_button)
 
-        save_button = Gtk.Button(label="Save Profile")
-        save_button.connect("clicked", self.on_save_button_clicked)
-        button_container.append(save_button)
-
-        # Make play_button an instance variable
-        self.play_button = Gtk.Button(label="▶️ Launch Game")
-        # Connect to a general handler that will decide to launch or stop
+        self.play_button = Gtk.Button(label="▶️ Launch")
         self.play_button.connect("clicked", self.on_play_button_clicked)
+        self.play_button.set_sensitive(False)
         button_container.append(self.play_button)
 
-        # Initialize configuration widgets early
-        self.num_players_spin = Gtk.SpinButton.new_with_range(1, 4, 1)
-        self.num_players_spin.set_value(1) # Default value
-        self.instance_width_spin = Gtk.SpinButton.new_with_range(640, 3840, 1)
-        self.instance_width_spin.set_value(1920) # Default from example.json
-        self.instance_height_spin = Gtk.SpinButton.new_with_range(480, 2160, 1)
-        self.instance_height_spin.set_value(1080) # Default from example.json
+        # --- Initialize UI Widgets ---
+        self._initialize_widgets()
 
-        self.mode_combo = Gtk.ComboBoxText()
-        self.mode_combo.append("fullscreen", "fullscreen")
-        self.mode_combo.append("splitscreen", "splitscreen")
-        self.mode_combo.set_active(0) # Default to None
+        # --- Setup Configuration Tabs ---
+        self.setup_game_settings_tab()
+        self.setup_profile_settings_tab()
+        self.setup_window_layout_tab()
 
-        self.splitscreen_orientation_label = Gtk.Label(label="Orientation:", xalign=0)
-        self.splitscreen_orientation_combo = Gtk.ComboBoxText()
-        self.splitscreen_orientation_combo.append("horizontal", "horizontal")
-        self.splitscreen_orientation_combo.append("vertical", "vertical")
-        self.splitscreen_orientation_combo.set_active(0) # Default to horizontal
+        # --- Connect Signals ---
+        self._connect_layout_signals()
 
-        self.device_manager = DeviceManager()
+        # --- Finalize Initialization ---
+        self.statusbar = Gtk.Label()
+        self.statusbar.set_halign(Gtk.Align.START)
+        self.statusbar.set_margin_start(10)
+        self.statusbar.set_margin_end(10)
+        self.statusbar.set_margin_top(5)
+        self.statusbar.set_margin_bottom(5)
+        main_vbox.append(self.statusbar)
+
+        self.show()
+        self._update_action_buttons_state()
+        self._populate_game_library()
+        self.connect("close-request", self._on_close_request)
+
+    def _initialize_widgets(self):
+        """Initializes all configuration widgets used across the UI."""
+        # --- Device Detection ---
         self.detected_input_devices = self.device_manager.get_input_devices()
         self.detected_audio_devices = self.device_manager.get_audio_devices()
-        self.detected_display_outputs = self.device_manager.get_display_outputs() # Adicionado para seleção de monitor
+        self.detected_display_outputs = self.device_manager.get_display_outputs()
 
-        self.logger = Logger(name="LinuxCoopGUI", log_dir=Path("./logs")) # Moved logger initialization here
-        self.proton_service = ProtonService(self.logger)
-
-        # Mappings for device names to IDs and vice-versa
         self.device_name_to_id = {"None": None}
         self.device_id_to_name = {None: "None"}
 
-        # Create device list mappings for each category
         self.device_lists = {
             "joystick": [{"name": "None", "id": None}] + self.detected_input_devices.get("joystick", []),
             "mouse": [{"name": "None", "id": None}] + self.detected_input_devices.get("mouse", []),
@@ -187,260 +190,17 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.device_name_to_id[device["name"]] = device["id"]
             self.device_id_to_name[device["id"]] = device["name"]
 
-        # Debug logs for mappings
-        self.logger.info(f"DEBUG: device_name_to_id: {self.device_name_to_id}")
-        self.logger.info(f"DEBUG: device_id_to_name: {self.device_id_to_name}")
-
-        # Initialize player config entries list
-        # self.player_config_entries = [] # REMOVED: This is no longer used
-        self.player_checkboxes = []
-
-        # Atributo para controlar o processo do jogo
-        self.cli_process_pid = None
-        self.monitoring_timeout_id = None # Para controlar o timeout do monitoramento
-
-        # Tab 1: General Settings
-        self.general_settings_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.general_settings_page.set_vexpand(True)
-        self.general_settings_page.set_hexpand(True)
-        self.notebook.append_page(self.general_settings_page, Gtk.Label(label="General"))
-
-        # Create a ScrolledWindow for general settings
-        general_scrolled_window = Gtk.ScrolledWindow()
-        general_scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        general_scrolled_window.set_vexpand(True)
-        general_scrolled_window.set_hexpand(True)
-        self.general_settings_page.append(general_scrolled_window)
-
-        # Create a container for the general settings content
-        self.general_settings_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.general_settings_container.set_vexpand(True)
-        self.general_settings_container.set_hexpand(True)
-        general_scrolled_window.set_child(self.general_settings_container)
-
-        self.setup_general_settings() # Call setup_general_settings here
-
-        # Tab 2: Player Configurations
-        self.player_configs_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.player_configs_page.set_vexpand(True)
-        self.player_configs_page.set_hexpand(True)
-        self.notebook.append_page(self.player_configs_page, Gtk.Label(label="Player Config"))
-
-        # Create a ScrolledWindow for player configurations
-        player_scrolled_window = Gtk.ScrolledWindow()
-        player_scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        player_scrolled_window.set_vexpand(True)
-        player_scrolled_window.set_hexpand(True)
-        self.player_configs_page.append(player_scrolled_window) # Changed from pack_start
-
-        # Create a Viewport for the player configurations content (Gtk.Viewport is deprecated in Gtk4)
-        self.player_config_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        self.player_config_vbox.set_vexpand(True)
-        self.player_config_vbox.set_hexpand(True)
-        player_scrolled_window.set_child(self.player_config_vbox) # Changed from player_viewport.add
-
-        self.setup_player_configs()
-
-        # Tab 3: Window Layout Preview
-        self.window_layout_page = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        self.window_layout_page.set_vexpand(True)
-        self.window_layout_page.set_hexpand(True)
-        self.notebook.append_page(self.window_layout_page, Gtk.Label(label="Window Layout"))
-
-        # Left side: Settings panel
-        settings_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        settings_panel.set_margin_start(5)
-        settings_panel.set_margin_end(5)
-        settings_panel.set_margin_top(5)
-        settings_panel.set_margin_bottom(5)
-        settings_panel.set_size_request(300, -1)  # Fixed width for settings
-        self.window_layout_page.append(settings_panel)
-
-        # Add a grid for layout settings in the preview tab
-        self.preview_settings_grid = Gtk.Grid()
-        self.preview_settings_grid.set_column_spacing(10)
-        self.preview_settings_grid.set_row_spacing(10)
-        self.preview_settings_grid.set_hexpand(False)
-        settings_panel.append(self.preview_settings_grid)
-
-        # Right side: Preview area
-        preview_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        preview_panel.set_margin_start(5)
-        preview_panel.set_margin_end(5)
-        preview_panel.set_margin_top(5)
-        preview_panel.set_margin_bottom(5)
-        preview_panel.set_hexpand(True)
-        preview_panel.set_vexpand(True)
-        self.window_layout_page.append(preview_panel)
-
-        # Add a label for the preview area
-        preview_label = Gtk.Label(label="Preview")
-        preview_label.set_halign(Gtk.Align.START)
-        preview_label.set_margin_bottom(5)
-        preview_label.add_css_class("heading")
-        preview_panel.append(preview_label)
-
-        # Num Players
-        preview_row = 0
-        self.preview_settings_grid.attach(Gtk.Label(label="Number of Players:", xalign=0), 0, preview_row, 1, 1)
-        self.preview_settings_grid.attach(self.num_players_spin, 1, preview_row, 1, 1)
-        preview_row += 1
-
-        # Instance Width
-        self.preview_settings_grid.attach(Gtk.Label(label="Instance Width:", xalign=0), 0, preview_row, 1, 1)
-        self.preview_settings_grid.attach(self.instance_width_spin, 1, preview_row, 1, 1)
-        preview_row += 1
-
-        # Instance Height
-        self.preview_settings_grid.attach(Gtk.Label(label="Instance Height:", xalign=0), 0, preview_row, 1, 1)
-        self.preview_settings_grid.attach(self.instance_height_spin, 1, preview_row, 1, 1)
-        preview_row += 1
-
-        # Mode (splitscreen or not)
-        self.preview_settings_grid.attach(Gtk.Label(label="Mode:", xalign=0), 0, preview_row, 1, 1)
-        self.preview_settings_grid.attach(self.mode_combo, 1, preview_row, 1, 1)
-        preview_row += 1
-
-        # Splitscreen Orientation
-        self.preview_settings_grid.attach(self.splitscreen_orientation_label, 0, preview_row, 1, 1)
-        self.preview_settings_grid.attach(self.splitscreen_orientation_combo, 1, preview_row, 1, 1)
-        self.splitscreen_orientation_label.hide()
-        self.splitscreen_orientation_combo.hide()
-        preview_row += 1
-
-        self.drawing_area = Gtk.DrawingArea()
-        self.drawing_area.set_draw_func(self.on_draw_window_layout) # Changed from connect("draw", ...)
-        self.drawing_area.set_hexpand(True) # Ensure drawing area expands horizontally
-        self.drawing_area.set_vexpand(True) # Ensure drawing area expands vertically
-        self.drawing_area.set_size_request(200, 200) # Set minimum size for drawing area
-        preview_panel.append(self.drawing_area)
-
-        # Connect signals for redraw
-        self.instance_width_spin.connect("value-changed", self.on_layout_setting_changed)
-        self.instance_height_spin.connect("value-changed", self.on_layout_setting_changed)
-        self.num_players_spin.connect("value-changed", self.on_layout_setting_changed)
-        self.mode_combo.connect("changed", self.on_layout_setting_changed)
-        self.splitscreen_orientation_combo.connect("changed", self.on_layout_setting_changed)
-
-        # Connect mode combo to its specific handler for visibility
-        self.mode_combo.connect("changed", self.on_mode_changed)
-
-        # Connect num_players_spin to its specific handler for player config UI update
-        self.num_players_spin.connect("value-changed", self.on_num_players_changed)
-
-        # Add a Statusbar at the bottom (Gtk.Statusbar is deprecated in Gtk4)
-        self.statusbar = Gtk.Label() # Using a Label as a simple statusbar replacement
-        self.statusbar.set_halign(Gtk.Align.START)
-        self.statusbar.set_margin_start(10)
-        self.statusbar.set_margin_end(10)
-        self.statusbar.set_margin_top(5)
-        self.statusbar.set_margin_bottom(5)
-        main_vbox.append(self.statusbar) # Changed from pack_end
-
-        self.show() # Changed from show_all()
-        self._update_play_button_state() # Set initial button state
-        self._populate_profile_list() # Populate the side profile list on startup
-
-        # Connect the close request to our custom handler
-        self.connect("close-request", self._on_close_request)
-
-    def setup_general_settings(self):
-        """Sets up the widgets for the 'General' settings tab."""
-        # Use a main VBox for this page to hold frames
-        main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
-        main_vbox.set_margin_start(5)
-        main_vbox.set_margin_end(5)
-        main_vbox.set_margin_top(5)
-        main_vbox.set_margin_bottom(5)
-        main_vbox.set_vexpand(True)
-        main_vbox.set_hexpand(True)
-        self.general_settings_container.append(main_vbox) # Changed to use scrolled container
-
-
-        # Frame 1: Game Details
-        game_details_frame = Gtk.Frame(label="Game Details")
-        main_vbox.append(game_details_frame) # Changed from pack_start
-
-        game_details_grid = Gtk.Grid()
-        game_details_grid.set_column_spacing(10)
-        game_details_grid.set_row_spacing(10)
-        game_details_grid.set_margin_start(5) # Changed from set_border_width
-        game_details_grid.set_margin_end(5)   # Changed from set_border_width
-        game_details_grid.set_margin_top(5)   # Changed from set_border_width
-        game_details_grid.set_margin_bottom(5) # Changed from set_border_width
-        game_details_frame.set_child(game_details_grid) # Changed from add
-
-        row = 0
-
-        # Game Name
-        game_details_grid.attach(Gtk.Label(label="Game Name:", xalign=0), 0, row, 1, 1)
-        self.game_name_entry = Gtk.Entry()
-        self.game_name_entry.set_placeholder_text("Ex: Palworld")
-        game_details_grid.attach(self.game_name_entry, 1, row, 1, 1)
-        row += 1
-
-        # Executable Path
-        game_details_grid.attach(Gtk.Label(label="Executable Path:", xalign=0), 0, row, 1, 1)
-
-        exe_path_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        self.exe_path_entry = Gtk.Entry()
-        self.exe_path_entry.set_hexpand(True)
-        self.exe_path_entry.set_placeholder_text("Ex: ~/.steam/steamapps/common/Palworld/Palworld.exe")
-        exe_path_hbox.append(self.exe_path_entry) # Changed from pack_start
-
-        exe_path_button = Gtk.Button(label="Browse...")
-        exe_path_button.connect("clicked", self.on_exe_path_button_clicked)
-        exe_path_hbox.append(exe_path_button) # Changed from pack_start
-
-        game_details_grid.attach(exe_path_hbox, 1, row, 1, 1)
-        row += 1
-
-        # App ID
-        game_details_grid.attach(Gtk.Label(label="App ID (Steam):", xalign=0), 0, row, 1, 1)
-        self.app_id_entry = Gtk.Entry()
-        self.app_id_entry.set_placeholder_text("Optional (ex: 1621530)")
-        game_details_grid.attach(self.app_id_entry, 1, row, 1, 1)
-        row += 1
-
-        # Game Arguments
-        game_details_grid.attach(Gtk.Label(label="Game Arguments:", xalign=0), 0, row, 1, 1)
-        self.game_args_entry = Gtk.Entry()
-        self.game_args_entry.set_placeholder_text("Optional (ex: -EpicPortal)")
-        game_details_grid.attach(self.game_args_entry, 1, row, 1, 1)
-        row += 1
-
-        # Is Native Checkbox
-        game_details_grid.attach(Gtk.Label(label="Is Native Game (Linux)?", xalign=0), 0, row, 1, 1)
+        # --- Game Details ---
+        self.game_name_entry = Gtk.Entry(placeholder_text="Ex: Palworld")
+        self.exe_path_entry = Gtk.Entry(placeholder_text="~/.steam/steamapps/common/Palworld/Palworld.exe")
+        self.app_id_entry = Gtk.Entry(placeholder_text="Optional (ex: 1621530)")
+        self.game_args_entry = Gtk.Entry(placeholder_text="Optional (ex: -EpicPortal)")
         self.is_native_check = Gtk.CheckButton()
-        self.is_native_check.set_active(False) # Most games will be Windows
-        game_details_grid.attach(self.is_native_check, 1, row, 1, 1)
-        row += 1
 
-        # # Use Gamescope Checkbox
-        # game_details_grid.attach(Gtk.Label(label="Use Gamescope?", xalign=0), 0, row, 1, 1)
-        # self.use_gamescope_check = Gtk.CheckButton()
-        # self.use_gamescope_check.set_active(True) # Default to using gamescope
-        # self.use_gamescope_check.set_tooltip_text("Enable/disable Gamescope for this profile")
-        # game_details_grid.attach(self.use_gamescope_check, 1, row, 1, 1)
-        # row += 1
+        # --- Profile Details ---
+        self.profile_name_entry = Gtk.Entry(placeholder_text="Ex: Coop Campaign, Modded Playthrough")
 
-        # Frame 2: Proton & Launch Options
-        proton_options_frame = Gtk.Frame(label="Launch Options")
-        main_vbox.append(proton_options_frame) # Changed from pack_start
-
-        proton_options_grid = Gtk.Grid()
-        proton_options_grid.set_column_spacing(10)
-        proton_options_grid.set_row_spacing(10)
-        proton_options_grid.set_margin_start(5) # Changed from set_border_width
-        proton_options_grid.set_margin_end(5)   # Changed from set_border_width
-        proton_options_grid.set_margin_top(5)   # Changed from set_border_width
-        proton_options_grid.set_margin_bottom(5) # Changed from set_border_width
-        proton_options_frame.set_child(proton_options_grid) # Changed from add
-
-        row = 0 # Reset row counter for this grid
-
-        # Proton Version
-        proton_options_grid.attach(Gtk.Label(label="Proton Version:", xalign=0), 0, row, 1, 1)
+        # --- Launch Options ---
         self.proton_version_combo = Gtk.ComboBoxText()
         proton_versions = self.proton_service.list_installed_proton_versions()
         if not proton_versions:
@@ -452,67 +212,194 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
                 self.proton_version_combo.append_text(version)
             self.proton_version_combo.set_active(0)
 
-        proton_options_grid.attach(self.proton_version_combo, 1, row, 1, 1)
-        row += 1
+        self.apply_dxvk_vkd3d_check = Gtk.CheckButton(active=True)
+        self.winetricks_verbs_entry = Gtk.Entry(placeholder_text="Optional (e.g., vcrun2019 dotnet48)")
 
-        # # Disable bwrap Checkbox
-        # proton_options_grid.attach(Gtk.Label(label="Disable bwrap:", xalign=0), 0, row, 1, 1)
-        # self.disable_bwrap_check = Gtk.CheckButton()
-        # self.disable_bwrap_check.set_active(False)
-        # self.disable_bwrap_check.set_tooltip_text("Disable bwrap isolation when launching via CLI (not recommended)")
-        # proton_options_grid.attach(self.disable_bwrap_check, 1, row, 1, 1)
-        # row += 1
+        # --- Layout & Display ---
+        self.num_players_spin = Gtk.SpinButton.new_with_range(1, 4, 1)
+        self.instance_width_spin = Gtk.SpinButton.new_with_range(640, 7680, 1)
+        self.instance_height_spin = Gtk.SpinButton.new_with_range(480, 4320, 1)
+        self.mode_combo = Gtk.ComboBoxText()
+        self.mode_combo.append("fullscreen", "Fullscreen")
+        self.mode_combo.append("splitscreen", "Splitscreen")
+        self.splitscreen_orientation_combo = Gtk.ComboBoxText()
+        self.splitscreen_orientation_combo.append("horizontal", "Horizontal")
+        self.splitscreen_orientation_combo.append("vertical", "Vertical")
 
-        # Apply DXVK/VKD3D Checkbox
-        proton_options_grid.attach(Gtk.Label(label="Apply DXVK/VKD3D:", xalign=0), 0, row, 1, 1)
-        self.apply_dxvk_vkd3d_check = Gtk.CheckButton()
-        self.apply_dxvk_vkd3d_check.set_active(True)
-        self.apply_dxvk_vkd3d_check.set_tooltip_text("Automatically install and configure DXVK/VKD3D for this prefix")
-        proton_options_grid.attach(self.apply_dxvk_vkd3d_check, 1, row, 1, 1)
-        row += 1
-
-        # Winetricks Verbs
-        proton_options_grid.attach(Gtk.Label(label="Winetricks Verbs:", xalign=0), 0, row, 1, 1)
-        self.winetricks_verbs_entry = Gtk.Entry()
-        self.winetricks_verbs_entry.set_placeholder_text("Optional (e.g., vcrun2019 dotnet48)")
-        self.winetricks_verbs_entry.set_tooltip_text("Enter Winetricks verbs separated by spaces")
-        proton_options_grid.attach(self.winetricks_verbs_entry, 1, row, 1, 1)
-        row += 1
-
-        # Environment Variables
-        env_vars_frame = Gtk.Frame(label="Custom Environment Variables")
-        main_vbox.append(env_vars_frame) # Changed from pack_start
-
-        env_vars_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        env_vars_vbox.set_margin_start(5) # Changed from set_border_width
-        env_vars_vbox.set_margin_end(5)   # Changed from set_border_width
-        env_vars_vbox.set_margin_top(5)   # Changed from set_border_width
-        env_vars_vbox.set_margin_bottom(5) # Changed from set_border_width
-        env_vars_frame.set_child(env_vars_vbox) # Changed from add
-
+        # --- Environment Variables ---
         self.env_vars_listbox = Gtk.ListBox()
         self.env_vars_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
-        env_vars_vbox.append(self.env_vars_listbox) # Changed from pack_start
         self.env_var_entries = []
 
+        # --- Player Configs ---
+        self.player_config_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        self.player_frames = []
+        self.player_device_combos = []
+        self.player_checkboxes = []
+
+        # --- Preview ---
+        self.drawing_area = Gtk.DrawingArea(hexpand=True, vexpand=True, width_request=200, height_request=200)
+
+    def setup_game_settings_tab(self):
+        """Sets up the 'Game Settings' tab."""
+        page_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
+        scrolled_window = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vscrollbar_policy=Gtk.PolicyType.AUTOMATIC)
+        scrolled_window.set_child(page_vbox)
+        self.notebook.append_page(scrolled_window, Gtk.Label(label="Game Settings"))
+
+        # --- Game Details Frame ---
+        game_details_frame = Gtk.Frame(label="Game Details")
+        page_vbox.append(game_details_frame)
+        game_details_grid = Gtk.Grid(column_spacing=10, row_spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
+        game_details_frame.set_child(game_details_grid)
+
+        row = 0
+        game_details_grid.attach(Gtk.Label(label="Game Name:", xalign=0), 0, row, 1, 1)
+        game_details_grid.attach(self.game_name_entry, 1, row, 1, 1)
+        row += 1
+        game_details_grid.attach(Gtk.Label(label="Executable Path:", xalign=0), 0, row, 1, 1)
+        exe_path_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        self.exe_path_entry.set_hexpand(True)
+        exe_path_hbox.append(self.exe_path_entry)
+        exe_path_button = Gtk.Button(label="Browse...")
+        exe_path_button.connect("clicked", self.on_exe_path_button_clicked)
+        exe_path_hbox.append(exe_path_button)
+        game_details_grid.attach(exe_path_hbox, 1, row, 1, 1)
+        row += 1
+        game_details_grid.attach(Gtk.Label(label="App ID (Steam):", xalign=0), 0, row, 1, 1)
+        game_details_grid.attach(self.app_id_entry, 1, row, 1, 1)
+        row += 1
+        game_details_grid.attach(Gtk.Label(label="Game Arguments:", xalign=0), 0, row, 1, 1)
+        game_details_grid.attach(self.game_args_entry, 1, row, 1, 1)
+        row += 1
+        game_details_grid.attach(Gtk.Label(label="Is Native Game (Linux)?", xalign=0), 0, row, 1, 1)
+        game_details_grid.attach(self.is_native_check, 1, row, 1, 1)
+
+        # --- Launch Options Frame ---
+        launch_options_frame = Gtk.Frame(label="Launch Options")
+        page_vbox.append(launch_options_frame)
+        launch_options_grid = Gtk.Grid(column_spacing=10, row_spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
+        launch_options_frame.set_child(launch_options_grid)
+
+        row = 0
+        launch_options_grid.attach(Gtk.Label(label="Proton Version:", xalign=0), 0, row, 1, 1)
+        launch_options_grid.attach(self.proton_version_combo, 1, row, 1, 1)
+        row += 1
+        launch_options_grid.attach(Gtk.Label(label="Apply DXVK/VKD3D:", xalign=0), 0, row, 1, 1)
+        launch_options_grid.attach(self.apply_dxvk_vkd3d_check, 1, row, 1, 1)
+        row += 1
+        launch_options_grid.attach(Gtk.Label(label="Winetricks Verbs:", xalign=0), 0, row, 1, 1)
+        launch_options_grid.attach(self.winetricks_verbs_entry, 1, row, 1, 1)
+
+        # --- Environment Variables Frame ---
+        env_vars_frame = Gtk.Frame(label="Custom Environment Variables")
+        page_vbox.append(env_vars_frame)
+        env_vars_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
+        env_vars_frame.set_child(env_vars_vbox)
+
+        env_vars_vbox.append(self.env_vars_listbox)
         self._add_env_var_row("WINEDLLOVERRIDES", "")
         self._add_env_var_row("MANGOHUD", "1")
-
         add_env_var_button = Gtk.Button(label="Add Variable")
         add_env_var_button.connect("clicked", self._on_add_env_var_clicked)
-        env_vars_vbox.append(add_env_var_button) # Changed from pack_start
+        env_vars_vbox.append(add_env_var_button)
 
-        # Buttons are now fixed at the bottom of the main window, so they're removed from this tab
+    def setup_profile_settings_tab(self):
+        """Sets up the 'Profile Settings' tab."""
+        page_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
+        scrolled_window = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vscrollbar_policy=Gtk.PolicyType.AUTOMATIC)
+        scrolled_window.set_child(page_vbox)
+        self.notebook.append_page(scrolled_window, Gtk.Label(label="Profile Settings"))
 
-    def _update_play_button_state(self):
-        """Updates the label and style of the main launch button based on game state."""
+        # --- Profile Details ---
+        profile_details_frame = Gtk.Frame(label="Profile Details")
+        page_vbox.append(profile_details_frame)
+        profile_details_grid = Gtk.Grid(column_spacing=10, row_spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
+        profile_details_frame.set_child(profile_details_grid)
+        profile_details_grid.attach(Gtk.Label(label="Profile Name:", xalign=0), 0, 0, 1, 1)
+        profile_details_grid.attach(self.profile_name_entry, 1, 0, 1, 1)
+
+        # --- Layout and Display ---
+        # --- Player Configurations ---
+        players_frame = Gtk.Frame(label="Player Configurations")
+        page_vbox.append(players_frame)
+        players_frame.set_child(self.player_config_vbox)
+
+    def setup_window_layout_tab(self):
+        """Sets up the 'Window Layout' preview tab."""
+        page = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
+        self.notebook.append_page(page, Gtk.Label(label="Window Layout"))
+
+        # --- Settings Panel (Left) ---
+        settings_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        settings_panel.set_size_request(300, -1)
+        page.append(settings_panel)
+
+        settings_grid = Gtk.Grid(column_spacing=10, row_spacing=10)
+        settings_panel.append(settings_grid)
+
+        row = 0
+        settings_grid.attach(Gtk.Label(label="Number of Players:", xalign=0), 0, row, 1, 1)
+        settings_grid.attach(self.num_players_spin, 1, row, 1, 1)
+        row += 1
+        settings_grid.attach(Gtk.Label(label="Instance Width:", xalign=0), 0, row, 1, 1)
+        settings_grid.attach(self.instance_width_spin, 1, row, 1, 1)
+        row += 1
+        settings_grid.attach(Gtk.Label(label="Instance Height:", xalign=0), 0, row, 1, 1)
+        settings_grid.attach(self.instance_height_spin, 1, row, 1, 1)
+        row += 1
+        settings_grid.attach(Gtk.Label(label="Mode:", xalign=0), 0, row, 1, 1)
+        settings_grid.attach(self.mode_combo, 1, row, 1, 1)
+        row += 1
+        self.splitscreen_orientation_label = Gtk.Label(label="Orientation:", xalign=0)
+        settings_grid.attach(self.splitscreen_orientation_label, 0, row, 1, 1)
+        settings_grid.attach(self.splitscreen_orientation_combo, 1, row, 1, 1)
+
+        # --- Preview Panel (Right) ---
+        preview_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5, hexpand=True, vexpand=True)
+        page.append(preview_panel)
+
+        preview_label = Gtk.Label(label="Preview", halign=Gtk.Align.START, margin_bottom=5)
+        preview_label.add_css_class("heading")
+        preview_panel.append(preview_label)
+
+        self.drawing_area.set_draw_func(self.on_draw_window_layout)
+        preview_panel.append(self.drawing_area)
+
+    def _connect_layout_signals(self):
+        """Connects signals for widgets that affect the layout preview."""
+        self.instance_width_spin.connect("value-changed", self.on_layout_setting_changed)
+        self.instance_height_spin.connect("value-changed", self.on_layout_setting_changed)
+        self.num_players_spin.connect("value-changed", self.on_layout_setting_changed)
+        self.mode_combo.connect("changed", self.on_layout_setting_changed)
+        self.splitscreen_orientation_combo.connect("changed", self.on_layout_setting_changed)
+
+        # Specific handlers
+        self.mode_combo.connect("changed", self.on_mode_changed)
+        self.num_players_spin.connect("value-changed", self.on_num_players_changed)
+
+    def _update_action_buttons_state(self):
+        """Updates the sensitivity and appearance of sidebar and bottom-bar buttons."""
+        game_selected = self.selected_game is not None
+        profile_selected = self.selected_profile is not None
+
+        # Sidebar buttons
+        self.add_profile_button.set_sensitive(game_selected)
+        self.delete_button.set_sensitive(game_selected or profile_selected)
+
+        # Bottom-bar buttons
+        self.save_button.set_sensitive(game_selected or profile_selected)
+        self.play_button.set_sensitive(profile_selected)
+
+        # Play/Stop button state
         if self.cli_process_pid:
-            self.play_button.set_label("⏹️ Stop Gaming")
-            self.play_button.set_css_classes(["destructive-action"]) # Gtk4 CSS class
+            self.play_button.set_label("⏹️ Stop")
+            self.play_button.get_style_context().add_class("destructive-action")
+            self.play_button.get_style_context().remove_class("suggested-action")
         else:
-            self.play_button.set_label("▶️ Launch Game")
-            self.play_button.set_css_classes(["suggested-action"]) # Gtk4 CSS class
-        self.play_button.set_sensitive(True) # Ensure button is always sensitive initially
+            self.play_button.set_label("▶️ Launch")
+            self.play_button.get_style_context().add_class("suggested-action")
+            self.play_button.get_style_context().remove_class("destructive-action")
 
     def on_exe_path_button_clicked(self, button):
         """Handles the 'Browse...' button click to select a game executable."""
@@ -541,62 +428,37 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         dialog.destroy()
         self.statusbar.set_label("Executable path selected.") # Changed from push
 
-    def on_load_button_clicked(self, button):
-        """Handles the 'Load Profile' button click."""
-        dialog = Gtk.FileChooserDialog(
-            title="Load Game Profile",
-            action=Gtk.FileChooserAction.OPEN
-        )
+    def _populate_game_library(self):
+        """Populates the TreeView with games and their profiles from the GameManager."""
+        self.game_tree_store.clear()
+        games = self.game_manager.get_games()
+        for game in games:
+            game_iter = self.game_tree_store.append(None, [game.game_name, game, None])
+            profiles = self.game_manager.get_profiles(game)
+            for profile in profiles:
+                self.game_tree_store.append(game_iter, [profile.profile_name, game, profile])
+        self.game_tree_view.expand_all()
 
-        # Set parent after creation for GTK4 compatibility
-        dialog.set_transient_for(self)
-        dialog.set_modal(True)
+    def _on_library_selection_changed(self, selection):
+        """Handles selection changes in the game/profile library TreeView."""
+        model, tree_iter = selection.get_selected()
+        if tree_iter:
+            self.selected_game = model[tree_iter][1]
+            self.selected_profile = model[tree_iter][2]
 
-        # Add buttons manually for GTK4 compatibility
-        dialog.add_button("_Cancel", Gtk.ResponseType.CANCEL)
-        dialog.add_button("_Open", Gtk.ResponseType.OK)
+            if self.selected_profile:
+                self._load_profile_data(self.selected_game, self.selected_profile)
+                self._set_fields_sensitivity(is_profile_selected=True)
+            elif self.selected_game:
+                self._load_game_data(self.selected_game)
+                self._set_fields_sensitivity(is_profile_selected=False)
+        else:
+            self.selected_game = None
+            self.selected_profile = None
+            self._clear_all_fields()
+            self._set_fields_sensitivity(is_profile_selected=False)
 
-        try:
-            Config.PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-            # Use Gio.File for GTK4 compatibility
-            from gi.repository import Gio
-            folder = Gio.File.new_for_path(str(Config.PROFILE_DIR))
-            dialog.set_current_folder(folder)
-        except Exception as e:
-            self.logger.warning(f"Could not set initial folder for profile loading: {e}")
-
-        dialog.connect("response", self._on_load_dialog_response)
-        dialog.present()
-
-    def _on_load_dialog_response(self, dialog, response):
-        """Handles the response from the file chooser dialog for loading a profile."""
-        if response == Gtk.ResponseType.OK:
-            file = dialog.get_file()
-            if file:
-                file_path = Path(file.get_path())
-                try:
-                    profile = GameProfile.load_from_file(file_path)
-                    self.load_profile_data(profile.model_dump(by_alias=True)) # Use model_dump to convert to dict
-                    self.logger.info(f"Profile loaded successfully from {file_path}")
-                    self.statusbar.set_label(f"Profile loaded: {file_path.name}") # Changed from push
-                    # Select the loaded profile in the listbox by its filename stem
-                    self._select_profile_in_list(file_path.stem)
-                except Exception as e:
-                    self.logger.error(f"Failed to load profile: {e}")
-                    self.statusbar.set_label(f"Error loading profile: {e}") # Changed from push
-                    # Create an error dialog using Adw.MessageDialog (Gtk4)
-                    error_dialog = Adw.MessageDialog(
-                        heading="Profile Load Error",
-                        body=f"Error loading profile:\n{e}",
-                        modal=True,
-                    )
-                    error_dialog.add_response("ok", "Ok")
-                    error_dialog.set_response_enabled("ok", True)
-                    error_dialog.set_default_response("ok")
-                    error_dialog.set_transient_for(self)
-                    error_dialog.connect("response", lambda d, r: d.close())
-                    error_dialog.present() # Show the dialog
-        dialog.destroy()
+        self._update_action_buttons_state()
 
     def _on_add_env_var_clicked(self, button):
         """Handles the 'Add Variable' button click for environment variables."""
@@ -638,6 +500,18 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.env_vars_listbox.remove(row)
         self.env_var_entries.remove((key_entry, value_entry, row))
         self.statusbar.set_label("Environment variable removed.") # Changed from push
+
+    def _clear_environment_variables_ui(self):
+        """Clears the environment variables from the UI."""
+        while self.env_vars_listbox.get_first_child():
+            self.env_vars_listbox.remove(self.env_vars_listbox.get_first_child())
+        self.env_var_entries.clear()
+        self.env_vars_listbox.queue_draw()
+
+    def _add_default_environment_variables(self):
+        """Adds the default environment variables to the UI."""
+        self._add_env_var_row("WINEDLLOVERRIDES", "")
+        self._add_env_var_row("MANGOHUD", "1")
 
     def _get_env_vars_from_ui(self) -> Dict[str, str]:
         """Gets the environment variables from the UI."""
@@ -866,54 +740,83 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.statusbar.set_label("Splitscreen mode deactivated.") # Changed from push
 
     def on_save_button_clicked(self, button):
-        """Handles the 'Save Profile' button click."""
-        self.statusbar.set_label("Saving profile...")
-        profile_data_dumped = self.get_profile_data()
+        """Handles the 'Save' button click, saving either game or profile data."""
+        if self.selected_profile and self.selected_game:
+            self.statusbar.set_label("Saving profile...")
+            try:
+                # Update profile object from UI
+                updated_profile = self._get_profile_from_ui()
+                self.game_manager.save_profile(self.selected_game, updated_profile)
+                self.statusbar.set_label(f"Profile '{updated_profile.profile_name}' saved.")
+                self._populate_game_library() # Refresh library
+            except Exception as e:
+                self.logger.error(f"Failed to save profile: {e}")
+                self.statusbar.set_label(f"Error saving profile: {e}")
 
-        # Collect selected players based on checkbox states
-        selected_players_indices = [i + 1 for i, cb in enumerate(self.player_checkboxes) if cb.get_active()]
-        profile_data_dumped['selected_players'] = selected_players_indices
+        elif self.selected_game:
+            self.statusbar.set_label("Saving game...")
+            try:
+                # Update game object from UI
+                updated_game = self._get_game_from_ui()
+                self.game_manager.save_game(updated_game)
+                self.statusbar.set_label(f"Game '{updated_game.game_name}' saved.")
+                self._populate_game_library() # Refresh library
+            except Exception as e:
+                self.logger.error(f"Failed to save game: {e}")
+                self.statusbar.set_label(f"Error saving game: {e}")
 
-        # Use existing profile name if we're editing, otherwise normalize the game name
-        if hasattr(self, 'selected_profile_name') and self.selected_profile_name:
-            profile_name = self.selected_profile_name
-        else:
-            game_name = self.game_name_entry.get_text().strip()
-            if not game_name:
-                dialog = Adw.MessageDialog(
-                    heading="Save Error", body="Game name cannot be empty.", modal=True,
-                )
-                dialog.add_response("ok", "Ok")
-                dialog.set_default_response("ok")
-                dialog.set_transient_for(self)
-                dialog.connect("response", lambda d, r: d.close())
-                dialog.present()
-                self.statusbar.set_label("Error: Game name is empty.")
-                return
-            profile_name = game_name.replace(" ", "_").lower()
+    def _get_game_from_ui(self) -> Game:
+        """Creates a Game object from the data in the UI fields."""
+        proton_version = self.proton_version_combo.get_active_text()
+        if proton_version == "None (Use Steam default)" or not proton_version:
+            proton_version = None
 
-        profile_dir = Config.PROFILE_DIR
-        profile_dir.mkdir(parents=True, exist_ok=True)
-        profile_path = profile_dir / f"{profile_name}.json"
+        winetricks_text = self.winetricks_verbs_entry.get_text().strip()
+        winetricks_verbs = winetricks_text.split() if winetricks_text else None
 
-        try:
-            with open(profile_path, "w", encoding="utf-8") as f:
-                json.dump(profile_data_dumped, f, indent=4)
-            self.statusbar.set_label(f"Profile saved successfully to: {profile_path.name}")
+        return Game(
+            game_name=self.game_name_entry.get_text(),
+            exe_path=self.exe_path_entry.get_text(),
+            app_id=self.app_id_entry.get_text() or None,
+            game_args=self.game_args_entry.get_text() or None,
+            is_native=self.is_native_check.get_active(),
+            proton_version=proton_version,
+            apply_dxvk_vkd3d=self.apply_dxvk_vkd3d_check.get_active(),
+            winetricks_verbs=winetricks_verbs,
+            env_vars=self._get_env_vars_from_ui()
+        )
 
-            self._populate_profile_list()
-            self._select_profile_in_list(profile_name)
-        except Exception as e:
-            self.logger.error(f"Failed to save profile to {profile_path}: {e}")
-            self.statusbar.set_label(f"Error saving profile: {e}")
-            error_dialog = Adw.MessageDialog(
-                heading="Error saving profile", body=f"Error saving profile:\n{e}", modal=True,
+    def _get_profile_from_ui(self) -> Profile:
+        """Creates a Profile object from the data in the UI fields."""
+        proton_version = self.proton_version_combo.get_active_text()
+        if proton_version == "None (Use Steam default)" or not proton_version:
+            proton_version = None
+
+        splitscreen_config = None
+        if self.mode_combo.get_active_text() == "splitscreen":
+            splitscreen_config = SplitscreenConfig(
+                orientation=self.splitscreen_orientation_combo.get_active_text()
             )
-            error_dialog.add_response("ok", "Ok")
-            error_dialog.set_default_response("ok")
-            error_dialog.set_transient_for(self)
-            error_dialog.connect("response", lambda d, r: d.close())
-            error_dialog.present()
+
+        winetricks_text = self.winetricks_verbs_entry.get_text().strip()
+        winetricks_verbs = winetricks_text.split() if winetricks_text else None
+
+        selected_players = [i + 1 for i, cb in enumerate(self.player_checkboxes) if cb.get_active()]
+
+        return Profile(
+            profile_name=self.profile_name_entry.get_text(),
+            proton_version=proton_version,
+            num_players=self.num_players_spin.get_value_as_int(),
+            instance_width=self.instance_width_spin.get_value_as_int(),
+            instance_height=self.instance_height_spin.get_value_as_int(),
+            mode=self.mode_combo.get_active_text(),
+            splitscreen=splitscreen_config,
+            env_vars=self._get_env_vars_from_ui(),
+            player_configs=self._get_player_configs_from_ui(),
+            selected_players=selected_players,
+            apply_dxvk_vkd3d=self.apply_dxvk_vkd3d_check.get_active(),
+            winetricks_verbs=winetricks_verbs
+        )
 
     def on_play_button_clicked(self, widget):
         """Handles clicks on the 'Launch Game' / 'Stop Game' button."""
@@ -921,14 +824,19 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self._stop_game()
             return
 
-        self.statusbar.set_label("Starting game...") # Changed from push
-        self.on_save_button_clicked(widget) # Ensure profile is saved before playing
-
-        profile_name = self.game_name_entry.get_text().replace(" ", "_").lower()
-        if not profile_name:
-            self.logger.error("Cannot launch game with an empty profile name.")
-            self.statusbar.set_label("Error: Profile name empty. Game not launched.") # Changed from push
+        if not self.selected_game or not self.selected_profile:
+            self.statusbar.set_label("Error: No profile selected to launch.")
             return
+
+        # Store references before the auto-save potentially clears the selection
+        game_to_launch = self.selected_game
+        profile_to_launch = self.selected_profile
+
+        self.statusbar.set_label("Starting game...")
+        self.on_save_button_clicked(widget) # Auto-save before launch
+
+        # The profile name for the CLI is the sanitized game name
+        cli_game_name = game_to_launch.game_name.replace(" ", "_").lower()
 
         # Check if running as PyInstaller bundle
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
@@ -957,10 +865,10 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             # PyInstaller bundle - call the executable directly
-            command = [python_exec, profile_name]
+            command = [python_exec, cli_game_name, "--profile", profile_to_launch.profile_name]
         else:
             # Normal Python execution
-            command = [python_exec, str(script_path), profile_name]
+            command = [python_exec, str(script_path), cli_game_name, "--profile", profile_to_launch.profile_name]
 
         # # Append --no-bwrap if requested via GUI
         # if getattr(self, 'disable_bwrap_check', None) and self.disable_bwrap_check.get_active():
@@ -981,8 +889,8 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             # Launch the CLI script as a separate process group
             process = subprocess.Popen(command, preexec_fn=os.setsid)
             self.cli_process_pid = process.pid
-            self.statusbar.set_label(f"Game '{profile_name}' launched successfully with PID: {self.cli_process_pid}.") # Changed from push
-            self._update_play_button_state() # Update button to "Stop Gaming"
+            self.statusbar.set_label(f"Game '{cli_game_name}' launched successfully with PID: {self.cli_process_pid}.") # Changed from push
+            self._update_action_buttons_state() # Update button to "Stop Gaming"
             # Start monitoring the process
             self.monitoring_timeout_id = GLib.timeout_add(1000, self._check_cli_process) # Corrigido para GLib.timeout_add
         except Exception as e:
@@ -1000,7 +908,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             dialog.connect("response", lambda d, r: d.close())
             dialog.present()
             self.cli_process_pid = None # Reset PID on error
-            self._update_play_button_state() # Reset button to "Launch Game"
+            self._update_action_buttons_state() # Reset button to "Launch Game"
 
     def _stop_game(self):
         """Terminates the running game process group."""
@@ -1041,7 +949,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             GLib.source_remove(self.monitoring_timeout_id) # Stop monitoring
             self.monitoring_timeout_id = None
         self.statusbar.set_label("Game stopped.") # Changed from push
-        self._update_play_button_state() # Reset button to "Launch Game"
+        self._update_action_buttons_state() # Reset button to "Launch Game"
 
     def _is_process_running(self, pid):
         """Checks if a process with the given PID is running."""
@@ -1134,25 +1042,17 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     def _create_preview_profile(self, settings):
         """Creates a dummy GameProfile for the layout preview."""
         try:
-            dummy_player_configs = []
-            for _ in range(settings['num_players']):
-                dummy_player_configs.append(PlayerInstanceConfig())
-
-            return GameProfile(
-                GAME_NAME="Preview",
-                EXE_PATH=None,
-                NUM_PLAYERS=settings['num_players'],
-                INSTANCE_WIDTH=settings['instance_width'],
-                INSTANCE_HEIGHT=settings['instance_height'],
-                MODE=settings['mode'],
-                SPLITSCREEN=SplitscreenConfig(orientation=settings['orientation']) if settings['mode'] == "splitscreen" else None,
-                player_configs=dummy_player_configs,
-                PLAYER_PHYSICAL_DEVICE_IDS=[],
-                PLAYER_MOUSE_EVENT_PATHS=[],
-                PLAYER_KEYBOARD_EVENT_PATHS=[],
-                PLAYER_AUDIO_DEVICE_IDS=[],
-                is_native=False,
+            dummy_game = Game(game_name="Preview", exe_path=Path("/tmp/dummy.exe"), is_native=False)
+            dummy_profile = Profile(
+                profile_name="Preview",
+                num_players=settings['num_players'],
+                instance_width=settings['instance_width'],
+                instance_height=settings['instance_height'],
+                mode=settings['mode'],
+                splitscreen=SplitscreenConfig(orientation=settings['orientation']) if settings['mode'] == "splitscreen" else None,
+                player_configs=[PlayerInstanceConfig() for _ in range(settings['num_players'])]
             )
+            return GameProfile(game=dummy_game, profile=dummy_profile)
         except Exception as e:
             self.logger.error(f"Error creating preview profile: {e}")
             return None
@@ -1353,192 +1253,152 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.logger.info(f"DEBUG: DISABLE_BWRAP value being saved: {profile_dumped.get('DISABLE_BWRAP', 'NOT FOUND')}")
         return profile_dumped
 
-    def load_profile_data(self, profile_data):
-        """Loads profile data into the UI."""
-        try:
-            # Load different sections of the profile
-            self._load_basic_profile_settings(profile_data)
-            self._load_proton_settings(profile_data)
-            self._load_instance_settings(profile_data)
-            self._load_mode_and_splitscreen_settings(profile_data)
-            self._load_environment_variables(profile_data)
-            self._load_player_configurations(profile_data)
-            self._finalize_profile_loading()
+    def _clear_all_fields(self):
+        """Clears all UI input fields to their default states."""
+        # Game details
+        self.game_name_entry.set_text("")
+        self.exe_path_entry.set_text("")
+        self.app_id_entry.set_text("")
+        self.game_args_entry.set_text("")
+        self.is_native_check.set_active(False)
 
-        except Exception as e:
-            import traceback
-            self.logger.error(f"Error loading profile data: {e}")
-            self.logger.error(f"Detailed error trace: {traceback.format_exc()}")
-            self.statusbar.set_label(f"Error loading profile: {str(e)}")
+        # Profile details
+        self.profile_name_entry.set_text("")
+        self.proton_version_combo.set_active(0)
+        self.apply_dxvk_vkd3d_check.set_active(True)
+        self.winetricks_verbs_entry.set_text("")
 
-    def _load_basic_profile_settings(self, profile_data):
-        """Loads the basic profile settings into the UI."""
-        self.game_name_entry.set_text(str(profile_data.get("GAME_NAME") or ""))
-        self.exe_path_entry.set_text(str(profile_data.get("EXE_PATH") or ""))
-        self.num_players_spin.set_value(profile_data.get("NUM_PLAYERS", 1))
+        # Layout
+        self.num_players_spin.set_value(1)
+        self.instance_width_spin.set_value(1920)
+        self.instance_height_spin.set_value(1080)
+        self.mode_combo.set_active(0)
+        self.splitscreen_orientation_combo.set_active(0)
 
-    def _load_proton_settings(self, profile_data):
-        """Loads the Proton settings into the UI."""
-        proton_version = profile_data.get("PROTON_VERSION")
-        if proton_version:
+        # Env vars
+        self._clear_environment_variables_ui()
+        self._add_default_environment_variables()
+
+        # Player configs
+        self._create_player_config_uis(1)
+
+        self.drawing_area.queue_draw()
+
+    def _set_fields_sensitivity(self, is_profile_selected: bool):
+        """Sets the sensitivity of input fields based on selection."""
+        # Game fields are editable only when a game is selected, but not a profile
+        game_editable = self.selected_game is not None and not is_profile_selected
+        self.game_name_entry.set_sensitive(game_editable)
+        self.exe_path_entry.set_sensitive(game_editable)
+        self.app_id_entry.set_sensitive(game_editable)
+        self.game_args_entry.set_sensitive(game_editable)
+        self.is_native_check.set_sensitive(game_editable)
+
+        # Profile fields are editable only when a profile is selected
+        profile_editable = is_profile_selected
+        # Game-level fields are editable when a game is selected
+        self.game_name_entry.set_sensitive(game_editable)
+        self.exe_path_entry.set_sensitive(game_editable)
+        self.app_id_entry.set_sensitive(game_editable)
+        self.game_args_entry.set_sensitive(game_editable)
+        self.is_native_check.set_sensitive(game_editable)
+        self.proton_version_combo.set_sensitive(game_editable)
+        self.apply_dxvk_vkd3d_check.set_sensitive(game_editable)
+        self.winetricks_verbs_entry.set_sensitive(game_editable)
+        self.env_vars_listbox.set_sensitive(game_editable)
+
+        # Profile-level fields are editable only when a profile is selected
+        self.profile_name_entry.set_sensitive(profile_editable)
+        self.num_players_spin.set_sensitive(profile_editable)
+        self.instance_width_spin.set_sensitive(profile_editable)
+        self.instance_height_spin.set_sensitive(profile_editable)
+        self.mode_combo.set_sensitive(profile_editable)
+        self.splitscreen_orientation_combo.set_sensitive(profile_editable)
+        self.player_config_vbox.set_sensitive(profile_editable)
+
+        # Set sensitivity for the notebook tabs
+        self.notebook.get_nth_page(0).set_sensitive(game_editable or profile_editable) # Game Settings
+        self.notebook.get_nth_page(1).set_sensitive(profile_editable) # Profile Settings
+        self.notebook.get_nth_page(2).set_sensitive(profile_editable) # Window Layout
+
+
+    def _load_game_data(self, game: Game):
+        """Loads data from a Game object into the UI fields."""
+        self._clear_all_fields()
+        # Game Details
+        self.game_name_entry.set_text(game.game_name or "")
+        self.exe_path_entry.set_text(str(game.exe_path) or "")
+        self.app_id_entry.set_text(game.app_id or "")
+        self.game_args_entry.set_text(game.game_args or "")
+        self.is_native_check.set_active(game.is_native)
+
+        # Launch Options
+        if game.proton_version:
             model = self.proton_version_combo.get_model()
             for i, row in enumerate(model):
-                if row[0] == proton_version:
+                if row[0] == game.proton_version:
                     self.proton_version_combo.set_active(i)
                     break
-            else:
-                self.proton_version_combo.set_active(0)
         else:
             self.proton_version_combo.set_active(0)
 
-        # # Load disable_bwrap setting
-        # self.disable_bwrap_check.set_active(profile_data.get("DISABLE_BWRAP", False))
+        self.apply_dxvk_vkd3d_check.set_active(game.apply_dxvk_vkd3d)
+        self.winetricks_verbs_entry.set_text(" ".join(game.winetricks_verbs) if game.winetricks_verbs else "")
 
-        # Load DXVK/VKD3D and Winetricks settings
-        self.apply_dxvk_vkd3d_check.set_active(profile_data.get("APPLY_DXVK_VKD3D", True))
-        winetricks_verbs = profile_data.get("WINETRICKS_VERBS")
-        if winetricks_verbs and isinstance(winetricks_verbs, list):
-            self.winetricks_verbs_entry.set_text(" ".join(winetricks_verbs))
-        else:
-            self.winetricks_verbs_entry.set_text("")
-
-    def _load_instance_settings(self, profile_data):
-        """Loads the instance settings into the UI."""
-        self.instance_width_spin.set_value(profile_data.get("INSTANCE_WIDTH", 1920))
-        self.instance_height_spin.set_value(profile_data.get("INSTANCE_HEIGHT", 1080))
-        self.app_id_entry.set_text(str(profile_data.get("APP_ID") or ""))
-        self.game_args_entry.set_text(str(profile_data.get("GAME_ARGS") or ""))
-        self.is_native_check.set_active(profile_data.get("IS_NATIVE", False))
-        # self.use_gamescope_check.set_active(profile_data.get("USE_GAMESCOPE", True))
-
-    def _load_mode_and_splitscreen_settings(self, profile_data):
-        """Loads the mode and splitscreen settings into the UI."""
-        mode = profile_data.get("MODE")
-        if mode:
-            self.mode_combo.set_active_id(mode)
-        else:
-            self.mode_combo.set_active_id("None")
-
-        # Configure splitscreen visibility and orientation
-        current_mode = self.mode_combo.get_active_id()
-        if current_mode == "splitscreen":
-            self._show_splitscreen_controls()
-            self._load_splitscreen_orientation(profile_data)
-        else:
-            self._hide_splitscreen_controls()
-
-    def _show_splitscreen_controls(self):
-        """Shows the splitscreen controls."""
-        self.splitscreen_orientation_label.show()
-        self.splitscreen_orientation_combo.show()
-
-    def _hide_splitscreen_controls(self):
-        """Hides the splitscreen controls."""
-        self.splitscreen_orientation_label.hide()
-        self.splitscreen_orientation_combo.hide()
-
-    def _load_splitscreen_orientation(self, profile_data):
-        """Loads the splitscreen orientation into the UI."""
-        splitscreen_data = profile_data.get("SPLITSCREEN")
-        if splitscreen_data and isinstance(splitscreen_data, dict):
-            orientation = splitscreen_data.get("ORIENTATION", "horizontal")
-            self.splitscreen_orientation_combo.set_active_id(orientation)
-        else:
-            # Default value if no splitscreen data
-            self.splitscreen_orientation_combo.set_active_id("horizontal")
-
-    def _load_environment_variables(self, profile_data):
-        """Loads the environment variables into the UI."""
-        # Clear existing environment variables
+        # Env Vars
         self._clear_environment_variables_ui()
-
-        env_vars_data = profile_data.get("ENV_VARS", {})
-        if env_vars_data:
-            self._populate_environment_variables(env_vars_data)
+        if game.env_vars:
+            for key, value in game.env_vars.items():
+                self._add_env_var_row(key, value)
         else:
             self._add_default_environment_variables()
 
-    def _clear_environment_variables_ui(self):
-        """Clears the environment variables from the UI."""
-        while self.env_vars_listbox.get_first_child():
-            self.env_vars_listbox.remove(self.env_vars_listbox.get_first_child())
-        self.env_var_entries.clear()
-        self.env_vars_listbox.queue_draw()
+    def _load_profile_data(self, game: Game, profile: Profile):
+        """Loads data from both a Game and a Profile object into the UI."""
+        self._load_game_data(game)
 
-    def _populate_environment_variables(self, env_vars_data):
-        """Populates the environment variables in the UI."""
-        for key, value in env_vars_data.items():
-            self._add_env_var_row(key, value)
+        # Profile Details
+        self.profile_name_entry.set_text(profile.profile_name or "")
 
-    def _add_default_environment_variables(self):
-        """Adds the default environment variables to the UI."""
-        self._add_env_var_row("WINEDLLOVERRIDES", "")
-        self._add_env_var_row("MANGOHUD", "1")
+        # Layout & Display
+        self.num_players_spin.set_value(profile.num_players)
+        self.instance_width_spin.set_value(profile.instance_width)
+        self.instance_height_spin.set_value(profile.instance_height)
+        self.mode_combo.set_active_id(profile.mode or "fullscreen")
+        if profile.is_splitscreen_mode and profile.splitscreen:
+            self.splitscreen_orientation_combo.set_active_id(profile.splitscreen.orientation)
 
-    def _load_player_configurations(self, profile_data):
-        """Loads the player configurations into the UI."""
-        # Clear existing player UI
-        self._clear_player_configurations_ui()
+        # Load Player Configs
+        if profile.player_configs:
+            self._create_player_config_uis(len(profile.player_configs))
+            self._populate_player_configurations(profile.player_configs, profile)
+        else:
+            self._create_player_config_uis(profile.num_players)
 
-        # Get player data and recreate UI
-        players_data = profile_data.get("PLAYERS", []) or []
-        num_players = len(players_data)
+        self.drawing_area.queue_draw()
 
-        if num_players > 0:
-            self.num_players_spin.set_value(num_players)
-            self._create_player_config_uis(num_players)
-            self._populate_player_configurations(players_data, profile_data)
-
-    def _clear_player_configurations_ui(self):
-        """Clears the player configurations from the UI."""
-        while self.player_config_vbox.get_first_child():
-            self.player_config_vbox.remove(self.player_config_vbox.get_first_child())
-
-        self.player_frames.clear()
-        self.player_device_combos.clear()
-        self.player_checkboxes.clear()
-        self.player_config_vbox.queue_draw()
-
-    def _populate_player_configurations(self, players_data, profile_data):
-        """Populates the player configurations in the UI."""
-        selected_players = profile_data.get("selected_players", []) or []
-
-        for i, player_config_data in enumerate(players_data):
+    def _populate_player_configurations(self, player_configs: List[PlayerInstanceConfig], profile: Profile):
+        """Populates the player configuration UI from a list of player config objects."""
+        selected_players = profile.selected_players or []
+        for i, player_config in enumerate(player_configs):
             if i < len(self.player_device_combos):
-                self._load_single_player_configuration(
-                    i, player_config_data, selected_players
-                )
+                player_widgets = self.player_device_combos[i]
 
-    def _load_single_player_configuration(self, player_index, player_data, selected_players):
-        """Loads a single player's configuration into the UI."""
-        player_combos = self.player_device_combos[player_index]
-        player_checkbox = self.player_checkboxes[player_index]
+                # Set checkbox
+                self.player_checkboxes[i].set_active((i + 1) in selected_players)
 
-        # Set player selection checkbox
-        player_checkbox.set_active((player_index + 1) in selected_players)
+                # Set text entries
+                player_widgets["ACCOUNT_NAME"].set_text(player_config.ACCOUNT_NAME or "")
+                player_widgets["LANGUAGE"].set_text(player_config.LANGUAGE or "")
+                player_widgets["LISTEN_PORT"].set_text(player_config.LISTEN_PORT or "")
+                player_widgets["USER_STEAM_ID"].set_text(player_config.USER_STEAM_ID or "")
 
-        # Load text fields
-        self._load_player_text_fields(player_combos, player_data)
-
-        # Load device dropdowns
-        self._load_player_device_settings(player_combos, player_data)
-
-    def _load_player_text_fields(self, player_combos, player_data):
-        """Loads the text fields for a player's configuration."""
-        text_fields = ["ACCOUNT_NAME", "LANGUAGE", "LISTEN_PORT", "USER_STEAM_ID"]
-        for field in text_fields:
-            value = player_data.get(field, "") or ""
-            player_combos[field].set_text(value)
-
-    def _load_player_device_settings(self, player_combos, player_data):
-        """Loads the device settings for a player's configuration."""
-        device_fields = [
-            "PHYSICAL_DEVICE_ID", "MOUSE_EVENT_PATH",
-            "KEYBOARD_EVENT_PATH", "AUDIO_DEVICE_ID", "MONITOR_ID"
-        ]
-
-        for field in device_fields:
-            self._set_device_dropdown(player_combos[field], player_data.get(field))
+                # Set device dropdowns
+                self._set_device_dropdown(player_widgets["PHYSICAL_DEVICE_ID"], player_config.PHYSICAL_DEVICE_ID)
+                self._set_device_dropdown(player_widgets["MOUSE_EVENT_PATH"], player_config.MOUSE_EVENT_PATH)
+                self._set_device_dropdown(player_widgets["KEYBOARD_EVENT_PATH"], player_config.KEYBOARD_EVENT_PATH)
+                self._set_device_dropdown(player_widgets["AUDIO_DEVICE_ID"], player_config.AUDIO_DEVICE_ID)
+                self._set_device_dropdown(player_widgets["MONITOR_ID"], player_config.monitor_id)
 
     def _set_device_dropdown(self, dropdown, device_id):
         """Sets the selected item in a device dropdown."""
@@ -1558,11 +1418,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             device_name = self.device_id_to_name.get(device_id, "None")
             selected_index = self._get_dropdown_index_for_name(dropdown, device_name)
             dropdown.set_selected(selected_index)
-
-    def _finalize_profile_loading(self):
-        """Finalizes the profile loading process."""
-        # Update the layout preview after loading all profile data
-        self.drawing_area.queue_draw()
 
 
     def _get_dropdown_index_for_name(self, dropdown: Gtk.DropDown, name: str) -> int:
@@ -1662,263 +1517,158 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             error_dialog.connect("response", lambda d, r: d.close())
             error_dialog.present()
 
-    def _on_add_profile_clicked(self, button):
-        """Handles the 'Add New Profile' button click."""
-        self._create_new_profile()
-
-    def _on_delete_profile_clicked(self, button):
-        """Handles the 'Delete Profile' button click."""
-        if not self.selected_profile_name:
-            return
-
-        self._delete_selected_profile()
-
-    def _create_new_profile(self):
-        """Creates a new profile."""
-        # Create dialog to get profile name
-        dialog = Adw.MessageDialog(
-            heading="New Profile",
-            body="Enter a name for your new game profile:",
-            transient_for=self,
-            modal=True
+    def _on_add_game_clicked(self, button):
+        """Handles the 'Add Game' button click by showing a dialog."""
+        dialog = Gtk.Dialog(title="Add New Game", transient_for=self, modal=True)
+        dialog.add_buttons(
+            "_Cancel", Gtk.ResponseType.CANCEL,
+            "_Add", Gtk.ResponseType.OK
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("create", "Create")
-        dialog.set_response_appearance("create", Adw.ResponseAppearance.SUGGESTED)
-        dialog.set_default_response("create")
-        dialog.set_close_response("cancel")
+        dialog.get_widget_for_response(Gtk.ResponseType.OK).add_css_class("suggested-action")
 
-        # Create entry for profile name
-        entry = Gtk.Entry()
-        entry.set_placeholder_text("e.g., Palworld, Elden Ring, Enshrouded...")
-        entry.set_margin_start(10)
-        entry.set_margin_end(10)
-        entry.set_margin_top(10)
-        entry.set_margin_bottom(10)
-        dialog.set_extra_child(entry)
+        content_area = dialog.get_content_area()
+        grid = Gtk.Grid(column_spacing=10, row_spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
+        content_area.append(grid)
 
-        def on_response(dialog, response_id):
-            if response_id == "create":
-                profile_name = entry.get_text().strip()
-                if profile_name:
-                    if self._validate_profile_name(profile_name):
-                        self._create_profile_with_name(profile_name)
-                        dialog.close()
-                    # If validation fails, don't close dialog, let user try again
-                    return
+        grid.attach(Gtk.Label(label="Game Name:", xalign=0), 0, 0, 1, 1)
+        name_entry = Gtk.Entry(placeholder_text="e.g., Elden Ring")
+        grid.attach(name_entry, 1, 0, 1, 1)
+
+        grid.attach(Gtk.Label(label="Executable Path:", xalign=0), 0, 1, 1, 1)
+
+        exe_path_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        exe_path_entry = Gtk.Entry(placeholder_text="Path to game's .exe", hexpand=True)
+        exe_path_box.append(exe_path_entry)
+
+        browse_button = Gtk.Button(label="Browse...")
+
+        def on_browse_clicked(btn):
+            file_dialog = Gtk.FileChooserDialog(
+                title="Select Game Executable",
+                transient_for=dialog,
+                action=Gtk.FileChooserAction.OPEN,
+            )
+            file_dialog.add_buttons("_Cancel", Gtk.ResponseType.CANCEL, "_Open", Gtk.ResponseType.OK)
+
+            def on_file_dialog_response(d, response_id):
+                if response_id == Gtk.ResponseType.OK:
+                    file = d.get_file()
+                    if file:
+                        exe_path_entry.set_text(file.get_path())
+                d.destroy()
+
+            file_dialog.connect("response", on_file_dialog_response)
+            file_dialog.show()
+
+        browse_button.connect("clicked", on_browse_clicked)
+        exe_path_box.append(browse_button)
+        grid.attach(exe_path_box, 1, 1, 1, 1)
+
+        def on_response(d, response_id):
+            if response_id == Gtk.ResponseType.OK:
+                game_name = name_entry.get_text().strip()
+                exe_path = exe_path_entry.get_text().strip()
+                if game_name and exe_path:
+                    try:
+                        new_game = Game(game_name=game_name, exe_path=Path(exe_path))
+                        self.game_manager.add_game(new_game)
+                        self._populate_game_library()
+                        self.statusbar.set_label(f"Game '{game_name}' added successfully.")
+                    except Exception as e:
+                        self.logger.error(f"Failed to add game: {e}")
+                        self.statusbar.set_label(f"Error: {e}")
                 else:
-                    self.statusbar.set_label("❌ Profile name cannot be empty")
-                    return
-            dialog.close()
+                    self.statusbar.set_label("Game Name and Executable Path cannot be empty.")
+            d.destroy()
 
         dialog.connect("response", on_response)
-        dialog.present()
-        entry.grab_focus()  # Focus on entry when dialog opens
+        dialog.show()
 
-    def _validate_profile_name(self, profile_name):
-        """Validates a profile name."""
-        # Check for invalid characters
-        invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '/', '\\']
-        for char in invalid_chars:
-            if char in profile_name:
-                self.statusbar.set_label(f"❌ Profile name cannot contain '{char}'")
-                return False
-
-        # Check length
-        if len(profile_name) > 50:
-            self.statusbar.set_label("❌ Profile name too long (max 50 characters)")
-            return False
-
-        # Check if already exists using normalized filename
-        safe_filename = profile_name.replace(" ", "_").lower()
-        profile_path = Config.PROFILE_DIR / f"{safe_filename}.json"
-        if profile_path.exists():
-            self.statusbar.set_label(f"❌ Profile '{profile_name}' already exists")
-            return False
-
-        return True
-
-    def _create_profile_with_name(self, profile_name):
-        """Creates a new profile with the given name."""
-        try:
-            # Ensure profile directory exists
-            Config.PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-
-            # Normalize the profile name for the filename but keep original for display
-            safe_filename = profile_name.replace(" ", "_").lower()
-
-            # Create profile path with normalized filename
-            profile_path = Config.PROFILE_DIR / f"{safe_filename}.json"
-
-            # Profile validation is now done in _validate_profile_name
-
-            # Create default profile data
-            default_profile_data = {
-                "GAME_NAME": profile_name,
-                "EXE_PATH": "",
-                "NUM_PLAYERS": 2,
-                "INSTANCE_WIDTH": 1920,
-                "INSTANCE_HEIGHT": 1080,
-                # "APP_ID": "",
-                "GAME_ARGS": "",
-                "IS_NATIVE": False,
-                "MODE": "None",
-                "SPLITSCREEN": None,
-                "PROTON_VERSION": None,
-                "PLAYERS": [
-                    {
-                        "ACCOUNT_NAME": "Player1",
-                        "LANGUAGE": "english",
-                        "LISTEN_PORT": "",
-                        "USER_STEAM_ID": "",
-                        "PHYSICAL_DEVICE_ID": "",
-                        "MOUSE_EVENT_PATH": "",
-                        "KEYBOARD_EVENT_PATH": "",
-                        "AUDIO_DEVICE_ID": "",
-                        "MONITOR_ID": ""
-                    },
-                    {
-                        "ACCOUNT_NAME": "Player2",
-                        "LANGUAGE": "english",
-                        "LISTEN_PORT": "",
-                        "USER_STEAM_ID": "",
-                        "PHYSICAL_DEVICE_ID": "",
-                        "MOUSE_EVENT_PATH": "",
-                        "KEYBOARD_EVENT_PATH": "",
-                        "AUDIO_DEVICE_ID": "",
-                        "MONITOR_ID": ""
-                    }
-                ],
-                "ENV_VARS": {
-                    "WINEDLLOVERRIDES": "",
-                    "MANGOHUD": "1"
-                },
-                "APPLY_DXVK_VKD3D": True,
-                "WINETRICKS_VERBS": None
-            }
-
-            # Save the profile
-            with open(profile_path, 'w', encoding='utf-8') as f:
-                json.dump(default_profile_data, f, indent=4)
-
-            # Refresh the profile list
-            self._populate_profile_list()
-
-            # Load the new profile
-            self.load_profile_data(default_profile_data)
-
-            # Select the new profile in the list using the safe filename
-            self._select_profile_in_list(safe_filename)
-
-            # Update selected profile and show delete button using the safe filename
-            self.selected_profile_name = safe_filename
-            self.delete_profile_button.set_visible(True)
-
-            # Switch to General Settings tab
-            self.notebook.set_current_page(0)
-
-            self.statusbar.set_label(f"✅ Profile '{profile_name}' created successfully!")
-            self.logger.info(f"Created new profile: {profile_name}")
-
-        except Exception as e:
-            error_msg = f"❌ Error creating profile '{profile_name}': {e}"
-            self.statusbar.set_label(error_msg)
-            self.logger.error(error_msg)
-
-    def _delete_selected_profile(self):
-        """Deletes the selected profile."""
-        if not self.selected_profile_name:
+    def _on_add_profile_clicked(self, button):
+        """Handles the 'Add Profile' button click by showing a dialog."""
+        if not self.selected_game:
+            self.statusbar.set_label("Please select a game before adding a profile.")
             return
 
-        # Create confirmation dialog
-        dialog = Adw.MessageDialog(
-            heading="Delete Profile",
-            body=f"Are you sure you want to delete the profile '{self.selected_profile_name}'?\n\nThis action cannot be undone.",
-            transient_for=self,
-            modal=True
+        dialog = Gtk.Dialog(title=f"Add Profile to {self.selected_game.game_name}", transient_for=self, modal=True)
+        dialog.add_buttons(
+            "_Cancel", Gtk.ResponseType.CANCEL,
+            "_Create", Gtk.ResponseType.OK
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete")
-        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
-        dialog.set_default_response("cancel")
-        dialog.set_close_response("cancel")
+        dialog.get_widget_for_response(Gtk.ResponseType.OK).add_css_class("suggested-action")
 
-        def on_response(dialog, response_id):
-            if response_id == "delete":
-                self._confirm_delete_profile()
-            dialog.close()
+        content_area = dialog.get_content_area()
+        grid = Gtk.Grid(column_spacing=10, row_spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
+        content_area.append(grid)
+
+        grid.attach(Gtk.Label(label="New Profile Name:", xalign=0), 0, 0, 1, 1)
+        name_entry = Gtk.Entry(placeholder_text="e.g., Modded, Speedrun")
+        grid.attach(name_entry, 1, 0, 1, 1)
+
+        def on_response(d, response_id):
+            if response_id == Gtk.ResponseType.OK:
+                profile_name = name_entry.get_text().strip()
+                if profile_name:
+                    try:
+                        # Create a default profile
+                        new_profile = Profile(
+                            profile_name=profile_name,
+                            num_players=2,
+                            instance_width=1920,
+                            instance_height=1080,
+                            player_configs=[PlayerInstanceConfig(), PlayerInstanceConfig()]
+                        )
+                        game_name = self.selected_game.game_name
+                        self.game_manager.add_profile(self.selected_game, new_profile)
+                        self.statusbar.set_label(f"Profile '{profile_name}' added to {game_name}.")
+                        self._populate_game_library()
+                    except Exception as e:
+                        self.logger.error(f"Failed to add profile: {e}")
+                        self.statusbar.set_label(f"Error: {e}")
+                else:
+                    self.statusbar.set_label("Profile name cannot be empty.")
+            d.destroy()
 
         dialog.connect("response", on_response)
-        dialog.present()
+        dialog.show()
 
-    def _confirm_delete_profile(self):
-        """Confirms the deletion of a profile."""
-        try:
-            # Save the name before clearing
-            deleted_name = self.selected_profile_name
+    def _on_delete_clicked(self, button):
+        """Handles the 'Delete' button click for either a game or a profile."""
+        if self.selected_profile:
+            # Delete profile logic
+            self.logger.info(f"Deleting profile: {self.selected_profile.profile_name}")
+            self.game_manager.delete_profile(self.selected_game, self.selected_profile)
+        elif self.selected_game:
+            # Delete game logic
+            self.logger.info(f"Deleting game: {self.selected_game.game_name}")
+            self.game_manager.delete_game(self.selected_game)
 
-            # Delete the profile file
-            profile_path = Config.PROFILE_DIR / f"{self.selected_profile_name}.json"
-            if profile_path.exists():
-                profile_path.unlink()
-                self.logger.info(f"Deleted profile: {self.selected_profile_name}")
+        self._populate_game_library()
+        self._clear_all_fields()
 
-            # Clear UI and update
-            self._clear_all_fields()
-            self._populate_profile_list()
+    def _on_close_request(self, window):
+        """Handles the window close request."""
+        if self.cli_process_pid:
+            self.logger.info("Close requested, but game is running. Stopping game first.")
+            self.statusbar.set_label("Game is running. Stopping instances before closing...")
+            self._stop_game()
 
-            # Hide delete button and clear selection
-            self.delete_profile_button.set_visible(False)
-            self.selected_profile_name = None
+            # We can't immediately close because _stop_game is asynchronous in its effect.
+            # We need to wait until the process is confirmed dead.
+            # We can use a timeout to check for process termination.
+            def check_if_can_close():
+                if not self._is_process_running(self.cli_process_pid):
+                    self.logger.info("Game has been stopped. Now closing the window.")
+                    self.close() # Now we can close for real
+                    return GLib.SOURCE_REMOVE # Stop the timeout
+                return GLib.SOURCE_CONTINUE # Continue checking
 
-            self.statusbar.set_label(f"✅ Profile '{deleted_name}' deleted successfully")
+            GLib.timeout_add(500, check_if_can_close)
 
-        except Exception as e:
-            error_msg = f"❌ Error deleting profile: {e}"
-            self.statusbar.set_label(error_msg)
-            self.logger.error(error_msg)
+            return True # Prevent the default close handler from running
 
-    def _clear_all_fields(self):
-        """Clears all the fields in the UI."""
-        # Basic settings
-        self.game_name_entry.set_text("")
-        self.exe_path_entry.set_text("")
-        self.num_players_spin.set_value(1)
-        self.instance_width_spin.set_value(1920)
-        self.instance_height_spin.set_value(1080)
-        self.app_id_entry.set_text("")
-        self.game_args_entry.set_text("")
-        self.is_native_check.set_active(False)
-
-        # Mode settings
-        self.mode_combo.set_active_id("None")
-        self.splitscreen_orientation_combo.set_active_id("horizontal")
-        self._hide_splitscreen_controls()
-
-        # Proton version
-        self.proton_version_combo.set_active(0)
-
-        # Clear environment variables
-        self._clear_environment_variables_ui()
-        self._add_default_environment_variables()
-
-        # Clear player configurations
-        self._clear_player_configurations_ui()
-        self.num_players_spin.set_value(1)
-        self._create_player_config_uis(1)
-
-        # Update preview
-        self.drawing_area.queue_draw()
-
-    def _select_profile_in_list(self, profile_name_to_select: str):
-        """Selects a profile in the listbox."""
-        current_row = self.profile_listbox.get_first_child()
-        while current_row:
-            # Check if the row is a valid Gtk.ListBoxRow and its child (label) has the correct name
-            if isinstance(current_row, Gtk.ListBoxRow) and isinstance(current_row.get_child(), Gtk.Label) and current_row.get_child().get_name() == profile_name_to_select:
-                self.profile_listbox.select_row(current_row)
-                break
-            current_row = current_row.get_next_sibling()
+        self.logger.info("No game running. Closing window.")
+        return False # Allow the default close handler to run
 
     def _on_close_request(self, window):
         """Handles the window close request."""

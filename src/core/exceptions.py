@@ -33,3 +33,9 @@ class ExecutableNotFoundError(LinuxCoopError):
     the configured path.
     """
     pass
+
+class GameNotFoundError(LinuxCoopError):
+    """
+    Raised when a specified game cannot be found in the library.
+    """
+    pass
