@@ -460,6 +460,29 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         self._update_action_buttons_state()
 
+    def _select_item_in_library(self, game_name: str, profile_name: Optional[str] = None):
+        """Programmatically selects an item in the game library TreeView."""
+        model = self.game_tree_store
+        root_iter = model.get_iter_first()
+        while root_iter:
+            stored_game = model.get_value(root_iter, 1)
+            if stored_game and stored_game.game_name == game_name:
+                # Found the game, now decide if we need to find a profile
+                if not profile_name:
+                    self.game_tree_view.get_selection().select_iter(root_iter)
+                    self.game_tree_view.scroll_to_cell(model.get_path(root_iter))
+                    return
+
+                child_iter = model.iter_children(root_iter)
+                while child_iter:
+                    stored_profile = model.get_value(child_iter, 2)
+                    if stored_profile and stored_profile.profile_name == profile_name:
+                        self.game_tree_view.get_selection().select_iter(child_iter)
+                        self.game_tree_view.scroll_to_cell(model.get_path(child_iter))
+                        return
+                    child_iter = model.iter_next(child_iter)
+            root_iter = model.iter_next(root_iter)
+
     def _on_add_env_var_clicked(self, button):
         """Handles the 'Add Variable' button click for environment variables."""
         self._add_env_var_row()
@@ -735,30 +758,37 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.statusbar.set_label("Splitscreen mode deactivated.")
 
     def on_save_button_clicked(self, button):
-        """Handles the 'Save' button click, saving either game or profile data."""
+        """Handles the 'Save' button click, saving data and restoring selection."""
+        game_to_reselect = None
+        profile_to_reselect = None
+
         if self.selected_profile and self.selected_game:
+            game_to_reselect = self.selected_game.game_name
+            profile_to_reselect = self.profile_name_entry.get_text() # Get name from entry in case it was changed
             self.statusbar.set_label("Saving profile...")
             try:
-                # Update profile object from UI
                 updated_profile = self._get_profile_from_ui()
                 self.game_manager.save_profile(self.selected_game, updated_profile)
                 self.statusbar.set_label(f"Profile '{updated_profile.profile_name}' saved.")
-                self._populate_game_library() # Refresh library
             except Exception as e:
                 self.logger.error(f"Failed to save profile: {e}")
                 self.statusbar.set_label(f"Error saving profile: {e}")
 
         elif self.selected_game:
+            game_to_reselect = self.game_name_entry.get_text() # Get name from entry in case it was changed
             self.statusbar.set_label("Saving game...")
             try:
-                # Update game object from UI
                 updated_game = self._get_game_from_ui()
                 self.game_manager.save_game(updated_game)
                 self.statusbar.set_label(f"Game '{updated_game.game_name}' saved.")
-                self._populate_game_library() # Refresh library
             except Exception as e:
                 self.logger.error(f"Failed to save game: {e}")
                 self.statusbar.set_label(f"Error saving game: {e}")
+
+        # Refresh library and restore selection
+        self._populate_game_library()
+        if game_to_reselect:
+            self._select_item_in_library(game_to_reselect, profile_to_reselect)
 
     def _get_game_from_ui(self) -> Game:
         """Creates a Game object from the data in the UI fields."""
