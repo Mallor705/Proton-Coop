@@ -469,7 +469,6 @@ exec {gamescope_cmd_str} -- env LD_PRELOAD="$LD_PRELOAD_BAK" {proton_cmd_str}
 
         gamescope_cli_options = [
             gamescope_path,
-            '-b', # Use borderless instead of fullscreen for better compatibility
             '-W', str(effective_width),
             '-H', str(effective_height),
             '-w', str(effective_width),
@@ -486,7 +485,9 @@ exec {gamescope_cmd_str} -- env LD_PRELOAD="$LD_PRELOAD_BAK" {proton_cmd_str}
 
         # Add adaptive sync if not in splitscreen mode
         if not profile.is_splitscreen_mode:
-            gamescope_cli_options.append('--adaptive-sync')
+            gamescope_cli_options.extend(['-f', '--adaptive-sync'])
+        else:
+            gamescope_cli_options.extend(['-b'])
 
         if should_add_grab_flags:
             self.logger.info(f"Instance {instance_num}: Using dedicated mouse and keyboard. Adding --grab and --force-grab-cursor to Gamescope.")
