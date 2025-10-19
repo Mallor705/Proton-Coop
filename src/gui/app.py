@@ -806,16 +806,25 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         profile_to_reselect = None
 
         if self.selected_profile and self.selected_game:
-            game_to_reselect = self.selected_game.game_name
-            profile_to_reselect = self.profile_name_entry.get_text() # Get name from entry in case it was changed
-            self.statusbar.set_label("Saving profile...")
+            # When a profile is selected, we need to save both game and profile data,
+            # as shared settings (like Proton version) might have been changed.
+            game_to_reselect = self.game_name_entry.get_text()
+            profile_to_reselect = self.profile_name_entry.get_text()
+            self.statusbar.set_label("Saving game and profile...")
+
             try:
+                # First, save the game data
+                updated_game = self._get_game_from_ui()
+                self.game_manager.save_game(updated_game)
+
+                # Then, save the profile data using the potentially updated game object
                 updated_profile = self._get_profile_from_ui()
-                self.game_manager.save_profile(self.selected_game, updated_profile)
-                self.statusbar.set_label(f"Profile '{updated_profile.profile_name}' saved.")
+                self.game_manager.save_profile(updated_game, updated_profile)
+
+                self.statusbar.set_label(f"Game and profile for '{updated_game.game_name}' saved.")
             except Exception as e:
-                self.logger.error(f"Failed to save profile: {e}")
-                self.statusbar.set_label(f"Error saving profile: {e}")
+                self.logger.error(f"Failed to save game/profile: {e}")
+                self.statusbar.set_label(f"Error saving: {e}")
 
         elif self.selected_game:
             game_to_reselect = self.game_name_entry.get_text()
@@ -860,9 +869,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             proton_version = None
 
         splitscreen_config = None
-        if self.mode_combo.get_active_text() == "splitscreen":
+        if self.mode_combo.get_active_id() == "splitscreen":
             splitscreen_config = SplitscreenConfig(
-                orientation=self.splitscreen_orientation_combo.get_active_text()
+                orientation=self.splitscreen_orientation_combo.get_active_id()
             )
 
         winetricks_text = self.winetricks_verbs_entry.get_text().strip()
@@ -876,7 +885,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             num_players=self.num_players_spin.get_value_as_int(),
             instance_width=self.instance_width_spin.get_value_as_int(),
             instance_height=self.instance_height_spin.get_value_as_int(),
-            mode=self.mode_combo.get_active_text(),
+            mode=self.mode_combo.get_active_id(),
             splitscreen=splitscreen_config,
             env_vars=self._get_env_vars_from_ui(),
             player_configs=self._get_player_configs_from_ui(),
