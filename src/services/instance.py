@@ -272,36 +272,26 @@ class InstanceService:
             self.logger.error(f"Failed to launch instance {instance.instance_num}: {e}")
 
     def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], proton_path: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = {}) -> dict:
-        """Prepares a minimal environment for the game instance, plus device-specific vars."""
+        """Prepares the environment for the umu-run instance, plus device-specific vars."""
         env = os.environ.copy()
-        original_path = env.get('PATH', '')
 
         # Clean up potentially conflicting Python variables
         env.pop('PYTHONHOME', None)
         env.pop('PYTHONPATH', None)
 
         if not (profile and profile.is_native):
-            # --- Essential Proton/Wine variables ---
-            if steam_root:
-                env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
-            env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
+            # --- Essential umu-run variables ---
             env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
 
-            # --- PATH modification ---
             if proton_path:
-                proton_bin_dir = proton_path.parent
-                env['PATH'] = f"{str(proton_bin_dir)}:{original_path}"
+                # PROTONPATH is the directory containing the 'proton' script
+                env['PROTONPATH'] = str(proton_path.parent)
 
-            # --- Sane defaults ---
-            if 'PROTON_NO_ESYNC' not in env:
-                env['PROTON_NO_ESYNC'] = "0"
-            if 'PROTON_NO_FSYNC' not in env:
-                env['PROTON_NO_FSYNC'] = "0"
+            if profile and profile.game_id:
+                env['GAMEID'] = profile.game_id
 
-            # --- Steam Integration ---
-            if profile and profile.app_id:
-                env['SteamAppId'] = profile.app_id
-                env['SteamGameId'] = profile.app_id
+            if profile and profile.store:
+                env['STORE'] = profile.store
 
             # --- Force Host Network ---
             # This is critical for allowing instances to communicate via localhost (127.0.0.1)
@@ -358,26 +348,22 @@ class InstanceService:
     def _build_command(self, profile: GameProfile, proton_path: Optional[Path], instance: GameInstance, symlinked_exe_path: Path, cpu_affinity: str) -> List[str]:
         """
         Builds the final command array in the correct order:
-        [gamescope?] -> [bwrap] -> [proton/native]
+        [gamescope] -> [umu-run] -> [executable]
         """
         instance_idx = instance.instance_num - 1
 
-        # 1. Validate input devices to determine flags for bwrap and gamescope
+        # 1. Validate input devices to determine flags for gamescope
         device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
 
-        # 2. Build the innermost game command (Proton or native)
+        # 2. Build the umu-run or native game command
         game_cmd = self._build_base_game_command(profile, proton_path, symlinked_exe_path, instance.instance_num)
 
-        # 3. Build the bwrap command, which will wrap the game command
-        bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num)
-
-        # 4. Prepend bwrap to the game command
-        final_cmd = bwrap_cmd + game_cmd
-
-        # 5. Build the Gamescope command and prepend it to the bwrap+game command
+        # 3. Build the Gamescope command and prepend it
         gamescope_cmd = self._build_gamescope_command(profile, device_info['should_add_grab_flags'], instance.instance_num)
+
+        # 4. Combine the commands
         # Add the '--' separator before the command Gamescope will run
-        final_cmd = gamescope_cmd + ['--'] + final_cmd
+        final_cmd = gamescope_cmd + ['--'] + game_cmd
 
         self.logger.info(f"Instance {instance.instance_num}: Full command: {shlex.join(final_cmd)}")
 
@@ -463,7 +449,7 @@ class InstanceService:
         return gamescope_cli_options
 
     def _build_base_game_command(self, profile: GameProfile, proton_path: Optional[Path], symlinked_exe_path: Path, instance_num: int) -> List[str]:
-        """Builds the base game command (Proton or native)."""
+        """Builds the base game command (umu-run or native)."""
         # Add game arguments defined in the profile, if any
         game_specific_args = []
         if profile.game_args:
@@ -472,66 +458,14 @@ class InstanceService:
             self.logger.info(f"Instance {instance_num}: Adding game arguments: {game_specific_args}")
 
         if profile.is_native:
+            # For native games, we just run the executable directly.
             base_cmd = [str(symlinked_exe_path)] + game_specific_args
         else:
-            base_cmd = [str(proton_path), 'run', str(symlinked_exe_path)] + game_specific_args
+            # For Windows games, we use umu-run.
+            base_cmd = ['umu-run', str(symlinked_exe_path)] + game_specific_args
 
         return base_cmd
 
-    def _build_bwrap_command(self, profile: GameProfile, instance_idx: int, device_info: dict, instance_num: int) -> List[str]:
-        """Builds the bwrap command, including device bindings."""
-        bwrap_cmd = [
-            'bwrap',
-            '--die-with-parent',
-            '--dev-bind', '/', '/',
-            '--proc', '/proc',
-            '--tmpfs', '/tmp',
-            '--cap-add', 'all',
-            '--share-net',
-        ]
-
-        device_paths_to_bind = self._collect_device_paths(profile, instance_idx, device_info, instance_num)
-
-        if device_paths_to_bind:
-            bwrap_cmd.extend(['--tmpfs', '/dev/input'])
-            for device_path in device_paths_to_bind:
-                bwrap_cmd.extend(['--dev-bind', device_path, device_path])
-                self.logger.info(f"Instance {instance_num}: bwrap will bind '{device_path}' to '{device_path}'.")
-        else:
-            self.logger.info(f"Instance {instance_num}: No specific input devices to bind with bwrap. Creating an empty isolated /dev/input.")
-            bwrap_cmd.extend(['--tmpfs', '/dev/input'])
-
-        return bwrap_cmd
-
-    def _collect_device_paths(self, profile: GameProfile, instance_idx: int, device_info: dict, instance_num: int) -> List[str]:
-        """Collects all necessary device paths for bwrap."""
-        collected_paths = []
-
-        # Joysticks
-        # Get specific player config
-        player_config = profile.player_configs[instance_idx] if profile.player_configs and 0 <= instance_idx < len(profile.player_configs) else None
-
-        if player_config:
-            joystick_path_str = player_config.PHYSICAL_DEVICE_ID
-            if joystick_path_str and joystick_path_str.strip():
-                joystick_path = Path(joystick_path_str)
-                if joystick_path.exists() and joystick_path.is_char_device():
-                    collected_paths.append(str(joystick_path))
-                    self.logger.info(f"Instance {instance_num}: Queued joystick '{joystick_path}' for bwrap binding.")
-                else:
-                    self.logger.warning(f"Instance {instance_num}: Joystick device '{joystick_path_str}' specified in profile but not found or not a char device. Not binding.")
-
-        # Mice - uses already validated variables
-        if device_info['has_dedicated_mouse']:
-            collected_paths.append(device_info['mouse_path_str_for_instance'])
-            self.logger.info(f"Instance {instance_num}: Queued mouse device '{device_info['mouse_path_str_for_instance']}' for bwrap binding.")
-
-        # Keyboards - uses already validated variables
-        if device_info['has_dedicated_keyboard']:
-            collected_paths.append(device_info['keyboard_path_str_for_instance'])
-            self.logger.info(f"Instance {instance_num}: Queued keyboard device '{device_info['keyboard_path_str_for_instance']}' for bwrap binding.")
-
-        return collected_paths
 
     def _is_any_process_running(self) -> bool:
         """Checks if any of the managed PIDs are still running."""
