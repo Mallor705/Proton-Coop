@@ -28,8 +28,6 @@ class Game(BaseModel):
         env_vars (Optional[Dict[str, str]]): Environment variables to set for this game.
     """
     game_name: str = Field(..., alias="GAME_NAME")
-    game_id: Optional[str] = Field(default=None, alias="GAME_ID")
-    store: Optional[str] = Field(default=None, alias="STORE")
     exe_path: Path = Field(..., alias="EXE_PATH")
     app_id: Optional[str] = Field(default=None, alias="APP_ID")
     game_args: Optional[str] = Field(default=None, alias="GAME_ARGS")

@@ -62,7 +62,7 @@ class Config:
         Path.home() / ".steam/debian-installation",
     ]
 
-    REQUIRED_COMMANDS: list[str] = ["umu-run", "gamescope"]
+    REQUIRED_COMMANDS: list[str] = ["bwrap", "umu-run", "gamescope"]
     OPTIONAL_COMMANDS: list[str] = []
 
     # Timeout configurations (in seconds)
