@@ -213,9 +213,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.splitscreen_orientation_combo.append("vertical", "Vertical")
 
         # --- Environment Variables ---
-        self.env_vars_listbox = Gtk.ListBox()
-        self.env_vars_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
-        self.env_var_entries = []
+        self.env_var_entries: List[Tuple[Gtk.Entry, Gtk.Entry, Adw.ActionRow]] = []
 
         # --- Player Configs ---
         self.player_config_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
@@ -308,19 +306,19 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         launch_options_group.add(self.winetricks_verbs_row)
 
         # --- Environment Variables Group ---
-        env_vars_group = Adw.PreferencesGroup(title="Custom Environment Variables")
-        page_vbox.append(env_vars_group)
+        self.env_vars_group = Adw.PreferencesGroup(title="Custom Environment Variables")
+        page_vbox.append(self.env_vars_group)
 
-        env_vars_group.add(self.env_vars_listbox)
         self._add_env_var_row("WINEDLLOVERRIDES", "")
         self._add_env_var_row("MANGOHUD", "1")
+
         add_env_var_button = Gtk.Button(label="Add Variable")
         add_env_var_button.connect("clicked", self._on_add_env_var_clicked)
 
-        add_button_row = Adw.ActionRow()
-        add_button_row.add_suffix(add_env_var_button)
-        add_button_row.set_title("Add New Variable")
-        env_vars_group.add(add_button_row)
+        self.add_button_row = Adw.ActionRow()
+        self.add_button_row.add_suffix(add_env_var_button)
+        self.add_button_row.set_title("Add New Variable")
+        self.env_vars_group.add(self.add_button_row)
 
     def setup_profile_settings_tab(self):
         """Sets up the 'Profile Settings' tab."""
@@ -563,46 +561,41 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self._add_env_var_row()
 
     def _add_env_var_row(self, key="", value=""):
-        """Adds a new row to the environment variables listbox."""
-        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        """Adds a new row for an environment variable."""
+        row = Adw.ActionRow()
 
-        key_entry = Gtk.Entry()
-        key_entry.set_placeholder_text("Variable Name")
-        key_entry.set_hexpand(True)
-        key_entry.set_text(key)
-        hbox.append(key_entry) # Changed from pack_start
+        key_entry = Gtk.Entry(placeholder_text="Variable Name", hexpand=True, text=key)
+        row.add_suffix(key_entry)
 
-        value_entry = Gtk.Entry()
-        value_entry.set_placeholder_text("Value")
-        value_entry.set_hexpand(True)
-        value_entry.set_text(value)
-        hbox.append(value_entry) # Changed from pack_start
+        value_entry = Gtk.Entry(placeholder_text="Value", hexpand=True, text=value)
+        row.add_suffix(value_entry)
 
-        remove_button = Gtk.Button(label="-")
-        # remove_button.set_relief(Gtk.ReliefStyle.NONE) # set_relief is Gtk3 only
+        remove_button = Gtk.Button(icon_name="edit-delete-symbolic")
+        remove_button.add_css_class("flat")
         remove_button.set_tooltip_text("Remove this environment variable")
+        row.add_suffix(remove_button)
 
-        list_box_row = Gtk.ListBoxRow()
-        list_box_row.set_child(hbox) # Changed from add
+        # Insert the new row before the "Add Variable" button
+        self.env_vars_group.add(row)
+        self.env_vars_group.remove(self.add_button_row)
+        self.env_vars_group.add(self.add_button_row)
 
-        remove_button.connect("clicked", lambda btn, row=list_box_row, k_entry=key_entry, v_entry=value_entry: self._remove_env_var_row(btn, row, k_entry, v_entry))
-        hbox.append(remove_button) # Changed from pack_end
+        entry_tuple = (key_entry, value_entry, row)
+        remove_button.connect("clicked", self._on_remove_env_var_clicked, entry_tuple)
 
-        self.env_vars_listbox.append(list_box_row) # Changed from add
-        list_box_row.show() # Explicitly show the row for Gtk4 ListBox
-        self.env_var_entries.append((key_entry, value_entry, list_box_row))
+        self.env_var_entries.append(entry_tuple)
 
-    def _remove_env_var_row(self, button, row, key_entry, value_entry):
-        """Removes a row from the environment variables listbox."""
-        self.env_vars_listbox.remove(row)
-        self.env_var_entries.remove((key_entry, value_entry, row))
+    def _on_remove_env_var_clicked(self, button, entry_tuple):
+        """Callback to remove an environment variable row."""
+        key_entry, value_entry, row = entry_tuple
+        self.env_vars_group.remove(row)
+        self.env_var_entries.remove(entry_tuple)
 
     def _clear_environment_variables_ui(self):
         """Clears the environment variables from the UI."""
-        while self.env_vars_listbox.get_first_child():
-            self.env_vars_listbox.remove(self.env_vars_listbox.get_first_child())
+        for _, _, row in self.env_var_entries:
+            self.env_vars_group.remove(row)
         self.env_var_entries.clear()
-        self.env_vars_listbox.queue_draw()
 
     def _add_default_environment_variables(self):
         """Adds the default environment variables to the UI."""
