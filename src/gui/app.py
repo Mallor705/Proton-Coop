@@ -31,7 +31,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     widgets and logic for creating, loading, saving, and launching games.
     """
     def __init__(self, app):
-        super().__init__(application=app)
+        super().__init__(application=app, title="Linux Coop")
         self.set_default_size(1200, 800)
 
         # --- Main Layout with ToolbarView ---
@@ -40,7 +40,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         # --- Header Bar ---
         header_bar = Adw.HeaderBar()
-        header_bar.set_title_widget(Adw.WindowTitle(title="Linux Coop"))
         toolbar_view.add_top_bar(header_bar)
 
 
@@ -117,13 +116,11 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         right_pane_vbox.set_hexpand(True)
         self.main_paned.set_end_child(right_pane_vbox)
 
-        # Use Adw.TabBar and Adw.ViewStack for a modern tabbed view
-        self.tab_bar = Adw.TabBar()
-        self.tab_view = Adw.ViewStack()
+        # Use Adw.TabView for a modern tabbed view
+        self.tab_view = Adw.TabView()
 
-        # Add the TabBar to the HeaderBar
-        header_bar.set_title_widget(self.tab_bar)
-        self.tab_bar.set_view(self.tab_view)
+        # Add the TabBar from the TabView to the HeaderBar
+        header_bar.set_title_widget(self.tab_view.get_tab_bar())
 
         right_pane_vbox.append(self.tab_view)
 
@@ -261,8 +258,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         scrolled_window = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vscrollbar_policy=Gtk.PolicyType.AUTOMATIC)
         scrolled_window.set_child(page_vbox)
 
-        # Add page to ViewStack
-        page = self.tab_view.add_titled(scrolled_window, "game_settings", "Game Settings")
+        # Add page to TabView
+        page = self.tab_view.append(scrolled_window)
+        page.set_title("Game Settings")
         page.set_icon_name("applications-games-symbolic")
 
         # --- Game Details Frame ---
@@ -351,8 +349,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         scrolled_window = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vscrollbar_policy=Gtk.PolicyType.AUTOMATIC)
         scrolled_window.set_child(page_vbox)
 
-        # Add page to ViewStack
-        page = self.tab_view.add_titled(scrolled_window, "profile_settings", "Profile Settings")
+        # Add page to TabView
+        page = self.tab_view.append(scrolled_window)
+        page.set_title("Profile Settings")
         page.set_icon_name("document-properties-symbolic")
 
 
@@ -374,8 +373,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         """Sets up the 'Window Layout' preview tab."""
         page = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
 
-        # Add page to ViewStack
-        page_widget = self.tab_view.add_titled(page, "window_layout", "Window Layout")
+        # Add page to TabView
+        page_widget = self.tab_view.append(page)
+        page_widget.set_title("Window Layout")
         page_widget.set_icon_name("video-display-symbolic")
 
         # --- Settings Panel (Left) ---
@@ -1417,9 +1417,10 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.player_config_vbox.set_sensitive(is_profile_selected)
 
         # Set sensitivity for the notebook tabs
-        self.tab_view.get_child_by_name("game_settings").set_sensitive(is_game_selected)
-        self.tab_view.get_child_by_name("profile_settings").set_sensitive(is_profile_selected)
-        self.tab_view.get_child_by_name("window_layout").set_sensitive(is_profile_selected)
+        for i in range(self.tab_view.get_n_pages()):
+            page = self.tab_view.get_nth_page(i)
+            is_game_page = (page.get_title() == "Game Settings")
+            page.set_sensitive(is_game_page and is_game_selected or not is_game_page and is_profile_selected)
 
 
     def _load_game_data(self, game: Game):
@@ -1602,7 +1603,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.load_profile_data(profile.model_dump(by_alias=True))
             self.statusbar.set_label(f"Profile loaded: {profile_name_stem}") # Changed from push
             # Switch to General Settings tab after loading
-            self.tab_view.set_visible_child_name("game_settings")
+            self.tab_view.set_selected_page(self.tab_view.get_nth_page(0))
         except Exception as e:
             self.logger.error(f"Failed to load profile {profile_name_stem}: {e}")
             # Show error dialog
