@@ -77,21 +77,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.sidebar_vbox.set_size_request(250, -1)
         self.main_paned.set_start_child(self.sidebar_vbox)
 
-        # TreeView for games and profiles
+        # Adwaita ListBox for games and profiles
         scrolled_window = Gtk.ScrolledWindow()
-        scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scrolled_window.set_vexpand(True)
         self.sidebar_vbox.append(scrolled_window)
 
-        # TreeStore model: Name, Game Object, Profile Object
-        self.game_tree_store = Gtk.TreeStore(str, object, object)
-        self.game_tree_view = Gtk.TreeView(model=self.game_tree_store)
-        self.game_tree_view.get_selection().connect("changed", self._on_library_selection_changed)
-        scrolled_window.set_child(self.game_tree_view)
-
-        renderer = Gtk.CellRendererText()
-        column = Gtk.TreeViewColumn("Library", renderer, text=0)
-        self.game_tree_view.append_column(column)
+        self.game_list_group = Adw.PreferencesGroup()
+        scrolled_window.set_child(self.game_list_group)
 
         # Action Buttons
         self.add_game_button = Gtk.Button(label="➕ Add Game")
@@ -246,85 +239,87 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             "applications-games-symbolic"
         )
 
-        # --- Game Details Frame ---
-        game_details_frame = Gtk.Frame(label="Game Details")
-        page_vbox.append(game_details_frame)
-        game_details_grid = Gtk.Grid(column_spacing=10, row_spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
-        game_details_frame.set_child(game_details_grid)
+        # --- Game Details Group ---
+        game_details_group = Adw.PreferencesGroup(title="Game Details")
+        page_vbox.append(game_details_group)
 
-        row = 0
-        game_details_grid.attach(Gtk.Label(label="Game Name:", xalign=0), 0, row, 1, 1)
-        game_details_grid.attach(self.game_name_entry, 1, row, 1, 1)
-        row += 1
-        game_details_grid.attach(Gtk.Label(label="Executable Path:", xalign=0), 0, row, 1, 1)
-        exe_path_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        self.exe_path_entry.set_hexpand(True)
-        exe_path_hbox.append(self.exe_path_entry)
+        # Game Name
+        self.game_name_row = Adw.EntryRow(title="Game Name")
+        game_details_group.add(self.game_name_row)
+
+        # Executable Path
+        self.exe_path_row = Adw.EntryRow(title="Executable Path")
         exe_path_button = Gtk.Button(label="Browse...")
         exe_path_button.connect("clicked", self.on_exe_path_button_clicked)
-        exe_path_hbox.append(exe_path_button)
-        game_details_grid.attach(exe_path_hbox, 1, row, 1, 1)
-        row += 1
-        game_details_grid.attach(Gtk.Label(label="App ID (Steam):", xalign=0), 0, row, 1, 1)
-        game_details_grid.attach(self.app_id_entry, 1, row, 1, 1)
-        row += 1
-        game_details_grid.attach(Gtk.Label(label="Game Arguments:", xalign=0), 0, row, 1, 1)
-        game_details_grid.attach(self.game_args_entry, 1, row, 1, 1)
-        row += 1
-        game_details_grid.attach(Gtk.Label(label="Is Native Game (Linux)?", xalign=0), 0, row, 1, 1)
-        game_details_grid.attach(self.is_native_check, 1, row, 1, 1)
+        self.exe_path_row.add_suffix(exe_path_button)
+        game_details_group.add(self.exe_path_row)
 
-        # --- Profiles Frame ---
-        profiles_frame = Gtk.Frame(label="Profiles")
-        page_vbox.append(profiles_frame)
-        profiles_grid = Gtk.Grid(column_spacing=10, row_spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
-        profiles_frame.set_child(profiles_grid)
+        # App ID
+        self.app_id_row = Adw.EntryRow(title="App ID (Steam)")
+        game_details_group.add(self.app_id_row)
 
-        profile_selector_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        # Game Arguments
+        self.game_args_row = Adw.EntryRow(title="Game Arguments")
+        game_details_group.add(self.game_args_row)
+
+        # Is Native
+        self.is_native_row = Adw.ActionRow(title="Is Native Game (Linux)?")
+        self.is_native_check = Gtk.CheckButton()
+        self.is_native_row.add_suffix(self.is_native_check)
+        self.is_native_row.set_activatable_widget(self.is_native_check)
+        game_details_group.add(self.is_native_row)
+
+        # --- Profiles Group ---
+        profiles_group = Adw.PreferencesGroup(title="Profiles")
+        page_vbox.append(profiles_group)
+
+        # Profile Selector
+        self.profile_selector_row = Adw.ActionRow(title="Select Profile")
         self.profile_selector_combo.set_hexpand(True)
-        profile_selector_box.append(self.profile_selector_combo)
-
+        self.profile_selector_row.add_suffix(self.profile_selector_combo)
         self.add_profile_button.set_tooltip_text("Add a new profile")
         self.add_profile_button.connect("clicked", self._on_add_profile_clicked)
-        profile_selector_box.append(self.add_profile_button)
-
+        self.profile_selector_row.add_suffix(self.add_profile_button)
         self.delete_profile_button.set_tooltip_text("Delete selected profile")
         self.delete_profile_button.add_css_class("destructive-action")
         self.delete_profile_button.connect("clicked", self._on_delete_clicked)
-        profile_selector_box.append(self.delete_profile_button)
-
-        profiles_grid.attach(Gtk.Label(label="Select Profile:", xalign=0), 0, 0, 1, 1)
-        profiles_grid.attach(profile_selector_box, 1, 0, 1, 1)
+        self.profile_selector_row.add_suffix(self.delete_profile_button)
         self.profile_selector_combo.connect("changed", self._on_profile_selected_from_combo)
+        profiles_group.add(self.profile_selector_row)
 
-        # --- Launch Options Frame ---
-        launch_options_frame = Gtk.Frame(label="Launch Options")
-        page_vbox.append(launch_options_frame)
-        launch_options_grid = Gtk.Grid(column_spacing=10, row_spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
-        launch_options_frame.set_child(launch_options_grid)
+        # --- Launch Options Group ---
+        launch_options_group = Adw.PreferencesGroup(title="Launch Options")
+        page_vbox.append(launch_options_group)
 
-        row = 0
-        launch_options_grid.attach(Gtk.Label(label="Proton Version:", xalign=0), 0, row, 1, 1)
-        launch_options_grid.attach(self.proton_version_combo, 1, row, 1, 1)
-        row += 1
-        launch_options_grid.attach(Gtk.Label(label="Apply DXVK/VKD3D:", xalign=0), 0, row, 1, 1)
-        launch_options_grid.attach(self.apply_dxvk_vkd3d_check, 1, row, 1, 1)
-        row += 1
-        launch_options_grid.attach(Gtk.Label(label="Winetricks Verbs:", xalign=0), 0, row, 1, 1)
-        launch_options_grid.attach(self.winetricks_verbs_entry, 1, row, 1, 1)
+        # Proton Version
+        self.proton_version_row = Adw.ActionRow(title="Proton Version")
+        self.proton_version_row.add_suffix(self.proton_version_combo)
+        launch_options_group.add(self.proton_version_row)
 
-        # --- Environment Variables Frame ---
-        env_vars_frame = Gtk.Frame(label="Custom Environment Variables")
-        page_vbox.append(env_vars_frame)
-        env_vars_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
-        env_vars_frame.set_child(env_vars_vbox)
+        # DXVK/VKD3D
+        self.apply_dxvk_vkd3d_row = Adw.ActionRow(title="Apply DXVK/VKD3D")
+        self.apply_dxvk_vkd3d_row.add_suffix(self.apply_dxvk_vkd3d_check)
+        self.apply_dxvk_vkd3d_row.set_activatable_widget(self.apply_dxvk_vkd3d_check)
+        launch_options_group.add(self.apply_dxvk_vkd3d_row)
 
-        env_vars_vbox.append(self.env_vars_listbox)
+        # Winetricks
+        self.winetricks_verbs_row = Adw.EntryRow(title="Winetricks Verbs")
+        launch_options_group.add(self.winetricks_verbs_row)
+
+        # --- Environment Variables Group ---
+        env_vars_group = Adw.PreferencesGroup(title="Custom Environment Variables")
+        page_vbox.append(env_vars_group)
+
+        env_vars_group.add(self.env_vars_listbox)
         self._add_env_var_row("WINEDLLOVERRIDES", "")
         self._add_env_var_row("MANGOHUD", "1")
         add_env_var_button = Gtk.Button(label="Add Variable")
         add_env_var_button.connect("clicked", self._on_add_env_var_clicked)
-        env_vars_vbox.append(add_env_var_button)
+
+        add_button_row = Adw.ActionRow()
+        add_button_row.add_suffix(add_env_var_button)
+        add_button_row.set_title("Add New Variable")
+        env_vars_group.add(add_button_row)
 
     def setup_profile_settings_tab(self):
         """Sets up the 'Profile Settings' tab."""
@@ -342,12 +337,10 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
 
         # --- Profile Details ---
-        profile_details_frame = Gtk.Frame(label="Profile Details")
-        page_vbox.append(profile_details_frame)
-        profile_details_grid = Gtk.Grid(column_spacing=10, row_spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
-        profile_details_frame.set_child(profile_details_grid)
-        profile_details_grid.attach(Gtk.Label(label="Profile Name:", xalign=0), 0, 0, 1, 1)
-        profile_details_grid.attach(self.profile_name_entry, 1, 0, 1, 1)
+        profile_details_group = Adw.PreferencesGroup(title="Profile Details")
+        page_vbox.append(profile_details_group)
+        self.profile_name_row = Adw.EntryRow(title="Profile Name")
+        profile_details_group.add(self.profile_name_row)
 
         # --- Layout and Display ---
         # --- Player Configurations ---
@@ -372,25 +365,31 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         settings_panel.set_size_request(300, -1)
         page.append(settings_panel)
 
-        settings_grid = Gtk.Grid(column_spacing=10, row_spacing=10)
-        settings_panel.append(settings_grid)
+        layout_group = Adw.PreferencesGroup()
+        settings_panel.append(layout_group)
 
-        row = 0
-        settings_grid.attach(Gtk.Label(label="Number of Players:", xalign=0), 0, row, 1, 1)
-        settings_grid.attach(self.num_players_spin, 1, row, 1, 1)
-        row += 1
-        settings_grid.attach(Gtk.Label(label="Instance Width:", xalign=0), 0, row, 1, 1)
-        settings_grid.attach(self.instance_width_spin, 1, row, 1, 1)
-        row += 1
-        settings_grid.attach(Gtk.Label(label="Instance Height:", xalign=0), 0, row, 1, 1)
-        settings_grid.attach(self.instance_height_spin, 1, row, 1, 1)
-        row += 1
-        settings_grid.attach(Gtk.Label(label="Mode:", xalign=0), 0, row, 1, 1)
-        settings_grid.attach(self.mode_combo, 1, row, 1, 1)
-        row += 1
-        self.splitscreen_orientation_label = Gtk.Label(label="Orientation:", xalign=0)
-        settings_grid.attach(self.splitscreen_orientation_label, 0, row, 1, 1)
-        settings_grid.attach(self.splitscreen_orientation_combo, 1, row, 1, 1)
+        # Number of Players
+        self.num_players_row = Adw.SpinRow.new_with_range(1, 4, 1)
+        self.num_players_row.set_title("Number of Players")
+        layout_group.add(self.num_players_row)
+
+        # Instance Width
+        self.instance_width_row = Adw.SpinRow.new_with_range(640, 7680, 1)
+        self.instance_width_row.set_title("Instance Width")
+        layout_group.add(self.instance_width_row)
+
+        # Instance Height
+        self.instance_height_row = Adw.SpinRow.new_with_range(480, 4320, 1)
+        self.instance_height_row.set_title("Instance Height")
+        layout_group.add(self.instance_height_row)
+
+        # Mode
+        self.mode_row = Adw.ComboRow(title="Mode", model=Gtk.StringList.new(["Fullscreen", "Splitscreen"]))
+        layout_group.add(self.mode_row)
+
+        # Splitscreen Orientation
+        self.splitscreen_orientation_row = Adw.ComboRow(title="Orientation", model=Gtk.StringList.new(["Horizontal", "Vertical"]))
+        layout_group.add(self.splitscreen_orientation_row)
 
         # --- Preview Panel (Right) ---
         preview_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5, hexpand=True, vexpand=True)
@@ -405,15 +404,15 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
     def _connect_layout_signals(self):
         """Connects signals for widgets that affect the layout preview."""
-        self.instance_width_spin.connect("value-changed", self.on_layout_setting_changed)
-        self.instance_height_spin.connect("value-changed", self.on_layout_setting_changed)
-        self.num_players_spin.connect("value-changed", self.on_layout_setting_changed)
-        self.mode_combo.connect("changed", self.on_layout_setting_changed)
-        self.splitscreen_orientation_combo.connect("changed", self.on_layout_setting_changed)
+        self.instance_width_row.connect("notify::value", self.on_layout_setting_changed)
+        self.instance_height_row.connect("notify::value", self.on_layout_setting_changed)
+        self.num_players_row.connect("notify::value", self.on_layout_setting_changed)
+        self.mode_row.connect("notify::selected", self.on_layout_setting_changed)
+        self.splitscreen_orientation_row.connect("notify::selected", self.on_layout_setting_changed)
 
         # Specific handlers
-        self.mode_combo.connect("changed", self.on_mode_changed)
-        self.num_players_spin.connect("value-changed", self.on_num_players_changed)
+        self.mode_row.connect("notify::selected", self.on_mode_changed)
+        self.num_players_row.connect("notify::value", self.on_num_players_changed)
 
     def _update_action_buttons_state(self):
         """Updates the sensitivity of all action buttons based on the current selection."""
@@ -468,12 +467,52 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         dialog.destroy()
 
     def _populate_game_library(self):
-        """Populates the TreeView with games from the GameManager."""
-        self.game_tree_store.clear()
+        """Populates the Adwaita list with games and profiles."""
+        # Clear existing rows
+        for child in list(self.game_list_group.get_children()):
+            self.game_list_group.remove(child)
+
         games = self.game_manager.get_games()
         for game in games:
-            self.game_tree_store.append(None, [game.game_name, game, None])
-        self.game_tree_view.expand_all()
+            game_row = Adw.ExpanderRow(title=game.game_name)
+            game_row.connect("activated", self._on_game_row_selected, game)
+            self.game_list_group.add(game_row)
+
+            profiles_list = Gtk.ListBox()
+            profiles_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+            profiles_list.add_css_class("boxed-list")
+            game_row.add_row(profiles_list)
+
+            profiles = self.game_manager.get_profiles(game)
+            for profile in profiles:
+                profile_row = Gtk.ListBoxRow()
+                profile_row.set_child(Gtk.Label(label=profile.profile_name, halign=Gtk.Align.START))
+                profile_row.connect("activate", self._on_profile_row_selected, game, profile)
+                profiles_list.append(profile_row)
+            profiles_list.connect("row-activated", self._on_profile_row_activated)
+
+    def _on_game_row_selected(self, row, game):
+        """Handles when a game's ExpanderRow is selected."""
+        self.selected_game = game
+        self.selected_profile = None
+        self._clear_all_fields()
+        self._load_game_data(game)
+        self._populate_profile_selector(game) # Keep this to update the combo on the settings page
+        self._set_fields_sensitivity(is_game_selected=True, is_profile_selected=False)
+        self._update_action_buttons_state()
+
+    def _on_profile_row_activated(self, listbox, row):
+        """Handles when a profile row is activated in any listbox."""
+        # We get the game/profile from the row's "activate" signal, not here.
+        pass
+
+    def _on_profile_row_selected(self, row, game, profile):
+        """Handles when a profile row is selected."""
+        self.selected_game = game
+        self.selected_profile = profile
+        self._load_profile_data(game, profile)
+        self._set_fields_sensitivity(is_game_selected=True, is_profile_selected=True)
+        self._update_action_buttons_state()
 
     def _populate_profile_selector(self, game: Optional[Game]):
         """Populates the profile selector ComboBox with profiles for the given game."""
@@ -483,24 +522,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             for profile in profiles:
                 self.profile_selector_combo.append(profile.profile_name, profile.profile_name)
         self.profile_selector_combo.set_active(-1)
-
-    def _on_library_selection_changed(self, selection):
-        """Handles selection changes in the game library TreeView."""
-        model, tree_iter = selection.get_selected()
-        if tree_iter:
-            self.selected_game = model.get_value(tree_iter, 1)
-            self._clear_all_fields()
-            self._load_game_data(self.selected_game)
-            self._populate_profile_selector(self.selected_game)
-            self._set_fields_sensitivity(is_game_selected=True, is_profile_selected=False)
-        else:
-            self.selected_game = None
-            self.selected_profile = None
-            self._clear_all_fields()
-            self._populate_profile_selector(None)
-            self._set_fields_sensitivity(is_game_selected=False, is_profile_selected=False)
-
-        self._update_action_buttons_state()
 
     def _on_profile_selected_from_combo(self, combo):
         """Handles selection changes in the profile ComboBox."""
@@ -521,25 +542,22 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self._update_action_buttons_state()
 
     def _select_item_in_library(self, game_name: str, profile_name: Optional[str] = None):
-        """Programmatically selects a game and then defers profile selection."""
-        model = self.game_tree_store
-        root_iter = model.get_iter_first()
-        while root_iter:
-            stored_game = model.get_value(root_iter, 1)
-            if stored_game and stored_game.game_name == game_name:
-                # This selection will trigger _on_library_selection_changed,
-                # which will correctly populate the profile ComboBox.
-                self.game_tree_view.get_selection().select_iter(root_iter)
-                self.game_tree_view.scroll_to_cell(model.get_path(root_iter))
-
-                # Defer the profile selection to the next idle cycle.
-                # This gives the TreeView selection signal handler time to run
-                # and populate the ComboBox before we try to select an item in it.
+        """Programmatically selects a game and profile in the new Adwaita list."""
+        for game_row in self.game_list_group:
+            if game_row.get_title() == game_name:
+                game_row.set_expanded(True)
+                # Find the inner ListBox and select the profile
                 if profile_name:
-                    GLib.idle_add(self.profile_selector_combo.set_active_id, profile_name)
-
-                return
-            root_iter = model.iter_next(root_iter)
+                    profile_list = game_row.get_row_at_index(0) # The ListBox is the only child row
+                    for i, profile_row in enumerate(profile_list):
+                        if profile_row.get_child().get_label() == profile_name:
+                            profile_list.select_row(profile_row)
+                            profile_list.emit("row-activated", profile_row)
+                            break
+                else:
+                    # Just select the game row if no profile is specified
+                    game_row.emit("activated")
+                break
 
     def _on_add_env_var_clicked(self, button):
         """Handles the 'Add Variable' button click for environment variables."""
@@ -605,40 +623,24 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     def _get_player_configs_from_ui(self) -> List[Dict[str, Any]]:
         """Gets the player configurations from the UI."""
         player_configs_data = []
-        for i, (is_enabled_checkbox, player_widgets) in enumerate(zip(self.player_checkboxes, self.player_device_combos)):
+        for i, player_widgets in enumerate(self.player_device_combos):
             config = {}
-            # Iterate through the entry widgets and collect data
-            # No need to iterate self.player_config_entries, it's not structured for this anymore
-            # Instead, use the player_widgets directly
-            for key, widget in player_widgets.items(): # key will now be UPPER_SNAKE_CASE
-                if isinstance(widget, Gtk.Entry):
-                    value = widget.get_text().strip()
-                    config[key] = value if value != "" else None # Convert empty string to None if applicable
-                elif isinstance(widget, Gtk.DropDown): # Gtk.DropDown for device selection
+            for key, widget in player_widgets.items(): # key is "PHYSICAL_DEVICE_ID", etc.
+                if isinstance(widget, Adw.ComboRow):
                     selected_index = widget.get_selected()
-                    device_type = getattr(widget, 'device_type', None)
+                    device_type = getattr(widget, 'device_type', "unknown")
 
-                    if device_type and device_type in self.device_lists:
-                        device_list = self.device_lists[device_type]
-                        if 0 <= selected_index < len(device_list):
-                            device = device_list[selected_index]
-                            device_id = device["id"]
-                            device_name = device["name"]
-                        else:
-                            device_id = None
-                            device_name = "None"
+                    device_list = self.device_lists.get(device_type, [])
+                    # The model includes "None", so index 0 is "None", index 1 is device_list[0]
+                    if selected_index > 0 and (selected_index - 1) < len(device_list):
+                        device_id = device_list[selected_index - 1]["id"]
                     else:
-                        # Fallback to old method
-                        selected_item = widget.get_selected_item()
-                        selected_name = selected_item.get_string() if selected_item else "None"
-                        device_id = self.device_name_to_id.get(selected_name, None)
-                        device_name = selected_name
+                        device_id = None # "None" is selected or index is out of bounds
 
-                    self.logger.info(f"DEBUG: Player config: Selected name for {key}: '{device_name}' (index: {selected_index})")
-                    self.logger.info(f"DEBUG: Player config: Resolved ID for {key} ('{device_name}'): '{device_id}'")
                     config[key] = device_id
                 else:
-                    config[key] = "" # Default empty string for other widget types if any
+                     # Handle other widget types if any, e.g., EntryRow
+                    config[key] = widget.get_text().strip() if hasattr(widget, 'get_text') else None
             player_configs_data.append(config)
         self.logger.info(f"DEBUG: Collected player configurations data: {player_configs_data}")
         return player_configs_data
@@ -651,162 +653,71 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self._create_player_config_uis(self.num_players_spin.get_value_as_int())
 
     def _create_player_config_uis(self, num_players: int):
-        """Creates or recreates the UI for the specified number of players."""
-        for frame in self.player_frames:
-            frame.unparent() # Changed from destroy()
-        self.player_frames.clear()
-        self.player_device_combos.clear()
-        self.player_checkboxes.clear()
-
-        # In Gtk4, Gtk.Box.get_children() is removed. Remove children one by one.
+        """Creates or recreates the UI for the specified number of players using Adwaita widgets."""
+        # Clear existing widgets
         while self.player_config_vbox.get_first_child():
             self.player_config_vbox.remove(self.player_config_vbox.get_first_child())
 
+        self.player_device_combos = []
+        self.player_checkboxes = []
+
         for i in range(num_players):
-            player_frame = Gtk.Frame(label=f"Player {i+1} Configuration")
-            player_frame.set_margin_top(10) # Changed from set_shadow_type
-            player_frame.set_margin_bottom(10) # Added margin
-            player_frame.set_margin_start(10) # Added margin
-            player_frame.set_margin_end(10) # Added margin
-            self.player_config_vbox.append(player_frame) # Changed from pack_start
-            player_frame.show() # Explicitly show the frame
-            self.player_frames.append(player_frame)
+            player_group = Adw.PreferencesGroup(title=f"Player {i+1} Configuration")
+            self.player_config_vbox.append(player_group)
 
-            player_grid = Gtk.Grid()
-            player_grid.set_column_spacing(10)
-            player_grid.set_row_spacing(10)
-            player_grid.set_margin_start(10) # Changed from set_border_width
-            player_grid.set_margin_end(10)   # Changed from set_border_width
-            player_grid.set_margin_top(10)   # Changed from set_border_width
-            player_grid.set_margin_bottom(10) # Changed from set_border_width
-            player_frame.set_child(player_grid) # Changed from add
-            player_grid.show() # Explicitly show the grid
-
-            # Create DropDowns with ellipsize to prevent expansion
-            physical_device_dropdown = Gtk.DropDown.new_from_strings(self._create_device_list_store(self.detected_input_devices["joystick"]))
-            physical_device_dropdown.set_size_request(200, -1)
-
-            mouse_device_dropdown = Gtk.DropDown.new_from_strings(self._create_device_list_store(self.detected_input_devices["mouse"]))
-            mouse_device_dropdown.set_size_request(200, -1)
-
-            keyboard_device_dropdown = Gtk.DropDown.new_from_strings(self._create_device_list_store(self.detected_input_devices["keyboard"]))
-            keyboard_device_dropdown.set_size_request(200, -1)
-
-            audio_device_dropdown = Gtk.DropDown.new_from_strings(self._create_device_list_store(self.detected_audio_devices))
-            audio_device_dropdown.set_size_request(200, -1)
-
-            monitor_dropdown = Gtk.DropDown.new_from_strings(self._create_device_list_store(self.detected_display_outputs))
-            monitor_dropdown.set_size_request(200, -1)
-
-            # Store device type mapping for each dropdown
-            physical_device_dropdown.device_type = "joystick"
-            mouse_device_dropdown.device_type = "mouse"
-            keyboard_device_dropdown.device_type = "keyboard"
-            audio_device_dropdown.device_type = "audio"
-            monitor_dropdown.device_type = "display"
-
-            player_combos = {
-                "ACCOUNT_NAME": Gtk.Entry(),
-                "LANGUAGE": Gtk.Entry(),
-                "LISTEN_PORT": Gtk.Entry(),
-                "USER_STEAM_ID": Gtk.Entry(),
-                "PHYSICAL_DEVICE_ID": physical_device_dropdown,
-                "MOUSE_EVENT_PATH": mouse_device_dropdown,
-                "KEYBOARD_EVENT_PATH": keyboard_device_dropdown,
-                "AUDIO_DEVICE_ID": audio_device_dropdown,
-                "MONITOR_ID": monitor_dropdown,
-            }
-            self.player_device_combos.append(player_combos)
-
-            p_row = 0
-
-            check_button = Gtk.CheckButton(label=f"Enable Player {i + 1}")
-            check_button.set_active(True)
+            # Enable/Disable Checkbox
+            enable_row = Adw.ActionRow(title=f"Enable Player {i+1}")
+            check_button = Gtk.CheckButton(active=True)
+            enable_row.add_suffix(check_button)
+            enable_row.set_activatable_widget(check_button)
             self.player_checkboxes.append(check_button)
-            player_grid.attach(check_button, 0, p_row, 2, 1)
-            check_button.show()
-            p_row += 1
+            player_group.add(enable_row)
 
-            # player_grid.attach(Gtk.Label(label="Account Name:", xalign=0), 0, p_row, 1, 1)
-            # player_combos["ACCOUNT_NAME"].set_placeholder_text(f"Player {i+1}")
-            # player_grid.attach(player_combos["ACCOUNT_NAME"], 1, p_row, 1, 1)
-            # player_combos["ACCOUNT_NAME"].show()
-            # p_row += 1
+            # Device selectors
+            joystick_combo = Adw.ComboRow(
+                title="Joystick Device",
+                model=Gtk.StringList.new(self._create_device_list_store(self.device_lists["joystick"]))
+            )
+            mouse_combo = Adw.ComboRow(
+                title="Mouse Device",
+                model=Gtk.StringList.new(self._create_device_list_store(self.device_lists["mouse"]))
+            )
+            keyboard_combo = Adw.ComboRow(
+                title="Keyboard Device",
+                model=Gtk.StringList.new(self._create_device_list_store(self.device_lists["keyboard"]))
+            )
+            audio_combo = Adw.ComboRow(
+                title="Audio Device",
+                model=Gtk.StringList.new(self._create_device_list_store(self.device_lists["audio"]))
+            )
 
-            # player_grid.attach(Gtk.Label(label="Language:", xalign=0), 0, p_row, 1, 1)
-            # player_combos["LANGUAGE"].set_placeholder_text("Ex: brazilian, english")
-            # player_grid.attach(player_combos["LANGUAGE"], 1, p_row, 1, 1)
-            # player_combos["LANGUAGE"].show()
-            # p_row += 1
+            joystick_combo.device_type = "joystick"
+            mouse_combo.device_type = "mouse"
+            keyboard_combo.device_type = "keyboard"
+            audio_combo.device_type = "audio"
 
-            # player_grid.attach(Gtk.Label(label="Listen Port (Goldberg):", xalign=0), 0, p_row, 1, 1)
-            # player_combos["LISTEN_PORT"].set_placeholder_text("Optional")
-            # player_grid.attach(player_combos["LISTEN_PORT"], 1, p_row, 1, 1)
-            # player_combos["LISTEN_PORT"].show()
-            # p_row += 1
+            player_group.add(joystick_combo)
+            player_group.add(mouse_combo)
+            player_group.add(keyboard_combo)
+            player_group.add(audio_combo)
 
-            # player_grid.attach(Gtk.Label(label="User Steam ID:", xalign=0), 0, p_row, 1, 1)
-            # player_combos["USER_STEAM_ID"].set_placeholder_text("Optional (ex: 7656119...)")
-            # player_grid.attach(player_combos["USER_STEAM_ID"], 1, p_row, 1, 1)
-            # player_combos["USER_STEAM_ID"].show()
-            # p_row += 1
+            player_widgets = {
+                "PHYSICAL_DEVICE_ID": joystick_combo,
+                "MOUSE_EVENT_PATH": mouse_combo,
+                "KEYBOARD_EVENT_PATH": keyboard_combo,
+                "AUDIO_DEVICE_ID": audio_combo,
+            }
+            self.player_device_combos.append(player_widgets)
 
-            player_grid.attach(Gtk.Label(label="Joystick Device:", xalign=0), 0, p_row, 1, 1)
-            physical_device_id_combo = player_combos["PHYSICAL_DEVICE_ID"]
-            # Removed Gtk.CellRendererText and pack_start/add_attribute for Gtk4 Gtk.DropDown
-            physical_device_id_combo.set_selected(0) # Select "None" by default
-            player_grid.attach(physical_device_id_combo, 1, p_row, 1, 1)
-            physical_device_id_combo.show()
-            p_row += 1
-
-            player_grid.attach(Gtk.Label(label="Mouse Device:", xalign=0), 0, p_row, 1, 1)
-            mouse_event_path_combo = player_combos["MOUSE_EVENT_PATH"]
-            # Removed Gtk.CellRendererText and pack_start/add_attribute for Gtk4 Gtk.DropDown
-            mouse_event_path_combo.set_selected(0) # Select "None" by default
-            player_grid.attach(mouse_event_path_combo, 1, p_row, 1, 1)
-            mouse_event_path_combo.show()
-            p_row += 1
-
-            player_grid.attach(Gtk.Label(label="Keyboard Device:", xalign=0), 0, p_row, 1, 1)
-            keyboard_event_path_combo = player_combos["KEYBOARD_EVENT_PATH"]
-            # Removed Gtk.CellRendererText and pack_start/add_attribute for Gtk4 Gtk.DropDown
-            keyboard_event_path_combo.set_selected(0) # Select "None" by default
-            player_grid.attach(keyboard_event_path_combo, 1, p_row, 1, 1)
-            keyboard_event_path_combo.show()
-            p_row += 1
-
-            player_grid.attach(Gtk.Label(label="Audio Device:", xalign=0), 0, p_row, 1, 1)
-            audio_device_id_combo = player_combos["AUDIO_DEVICE_ID"]
-            # Removed Gtk.CellRendererText and pack_start/add_attribute for Gtk4 Gtk.DropDown
-            audio_device_id_combo.set_selected(0) # Select "None" by default
-            player_grid.attach(audio_device_id_combo, 1, p_row, 1, 1)
-            audio_device_id_combo.show()
-            p_row += 1
-
-            # # Monitor Selection
-            # player_grid.attach(Gtk.Label(label="Monitor:", xalign=0), 0, p_row, 1, 1)
-            # monitor_combo = player_combos["MONITOR_ID"]
-            # # Removed Gtk.CellRendererText and pack_start/add_attribute for Gtk4 Gtk.DropDown
-            # monitor_combo.set_selected(0) # Select "None" by default
-            # player_grid.attach(monitor_combo, 1, p_row, 1, 1)
-            # monitor_combo.show()
-            # p_row += 1
-
-        # self.player_config_vbox.show_all() # Not needed for Gtk4
-        self.logger.info(f"DEBUG: Created {len(self.player_frames)} player config UIs.")
-        self.player_config_vbox.queue_draw() # Force redraw after creating UIs
-
-    def on_num_players_changed(self, spin_button):
-        """Handles the 'Number of Players' spin button value change."""
-        num_players = spin_button.get_value_as_int()
+    def on_num_players_changed(self, spin_row, _):
+        """Handles the 'Number of Players' spin row value change."""
+        num_players = spin_row.get_value_as_int()
         self._create_player_config_uis(num_players)
 
-    def on_mode_changed(self, combo):
+    def on_mode_changed(self, combo_row, _):
         """Shows or hides the splitscreen orientation dropdown based on the selected mode."""
-        mode = combo.get_active_text()
-        is_splitscreen = (mode == "Splitscreen")
-        self.splitscreen_orientation_label.set_visible(is_splitscreen)
-        self.splitscreen_orientation_combo.set_visible(is_splitscreen)
+        is_splitscreen = (combo_row.get_selected() == 1) # 0: Fullscreen, 1: Splitscreen
+        self.splitscreen_orientation_row.set_visible(is_splitscreen)
 
     def on_save_button_clicked(self, button):
         """Handles the 'Save' button click, saving data and restoring selection."""
@@ -851,14 +762,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         if proton_version == "None (Use Steam default)" or not proton_version:
             proton_version = None
 
-        winetricks_text = self.winetricks_verbs_entry.get_text().strip()
+        winetricks_text = self.winetricks_verbs_row.get_text().strip()
         winetricks_verbs = winetricks_text.split() if winetricks_text else None
 
         return Game(
-            game_name=self.game_name_entry.get_text(),
-            exe_path=self.exe_path_entry.get_text(),
-            app_id=self.app_id_entry.get_text() or None,
-            game_args=self.game_args_entry.get_text() or None,
+            game_name=self.game_name_row.get_text(),
+            exe_path=self.exe_path_row.get_text(),
+            app_id=self.app_id_row.get_text() or None,
+            game_args=self.game_args_row.get_text() or None,
             is_native=self.is_native_check.get_active(),
             proton_version=proton_version,
             apply_dxvk_vkd3d=self.apply_dxvk_vkd3d_check.get_active(),
@@ -873,23 +784,27 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             proton_version = None
 
         splitscreen_config = None
-        if self.mode_combo.get_active_id() == "splitscreen":
+        mode_map = {0: "fullscreen", 1: "splitscreen"}
+        orientation_map = {0: "horizontal", 1: "vertical"}
+        mode = mode_map.get(self.mode_row.get_selected(), "fullscreen")
+
+        if mode == "splitscreen":
             splitscreen_config = SplitscreenConfig(
-                orientation=self.splitscreen_orientation_combo.get_active_id()
+                orientation=orientation_map.get(self.splitscreen_orientation_row.get_selected(), "horizontal")
             )
 
-        winetricks_text = self.winetricks_verbs_entry.get_text().strip()
+        winetricks_text = self.winetricks_verbs_row.get_text().strip()
         winetricks_verbs = winetricks_text.split() if winetricks_text else None
 
         selected_players = [i + 1 for i, cb in enumerate(self.player_checkboxes) if cb.get_active()]
 
         return Profile(
-            profile_name=self.profile_name_entry.get_text(),
+            profile_name=self.profile_name_row.get_text(),
             proton_version=proton_version,
-            num_players=self.num_players_spin.get_value_as_int(),
-            instance_width=self.instance_width_spin.get_value_as_int(),
-            instance_height=self.instance_height_spin.get_value_as_int(),
-            mode=self.mode_combo.get_active_id(),
+            num_players=self.num_players_row.get_value_as_int(),
+            instance_width=self.instance_width_row.get_value_as_int(),
+            instance_height=self.instance_height_row.get_value_as_int(),
+            mode=mode,
             splitscreen=splitscreen_config,
             env_vars=self._get_env_vars_from_ui(),
             player_configs=self._get_player_configs_from_ui(),
@@ -1089,12 +1004,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
     def _get_layout_settings(self):
         """Extracts layout settings from the UI widgets."""
+        mode_map = {0: "fullscreen", 1: "splitscreen"}
+        orientation_map = {0: "horizontal", 1: "vertical"}
         return {
-            'instance_width': self.instance_width_spin.get_value_as_int(),
-            'instance_height': self.instance_height_spin.get_value_as_int(),
-            'num_players': max(1, self.num_players_spin.get_value_as_int()),
-            'mode': self.mode_combo.get_active_id(),
-            'orientation': self.splitscreen_orientation_combo.get_active_id()
+            'instance_width': self.instance_width_row.get_value_as_int(),
+            'instance_height': self.instance_height_row.get_value_as_int(),
+            'num_players': max(1, self.num_players_row.get_value_as_int()),
+            'mode': mode_map.get(self.mode_row.get_selected(), "fullscreen"),
+            'orientation': orientation_map.get(self.splitscreen_orientation_row.get_selected(), "horizontal")
         }
 
     def _validate_layout_data(self, settings):
@@ -1341,24 +1258,24 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     def _clear_all_fields(self):
         """Clears all UI input fields to their default states."""
         # Game details
-        self.game_name_entry.set_text("")
-        self.exe_path_entry.set_text("")
-        self.app_id_entry.set_text("")
-        self.game_args_entry.set_text("")
+        self.game_name_row.set_text("")
+        self.exe_path_row.set_text("")
+        self.app_id_row.set_text("")
+        self.game_args_row.set_text("")
         self.is_native_check.set_active(False)
 
         # Profile details
         self.profile_name_entry.set_text("")
         self.proton_version_combo.set_active(0)
         self.apply_dxvk_vkd3d_check.set_active(True)
-        self.winetricks_verbs_entry.set_text("")
+        self.winetricks_verbs_row.set_text("")
 
         # Layout
-        self.num_players_spin.set_value(1)
-        self.instance_width_spin.set_value(1920)
-        self.instance_height_spin.set_value(1080)
-        self.mode_combo.set_active(0)
-        self.splitscreen_orientation_combo.set_active(0)
+        self.num_players_row.set_value(1)
+        self.instance_width_row.set_value(1920)
+        self.instance_height_row.set_value(1080)
+        self.mode_row.set_selected(0)
+        self.splitscreen_orientation_row.set_selected(0)
 
         # Env vars
         self._clear_environment_variables_ui()
@@ -1384,12 +1301,12 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.profile_selector_combo.set_sensitive(is_game_selected)
 
         # Profile-level fields are editable only when a profile is selected
-        self.profile_name_entry.set_sensitive(is_profile_selected)
-        self.num_players_spin.set_sensitive(is_profile_selected)
-        self.instance_width_spin.set_sensitive(is_profile_selected)
-        self.instance_height_spin.set_sensitive(is_profile_selected)
-        self.mode_combo.set_sensitive(is_profile_selected)
-        self.splitscreen_orientation_combo.set_sensitive(is_profile_selected)
+        self.profile_name_row.set_sensitive(is_profile_selected)
+        self.num_players_row.set_sensitive(is_profile_selected)
+        self.instance_width_row.set_sensitive(is_profile_selected)
+        self.instance_height_row.set_sensitive(is_profile_selected)
+        self.mode_row.set_sensitive(is_profile_selected)
+        self.splitscreen_orientation_row.set_sensitive(is_profile_selected)
         self.player_config_vbox.set_sensitive(is_profile_selected)
 
         # Set sensitivity for the view stack pages (tabs)
@@ -1409,10 +1326,10 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         """Loads data from a Game object into the UI fields."""
         self._clear_all_fields()
         # Game Details
-        self.game_name_entry.set_text(game.game_name or "")
-        self.exe_path_entry.set_text(str(game.exe_path) or "")
-        self.app_id_entry.set_text(game.app_id or "")
-        self.game_args_entry.set_text(game.game_args or "")
+        self.game_name_row.set_text(game.game_name or "")
+        self.exe_path_row.set_text(str(game.exe_path) or "")
+        self.app_id_row.set_text(game.app_id or "")
+        self.game_args_row.set_text(game.game_args or "")
         self.is_native_check.set_active(game.is_native)
 
         # Launch Options
@@ -1426,7 +1343,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.proton_version_combo.set_active(0)
 
         self.apply_dxvk_vkd3d_check.set_active(game.apply_dxvk_vkd3d)
-        self.winetricks_verbs_entry.set_text(" ".join(game.winetricks_verbs) if game.winetricks_verbs else "")
+        self.winetricks_verbs_row.set_text(" ".join(game.winetricks_verbs) if game.winetricks_verbs else "")
 
         # Env Vars
         self._clear_environment_variables_ui()
@@ -1441,15 +1358,19 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self._load_game_data(game)
 
         # Profile Details
-        self.profile_name_entry.set_text(profile.profile_name or "")
+        self.profile_name_row.set_text(profile.profile_name or "")
 
         # Layout & Display
-        self.num_players_spin.set_value(profile.num_players)
-        self.instance_width_spin.set_value(profile.instance_width)
-        self.instance_height_spin.set_value(profile.instance_height)
-        self.mode_combo.set_active_id(profile.mode or "fullscreen")
+        self.num_players_row.set_value(profile.num_players)
+        self.instance_width_row.set_value(profile.instance_width)
+        self.instance_height_row.set_value(profile.instance_height)
+
+        mode_map = {"fullscreen": 0, "splitscreen": 1}
+        self.mode_row.set_selected(mode_map.get(profile.mode, 0))
+
         if profile.is_splitscreen_mode and profile.splitscreen:
-            self.splitscreen_orientation_combo.set_active_id(profile.splitscreen.orientation)
+            orientation_map = {"horizontal": 0, "vertical": 1}
+            self.splitscreen_orientation_row.set_selected(orientation_map.get(profile.splitscreen.orientation, 0))
 
         # Load Player Configs
         if profile.player_configs:
@@ -1466,41 +1387,30 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         for i, player_config in enumerate(player_configs):
             if i < len(self.player_device_combos):
                 player_widgets = self.player_device_combos[i]
-
-                # Set checkbox
                 self.player_checkboxes[i].set_active((i + 1) in selected_players)
 
-                # Set text entries
-                player_widgets["ACCOUNT_NAME"].set_text(player_config.ACCOUNT_NAME or "")
-                player_widgets["LANGUAGE"].set_text(player_config.LANGUAGE or "")
-                player_widgets["LISTEN_PORT"].set_text(player_config.LISTEN_PORT or "")
-                player_widgets["USER_STEAM_ID"].set_text(player_config.USER_STEAM_ID or "")
-
-                # Set device dropdowns
+                # Set device dropdowns using the new Adw.ComboRow API
                 self._set_device_dropdown(player_widgets["PHYSICAL_DEVICE_ID"], player_config.PHYSICAL_DEVICE_ID)
                 self._set_device_dropdown(player_widgets["MOUSE_EVENT_PATH"], player_config.MOUSE_EVENT_PATH)
                 self._set_device_dropdown(player_widgets["KEYBOARD_EVENT_PATH"], player_config.KEYBOARD_EVENT_PATH)
                 self._set_device_dropdown(player_widgets["AUDIO_DEVICE_ID"], player_config.AUDIO_DEVICE_ID)
-                self._set_device_dropdown(player_widgets["MONITOR_ID"], player_config.monitor_id)
 
-    def _set_device_dropdown(self, dropdown, device_id):
-        """Sets the selected item in a device dropdown."""
-        device_type = getattr(dropdown, 'device_type', None)
+    def _set_device_dropdown(self, combo_row, device_id):
+        """Sets the selected item in an Adw.ComboRow based on device ID."""
+        device_type = getattr(combo_row, 'device_type', "unknown")
+        device_list = self.device_lists.get(device_type, [])
 
-        if device_type and device_type in self.device_lists:
-            # Use device_lists for accurate mapping
-            device_list = self.device_lists[device_type]
-            for i, device in enumerate(device_list):
-                if device["id"] == device_id:
-                    dropdown.set_selected(i)
-                    return
-            # If not found, default to "None" (index 0)
-            dropdown.set_selected(0)
-        else:
-            # Fallback to old method
-            device_name = self.device_id_to_name.get(device_id, "None")
-            selected_index = self._get_dropdown_index_for_name(dropdown, device_name)
-            dropdown.set_selected(selected_index)
+        if device_id is None:
+            combo_row.set_selected(0) # "None"
+            return
+
+        for i, device in enumerate(device_list):
+            if device["id"] == device_id:
+                # The model includes "None", so device indices are offset by 1
+                combo_row.set_selected(i + 1)
+                return
+
+        combo_row.set_selected(0) # Default to "None" if not found
 
 
     def _get_dropdown_index_for_name(self, dropdown: Gtk.DropDown, name: str) -> int:
