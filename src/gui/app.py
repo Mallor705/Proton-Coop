@@ -42,6 +42,10 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         header_bar = Adw.HeaderBar()
         toolbar_view.add_top_bar(header_bar)
 
+        # --- Footer Bar ---
+        self.footer_bar = Adw.HeaderBar()
+        toolbar_view.add_bottom_bar(self.footer_bar)
+
 
         # Services and Managers
         self.logger = Logger(name="LinuxCoopGUI", log_dir=Config.LOG_DIR)
@@ -125,27 +129,17 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         header_bar.set_title_widget(self.view_switcher)
         right_pane_vbox.append(self.view_stack)
 
-        # --- Action Buttons (Bottom Bar) ---
-        button_separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        right_pane_vbox.append(button_separator)
-
-        button_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        button_container.set_halign(Gtk.Align.END)
-        button_container.set_margin_start(10)
-        button_container.set_margin_end(10)
-        button_container.set_margin_top(10)
-        button_container.set_margin_bottom(10)
-        right_pane_vbox.append(button_container)
+        # --- Action Buttons (now in footer) ---
 
         self.save_button = Gtk.Button(label="💾 Save")
         self.save_button.connect("clicked", self.on_save_button_clicked)
         self.save_button.set_sensitive(False)
-        button_container.append(self.save_button)
+        self.footer_bar.pack_end(self.save_button)
 
         self.play_button = Gtk.Button(label="▶️ Launch")
         self.play_button.connect("clicked", self.on_play_button_clicked)
         self.play_button.set_sensitive(False)
-        button_container.append(self.play_button)
+        self.footer_bar.pack_end(self.play_button)
 
         # --- Setup Configuration Tabs ---
         self.setup_game_settings_tab()
