@@ -309,9 +309,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.env_vars_group = Adw.PreferencesGroup(title="Custom Environment Variables")
         page_vbox.append(self.env_vars_group)
 
-        self._add_env_var_row("WINEDLLOVERRIDES", "")
-        self._add_env_var_row("MANGOHUD", "1")
-
         add_env_var_button = Gtk.Button(label="Add Variable")
         add_env_var_button.connect("clicked", self._on_add_env_var_clicked)
 
@@ -319,6 +316,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.add_button_row.add_suffix(add_env_var_button)
         self.add_button_row.set_title("Add New Variable")
         self.env_vars_group.add(self.add_button_row)
+
+        self._add_env_var_row("WINEDLLOVERRIDES", "")
+        self._add_env_var_row("MANGOHUD", "1")
 
     def setup_profile_settings_tab(self):
         """Sets up the 'Profile Settings' tab."""
