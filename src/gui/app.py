@@ -59,6 +59,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.selected_profile: Optional[Profile] = None
         self.cli_process_pid: Optional[int] = None
         self.monitoring_timeout_id: Optional[int] = None
+        self.game_row_to_profile_list: Dict[Adw.ExpanderRow, Gtk.ListBox] = {}
 
         # --- Initialize UI Widgets ---
         self._initialize_widgets()
@@ -469,27 +470,22 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     def _populate_game_library(self):
         """Populates the Adwaita list with games and profiles."""
         # Clear existing rows
-        for child in list(self.game_list_group.get_children()):
+        while child := self.game_list_group.get_first_child():
             self.game_list_group.remove(child)
+        self.game_row_to_profile_list.clear()
 
         games = self.game_manager.get_games()
         for game in games:
-            game_row = Adw.ExpanderRow(title=game.game_name)
+            game_row = Adw.ExpanderRow(title=game.game_name, subtitle=f"{len(game.profiles)} profiles")
             game_row.connect("activated", self._on_game_row_selected, game)
             self.game_list_group.add(game_row)
 
-            profiles_list = Gtk.ListBox()
-            profiles_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
-            profiles_list.add_css_class("boxed-list")
-            game_row.add_row(profiles_list)
-
             profiles = self.game_manager.get_profiles(game)
             for profile in profiles:
-                profile_row = Gtk.ListBoxRow()
-                profile_row.set_child(Gtk.Label(label=profile.profile_name, halign=Gtk.Align.START))
-                profile_row.connect("activate", self._on_profile_row_selected, game, profile)
-                profiles_list.append(profile_row)
-            profiles_list.connect("row-activated", self._on_profile_row_activated)
+                profile_row = Adw.ActionRow(title=profile.profile_name)
+                profile_row.set_activatable(True)
+                profile_row.connect("activated", self._on_profile_row_selected, game, profile)
+                game_row.add_row(profile_row)
 
     def _on_game_row_selected(self, row, game):
         """Handles when a game's ExpanderRow is selected."""
@@ -501,11 +497,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self._set_fields_sensitivity(is_game_selected=True, is_profile_selected=False)
         self._update_action_buttons_state()
 
-    def _on_profile_row_activated(self, listbox, row):
-        """Handles when a profile row is activated in any listbox."""
-        # We get the game/profile from the row's "activate" signal, not here.
-        pass
-
     def _on_profile_row_selected(self, row, game, profile):
         """Handles when a profile row is selected."""
         self.selected_game = game
@@ -513,6 +504,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self._load_profile_data(game, profile)
         self._set_fields_sensitivity(is_game_selected=True, is_profile_selected=True)
         self._update_action_buttons_state()
+
+        # Ensure the correct profile is highlighted in the combo box
+        if self.profile_selector_combo.get_model():
+            model = self.profile_selector_combo.get_model()
+            for i in range(model.get_n_items()):
+                if self.profile_selector_combo.get_model().get_string(i) == profile.profile_name:
+                    self.profile_selector_combo.set_active(i)
+                    break
 
     def _populate_profile_selector(self, game: Optional[Game]):
         """Populates the profile selector ComboBox with profiles for the given game."""
@@ -546,16 +545,16 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         for game_row in self.game_list_group:
             if game_row.get_title() == game_name:
                 game_row.set_expanded(True)
-                # Find the inner ListBox and select the profile
                 if profile_name:
-                    profile_list = game_row.get_row_at_index(0) # The ListBox is the only child row
-                    for i, profile_row in enumerate(profile_list):
-                        if profile_row.get_child().get_label() == profile_name:
-                            profile_list.select_row(profile_row)
-                            profile_list.emit("row-activated", profile_row)
+                    # Iterate through the ActionRows directly added to the ExpanderRow
+                    for i in range(game_row.get_n_rows()):
+                        profile_row = game_row.get_row_at_index(i)
+                        if isinstance(profile_row, Adw.ActionRow) and profile_row.get_title() == profile_name:
+                            profile_row.emit("activated")
+                            # Visually highlight the row if possible (Adw.ActionRow is not selectable, activation is enough)
                             break
                 else:
-                    # Just select the game row if no profile is specified
+                    # Just activate the game row if no profile is specified
                     game_row.emit("activated")
                 break
 
