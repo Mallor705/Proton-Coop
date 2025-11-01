@@ -341,11 +341,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.profile_name_row = Adw.EntryRow(title="Profile Name")
         profile_details_group.add(self.profile_name_row)
 
-        # --- Layout and Display ---
         # --- Player Configurations ---
-        players_frame = Gtk.Frame(label="Player Configurations")
-        page_vbox.append(players_frame)
-        players_frame.set_child(self.player_config_vbox)
+        # The player_config_vbox will now hold the Adw.PreferencesGroup widgets directly
+        page_vbox.append(self.player_config_vbox)
 
     def setup_window_layout_tab(self):
         """Sets up the 'Window Layout' preview tab."""
