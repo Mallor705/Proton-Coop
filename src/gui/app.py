@@ -44,6 +44,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         # --- Footer Bar ---
         self.footer_bar = Adw.HeaderBar()
+        self.footer_bar.set_show_end_title_buttons(False)
         toolbar_view.add_bottom_bar(self.footer_bar)
 
 
@@ -92,27 +93,18 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         column = Gtk.TreeViewColumn("Library", renderer, text=0)
         self.game_tree_view.append_column(column)
 
-        # Buttons container
-        buttons_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        buttons_hbox.set_margin_start(8)
-        buttons_hbox.set_margin_end(8)
-        buttons_hbox.set_margin_bottom(8)
-        buttons_hbox.set_margin_top(8)
-        self.sidebar_vbox.append(buttons_hbox)
-
         # Action Buttons
         self.add_game_button = Gtk.Button(label="➕ Add Game")
         self.add_game_button.set_tooltip_text("Add a new game to the library")
         self.add_game_button.connect("clicked", self._on_add_game_clicked)
-        self.add_game_button.set_hexpand(True)
-        buttons_hbox.append(self.add_game_button)
+        self.footer_bar.pack_start(self.add_game_button)
 
         self.delete_button = Gtk.Button(label="🗑️")
         self.delete_button.add_css_class("destructive-action")
         self.delete_button.set_tooltip_text("Delete selected game or profile")
         self.delete_button.set_sensitive(False)
         self.delete_button.connect("clicked", self._on_delete_clicked)
-        buttons_hbox.append(self.delete_button)
+        self.footer_bar.pack_start(self.delete_button)
 
         # --- Right Pane: Configuration Notebook ---
         right_pane_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
