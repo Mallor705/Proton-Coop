@@ -31,12 +31,18 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     widgets and logic for creating, loading, saving, and launching games.
     """
     def __init__(self, app):
-        super().__init__(application=app, title="Linux Coop")
+        super().__init__(application=app)
         self.set_default_size(1200, 800)
+
+        # --- Main Layout with ToolbarView ---
+        toolbar_view = Adw.ToolbarView()
+        self.set_content(toolbar_view)
 
         # --- Header Bar ---
         header_bar = Adw.HeaderBar()
-        self.set_titlebar(header_bar)
+        header_bar.set_title_widget(Adw.WindowTitle(title="Linux Coop"))
+        toolbar_view.add_top_bar(header_bar)
+
 
         # Services and Managers
         self.logger = Logger(name="LinuxCoopGUI", log_dir=Config.LOG_DIR)
@@ -72,7 +78,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         # Main Layout
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.set_content(main_vbox)
+        toolbar_view.set_content(main_vbox)
 
         self.main_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         main_vbox.append(self.main_paned)
