@@ -59,22 +59,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         # --- Initialize UI Widgets ---
         self._initialize_widgets()
 
-        # --- Header Bar Actions ---
-        self.add_game_button = Gtk.Button(label="➕ Add Game")
-        self.add_game_button.set_tooltip_text("Add a new game to the library")
-        self.add_game_button.connect("clicked", self._on_add_game_clicked)
-        header_bar.pack_start(self.add_game_button)
-
-        self.play_button = Gtk.Button(label="▶️ Launch")
-        self.play_button.connect("clicked", self.on_play_button_clicked)
-        self.play_button.set_sensitive(False)
-        self.play_button.get_style_context().add_class("suggested-action")
-        header_bar.pack_end(self.play_button)
-
-        self.save_button = Gtk.Button(label="💾 Save")
-        self.save_button.connect("clicked", self.on_save_button_clicked)
-        self.save_button.set_sensitive(False)
-        header_bar.pack_end(self.save_button)
+        # --- Header Bar Actions (Now empty) ---
 
         # Main Layout
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -104,16 +89,27 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         column = Gtk.TreeViewColumn("Library", renderer, text=0)
         self.game_tree_view.append_column(column)
 
-        # Delete Button takes the full width now
-        self.delete_button = Gtk.Button(label="🗑️ Delete Selected")
+        # Buttons container
+        buttons_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        buttons_hbox.set_margin_start(8)
+        buttons_hbox.set_margin_end(8)
+        buttons_hbox.set_margin_bottom(8)
+        buttons_hbox.set_margin_top(8)
+        self.sidebar_vbox.append(buttons_hbox)
+
+        # Action Buttons
+        self.add_game_button = Gtk.Button(label="➕ Add Game")
+        self.add_game_button.set_tooltip_text("Add a new game to the library")
+        self.add_game_button.connect("clicked", self._on_add_game_clicked)
+        self.add_game_button.set_hexpand(True)
+        buttons_hbox.append(self.add_game_button)
+
+        self.delete_button = Gtk.Button(label="🗑️")
         self.delete_button.add_css_class("destructive-action")
         self.delete_button.set_tooltip_text("Delete selected game or profile")
         self.delete_button.set_sensitive(False)
         self.delete_button.connect("clicked", self._on_delete_clicked)
-        self.delete_button.set_margin_start(8)
-        self.delete_button.set_margin_end(8)
-        self.delete_button.set_margin_bottom(8)
-        self.sidebar_vbox.append(self.delete_button)
+        buttons_hbox.append(self.delete_button)
 
         # --- Right Pane: Configuration Notebook ---
         right_pane_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -121,10 +117,36 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         right_pane_vbox.set_hexpand(True)
         self.main_paned.set_end_child(right_pane_vbox)
 
-        self.notebook = Gtk.Notebook()
-        self.notebook.set_vexpand(True)
-        self.notebook.set_hexpand(True)
-        right_pane_vbox.append(self.notebook)
+        # Use Adw.TabBar and Adw.ViewStack for a modern tabbed view
+        self.tab_bar = Adw.TabBar()
+        self.tab_view = Adw.ViewStack()
+
+        # Add the TabBar to the HeaderBar
+        header_bar.set_title_widget(self.tab_bar)
+
+        right_pane_vbox.append(self.tab_view)
+
+        # --- Action Buttons (Bottom Bar) ---
+        button_separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        right_pane_vbox.append(button_separator)
+
+        button_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        button_container.set_halign(Gtk.Align.END)
+        button_container.set_margin_start(10)
+        button_container.set_margin_end(10)
+        button_container.set_margin_top(10)
+        button_container.set_margin_bottom(10)
+        right_pane_vbox.append(button_container)
+
+        self.save_button = Gtk.Button(label="💾 Save")
+        self.save_button.connect("clicked", self.on_save_button_clicked)
+        self.save_button.set_sensitive(False)
+        button_container.append(self.save_button)
+
+        self.play_button = Gtk.Button(label="▶️ Launch")
+        self.play_button.connect("clicked", self.on_play_button_clicked)
+        self.play_button.set_sensitive(False)
+        button_container.append(self.play_button)
 
         # --- Setup Configuration Tabs ---
         self.setup_game_settings_tab()
@@ -237,7 +259,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         page_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
         scrolled_window = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vscrollbar_policy=Gtk.PolicyType.AUTOMATIC)
         scrolled_window.set_child(page_vbox)
-        self.notebook.append_page(scrolled_window, Gtk.Label(label="Game Settings"))
+
+        # Add page to ViewStack
+        page = self.tab_view.add_titled(scrolled_window, "game_settings", "Game Settings")
+        page.set_icon_name("applications-games-symbolic")
+
+        # Associate page with a tab in TabBar
+        self.tab_bar.get_model().append(page)
+
 
         # --- Game Details Frame ---
         game_details_frame = Gtk.Frame(label="Game Details")
@@ -324,7 +353,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         page_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
         scrolled_window = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vscrollbar_policy=Gtk.PolicyType.AUTOMATIC)
         scrolled_window.set_child(page_vbox)
-        self.notebook.append_page(scrolled_window, Gtk.Label(label="Profile Settings"))
+
+        # Add page to ViewStack
+        page = self.tab_view.add_titled(scrolled_window, "profile_settings", "Profile Settings")
+        page.set_icon_name("document-properties-symbolic")
+
+        # Associate page with a tab in TabBar
+        self.tab_bar.get_model().append(page)
+
 
         # --- Profile Details ---
         profile_details_frame = Gtk.Frame(label="Profile Details")
@@ -343,7 +379,13 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     def setup_window_layout_tab(self):
         """Sets up the 'Window Layout' preview tab."""
         page = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
-        self.notebook.append_page(page, Gtk.Label(label="Window Layout"))
+
+        # Add page to ViewStack
+        page_widget = self.tab_view.add_titled(page, "window_layout", "Window Layout")
+        page_widget.set_icon_name("video-display-symbolic")
+
+        # Associate page with a tab in TabBar
+        self.tab_bar.get_model().append(page_widget)
 
         # --- Settings Panel (Left) ---
         settings_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -1384,9 +1426,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.player_config_vbox.set_sensitive(is_profile_selected)
 
         # Set sensitivity for the notebook tabs
-        self.notebook.get_nth_page(0).set_sensitive(is_game_selected) # Game Settings
-        self.notebook.get_nth_page(1).set_sensitive(is_profile_selected) # Profile Settings
-        self.notebook.get_nth_page(2).set_sensitive(is_profile_selected) # Window Layout
+        self.tab_view.get_child_by_name("game_settings").set_sensitive(is_game_selected)
+        self.tab_view.get_child_by_name("profile_settings").set_sensitive(is_profile_selected)
+        self.tab_view.get_child_by_name("window_layout").set_sensitive(is_profile_selected)
 
 
     def _load_game_data(self, game: Game):
@@ -1569,7 +1611,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.load_profile_data(profile.model_dump(by_alias=True))
             self.statusbar.set_label(f"Profile loaded: {profile_name_stem}") # Changed from push
             # Switch to General Settings tab after loading
-            self.notebook.set_current_page(0)
+            self.tab_view.set_visible_child_name("game_settings")
         except Exception as e:
             self.logger.error(f"Failed to load profile {profile_name_stem}: {e}")
             # Show error dialog
