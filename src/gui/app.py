@@ -123,6 +123,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         # Add the TabBar to the HeaderBar
         header_bar.set_title_widget(self.tab_bar)
+        self.tab_bar.set_view(self.tab_view)
 
         right_pane_vbox.append(self.tab_view)
 
@@ -264,10 +265,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         page = self.tab_view.add_titled(scrolled_window, "game_settings", "Game Settings")
         page.set_icon_name("applications-games-symbolic")
 
-        # Associate page with a tab in TabBar
-        self.tab_bar.get_model().append(page)
-
-
         # --- Game Details Frame ---
         game_details_frame = Gtk.Frame(label="Game Details")
         page_vbox.append(game_details_frame)
@@ -358,9 +355,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         page = self.tab_view.add_titled(scrolled_window, "profile_settings", "Profile Settings")
         page.set_icon_name("document-properties-symbolic")
 
-        # Associate page with a tab in TabBar
-        self.tab_bar.get_model().append(page)
-
 
         # --- Profile Details ---
         profile_details_frame = Gtk.Frame(label="Profile Details")
@@ -383,9 +377,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         # Add page to ViewStack
         page_widget = self.tab_view.add_titled(page, "window_layout", "Window Layout")
         page_widget.set_icon_name("video-display-symbolic")
-
-        # Associate page with a tab in TabBar
-        self.tab_bar.get_model().append(page_widget)
 
         # --- Settings Panel (Left) ---
         settings_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
