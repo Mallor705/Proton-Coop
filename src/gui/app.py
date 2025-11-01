@@ -216,7 +216,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.env_var_entries: List[Tuple[Gtk.Entry, Gtk.Entry, Adw.ActionRow]] = []
 
         # --- Player Configs ---
-        self.player_config_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         self.player_frames = []
         self.player_device_combos = []
         self.player_checkboxes = []
@@ -343,7 +342,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
         # --- Player Configurations ---
         # The player_config_vbox will now hold the Adw.PreferencesGroup widgets directly
-        page_vbox.append(self.player_config_vbox)
+        self.player_config_vbox_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        page_vbox.append(self.player_config_vbox_container)
+
 
     def setup_window_layout_tab(self):
         """Sets up the 'Window Layout' preview tab."""
@@ -645,15 +646,15 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     def _create_player_config_uis(self, num_players: int):
         """Creates or recreates the UI for the specified number of players using Adwaita widgets."""
         # Clear existing widgets
-        while self.player_config_vbox.get_first_child():
-            self.player_config_vbox.remove(self.player_config_vbox.get_first_child())
+        while self.player_config_vbox_container.get_first_child():
+            self.player_config_vbox_container.remove(self.player_config_vbox_container.get_first_child())
 
         self.player_device_combos = []
         self.player_checkboxes = []
 
         for i in range(num_players):
             player_group = Adw.PreferencesGroup(title=f"Player {i+1} Configuration")
-            self.player_config_vbox.append(player_group)
+            self.player_config_vbox_container.append(player_group)
 
             # Enable/Disable Checkbox
             enable_row = Adw.ActionRow(title=f"Enable Player {i+1}")
@@ -1287,7 +1288,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.proton_version_combo.set_sensitive(is_game_selected)
         self.apply_dxvk_vkd3d_check.set_sensitive(is_game_selected)
         self.winetricks_verbs_entry.set_sensitive(is_game_selected)
-        self.env_vars_listbox.set_sensitive(is_game_selected)
+        self.env_vars_group.set_sensitive(is_game_selected)
         self.profile_selector_combo.set_sensitive(is_game_selected)
 
         # Profile-level fields are editable only when a profile is selected
@@ -1297,7 +1298,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.instance_height_row.set_sensitive(is_profile_selected)
         self.mode_row.set_sensitive(is_profile_selected)
         self.splitscreen_orientation_row.set_sensitive(is_profile_selected)
-        self.player_config_vbox.set_sensitive(is_profile_selected)
+        self.player_config_vbox_container.set_sensitive(is_profile_selected)
 
         # Set sensitivity for the view stack pages (tabs)
         game_settings_page = self.view_stack.get_child_by_name("game_settings")
