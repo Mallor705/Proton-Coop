@@ -34,6 +34,10 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         super().__init__(application=app, title="Linux Coop")
         self.set_default_size(1200, 800)
 
+        # --- Header Bar ---
+        header_bar = Adw.HeaderBar()
+        self.set_titlebar(header_bar)
+
         # Services and Managers
         self.logger = Logger(name="LinuxCoopGUI", log_dir=Config.LOG_DIR)
         self.game_manager = GameManager(self.logger)
@@ -45,6 +49,26 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.selected_profile: Optional[Profile] = None
         self.cli_process_pid: Optional[int] = None
         self.monitoring_timeout_id: Optional[int] = None
+
+        # --- Initialize UI Widgets ---
+        self._initialize_widgets()
+
+        # --- Header Bar Actions ---
+        self.add_game_button = Gtk.Button(label="➕ Add Game")
+        self.add_game_button.set_tooltip_text("Add a new game to the library")
+        self.add_game_button.connect("clicked", self._on_add_game_clicked)
+        header_bar.pack_start(self.add_game_button)
+
+        self.play_button = Gtk.Button(label="▶️ Launch")
+        self.play_button.connect("clicked", self.on_play_button_clicked)
+        self.play_button.set_sensitive(False)
+        self.play_button.get_style_context().add_class("suggested-action")
+        header_bar.pack_end(self.play_button)
+
+        self.save_button = Gtk.Button(label="💾 Save")
+        self.save_button.connect("clicked", self.on_save_button_clicked)
+        self.save_button.set_sensitive(False)
+        header_bar.pack_end(self.save_button)
 
         # Main Layout
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -74,27 +98,16 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         column = Gtk.TreeViewColumn("Library", renderer, text=0)
         self.game_tree_view.append_column(column)
 
-        # Buttons container
-        buttons_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        buttons_hbox.set_margin_start(8)
-        buttons_hbox.set_margin_end(8)
-        buttons_hbox.set_margin_bottom(8)
-        buttons_hbox.set_margin_top(8)
-        self.sidebar_vbox.append(buttons_hbox)
-
-        # Action Buttons
-        self.add_game_button = Gtk.Button(label="➕ Add Game")
-        self.add_game_button.set_tooltip_text("Add a new game to the library")
-        self.add_game_button.connect("clicked", self._on_add_game_clicked)
-        self.add_game_button.set_hexpand(True)
-        buttons_hbox.append(self.add_game_button)
-
-        self.delete_button = Gtk.Button(label="🗑️")
+        # Delete Button takes the full width now
+        self.delete_button = Gtk.Button(label="🗑️ Delete Selected")
         self.delete_button.add_css_class("destructive-action")
         self.delete_button.set_tooltip_text("Delete selected game or profile")
         self.delete_button.set_sensitive(False)
         self.delete_button.connect("clicked", self._on_delete_clicked)
-        buttons_hbox.append(self.delete_button)
+        self.delete_button.set_margin_start(8)
+        self.delete_button.set_margin_end(8)
+        self.delete_button.set_margin_bottom(8)
+        self.sidebar_vbox.append(self.delete_button)
 
         # --- Right Pane: Configuration Notebook ---
         right_pane_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -106,31 +119,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.notebook.set_vexpand(True)
         self.notebook.set_hexpand(True)
         right_pane_vbox.append(self.notebook)
-
-        # --- Action Buttons (Bottom Bar) ---
-        button_separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        right_pane_vbox.append(button_separator)
-
-        button_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        button_container.set_halign(Gtk.Align.END)
-        button_container.set_margin_start(10)
-        button_container.set_margin_end(10)
-        button_container.set_margin_top(10)
-        button_container.set_margin_bottom(10)
-        right_pane_vbox.append(button_container)
-
-        self.save_button = Gtk.Button(label="💾 Save")
-        self.save_button.connect("clicked", self.on_save_button_clicked)
-        self.save_button.set_sensitive(False)
-        button_container.append(self.save_button)
-
-        self.play_button = Gtk.Button(label="▶️ Launch")
-        self.play_button.connect("clicked", self.on_play_button_clicked)
-        self.play_button.set_sensitive(False)
-        button_container.append(self.play_button)
-
-        # --- Initialize UI Widgets ---
-        self._initialize_widgets()
 
         # --- Setup Configuration Tabs ---
         self.setup_game_settings_tab()
