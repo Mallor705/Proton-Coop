@@ -469,18 +469,18 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
 
     def _populate_game_library(self):
         """Populates the Adwaita list with games and profiles."""
-        # Clear existing rows
+        # Clear existing rows - GTK4 compatible way
         while child := self.game_list_group.get_first_child():
             self.game_list_group.remove(child)
         self.game_row_to_profile_list.clear()
 
         games = self.game_manager.get_games()
         for game in games:
-            game_row = Adw.ExpanderRow(title=game.game_name, subtitle=f"{len(game.profiles)} profiles")
+            profiles = self.game_manager.get_profiles(game)
+            game_row = Adw.ExpanderRow(title=game.game_name, subtitle=f"{len(profiles)} profiles")
             game_row.connect("activated", self._on_game_row_selected, game)
             self.game_list_group.add(game_row)
 
-            profiles = self.game_manager.get_profiles(game)
             for profile in profiles:
                 profile_row = Adw.ActionRow(title=profile.profile_name)
                 profile_row.set_activatable(True)
