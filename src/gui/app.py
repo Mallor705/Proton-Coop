@@ -34,6 +34,15 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         super().__init__(application=app, title="Linux Coop")
         self.set_default_size(1200, 800)
 
+        # --- Main Layout with ToolbarView ---
+        toolbar_view = Adw.ToolbarView()
+        self.set_content(toolbar_view)
+
+        # --- Header Bar ---
+        header_bar = Adw.HeaderBar()
+        toolbar_view.add_top_bar(header_bar)
+
+
         # Services and Managers
         self.logger = Logger(name="LinuxCoopGUI", log_dir=Config.LOG_DIR)
         self.game_manager = GameManager(self.logger)
@@ -46,9 +55,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.cli_process_pid: Optional[int] = None
         self.monitoring_timeout_id: Optional[int] = None
 
+        # --- Initialize UI Widgets ---
+        self._initialize_widgets()
+
+        # --- Header Bar Actions (Now empty) ---
+
         # Main Layout
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.set_content(main_vbox)
+        toolbar_view.set_content(main_vbox)
 
         self.main_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         main_vbox.append(self.main_paned)
@@ -102,10 +116,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         right_pane_vbox.set_hexpand(True)
         self.main_paned.set_end_child(right_pane_vbox)
 
-        self.notebook = Gtk.Notebook()
-        self.notebook.set_vexpand(True)
-        self.notebook.set_hexpand(True)
-        right_pane_vbox.append(self.notebook)
+        # Use Adw.ViewStack and Adw.ViewSwitcher for a modern tabbed view
+        self.view_stack = Adw.ViewStack()
+        self.view_switcher = Adw.ViewSwitcher()
+        self.view_switcher.set_stack(self.view_stack)
+
+        # Add the ViewSwitcher to the HeaderBar and the ViewStack to the main content
+        header_bar.set_title_widget(self.view_switcher)
+        right_pane_vbox.append(self.view_stack)
 
         # --- Action Buttons (Bottom Bar) ---
         button_separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -128,9 +146,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.play_button.connect("clicked", self.on_play_button_clicked)
         self.play_button.set_sensitive(False)
         button_container.append(self.play_button)
-
-        # --- Initialize UI Widgets ---
-        self._initialize_widgets()
 
         # --- Setup Configuration Tabs ---
         self.setup_game_settings_tab()
@@ -243,7 +258,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         page_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
         scrolled_window = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vscrollbar_policy=Gtk.PolicyType.AUTOMATIC)
         scrolled_window.set_child(page_vbox)
-        self.notebook.append_page(scrolled_window, Gtk.Label(label="Game Settings"))
+
+        # Add page to ViewStack
+        self.view_stack.add_titled_with_icon(
+            scrolled_window,
+            "game_settings",
+            "Game Settings",
+            "applications-games-symbolic"
+        )
 
         # --- Game Details Frame ---
         game_details_frame = Gtk.Frame(label="Game Details")
@@ -330,7 +352,15 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         page_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
         scrolled_window = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vscrollbar_policy=Gtk.PolicyType.AUTOMATIC)
         scrolled_window.set_child(page_vbox)
-        self.notebook.append_page(scrolled_window, Gtk.Label(label="Profile Settings"))
+
+        # Add page to ViewStack
+        self.view_stack.add_titled_with_icon(
+            scrolled_window,
+            "profile_settings",
+            "Profile Settings",
+            "document-properties-symbolic"
+        )
+
 
         # --- Profile Details ---
         profile_details_frame = Gtk.Frame(label="Profile Details")
@@ -349,7 +379,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     def setup_window_layout_tab(self):
         """Sets up the 'Window Layout' preview tab."""
         page = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, margin_start=10, margin_end=10, margin_top=10, margin_bottom=10)
-        self.notebook.append_page(page, Gtk.Label(label="Window Layout"))
+
+        # Add page to ViewStack
+        self.view_stack.add_titled_with_icon(
+            page,
+            "window_layout",
+            "Window Layout",
+            "video-display-symbolic"
+        )
 
         # --- Settings Panel (Left) ---
         settings_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -1389,10 +1426,17 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.splitscreen_orientation_combo.set_sensitive(is_profile_selected)
         self.player_config_vbox.set_sensitive(is_profile_selected)
 
-        # Set sensitivity for the notebook tabs
-        self.notebook.get_nth_page(0).set_sensitive(is_game_selected) # Game Settings
-        self.notebook.get_nth_page(1).set_sensitive(is_profile_selected) # Profile Settings
-        self.notebook.get_nth_page(2).set_sensitive(is_profile_selected) # Window Layout
+        # Set sensitivity for the view stack pages (tabs)
+        game_settings_page = self.view_stack.get_child_by_name("game_settings")
+        profile_settings_page = self.view_stack.get_child_by_name("profile_settings")
+        window_layout_page = self.view_stack.get_child_by_name("window_layout")
+
+        if game_settings_page:
+            game_settings_page.set_sensitive(is_game_selected)
+        if profile_settings_page:
+            profile_settings_page.set_sensitive(is_profile_selected)
+        if window_layout_page:
+            window_layout_page.set_sensitive(is_profile_selected)
 
 
     def _load_game_data(self, game: Game):
@@ -1575,7 +1619,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.load_profile_data(profile.model_dump(by_alias=True))
             self.statusbar.set_label(f"Profile loaded: {profile_name_stem}") # Changed from push
             # Switch to General Settings tab after loading
-            self.notebook.set_current_page(0)
+            self.view_stack.set_visible_child_name("game_settings")
         except Exception as e:
             self.logger.error(f"Failed to load profile {profile_name_stem}: {e}")
             # Show error dialog
