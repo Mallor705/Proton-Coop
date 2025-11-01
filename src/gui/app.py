@@ -116,13 +116,13 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         right_pane_vbox.set_hexpand(True)
         self.main_paned.set_end_child(right_pane_vbox)
 
-        # Use Adw.ViewStack and Adw.TabBar for a modern tabbed view
+        # Use Adw.ViewStack and Adw.ViewSwitcher for a modern tabbed view
         self.view_stack = Adw.ViewStack()
-        self.tab_bar = Adw.TabBar()
-        self.tab_bar.set_view(self.view_stack)
+        self.view_switcher = Adw.ViewSwitcher()
+        self.view_switcher.set_stack(self.view_stack)
 
-        # Add the TabBar to the HeaderBar and the ViewStack to the main content
-        header_bar.set_title_widget(self.tab_bar)
+        # Add the ViewSwitcher to the HeaderBar and the ViewStack to the main content
+        header_bar.set_title_widget(self.view_switcher)
         right_pane_vbox.append(self.view_stack)
 
         # --- Action Buttons (Bottom Bar) ---
@@ -1427,16 +1427,16 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self.player_config_vbox.set_sensitive(is_profile_selected)
 
         # Set sensitivity for the view stack pages (tabs)
-        game_settings_page = self.view_stack.get_page_by_name("game_settings")
-        profile_settings_page = self.view_stack.get_page_by_name("profile_settings")
-        window_layout_page = self.view_stack.get_page_by_name("window_layout")
+        game_settings_page = self.view_stack.get_child_by_name("game_settings")
+        profile_settings_page = self.view_stack.get_child_by_name("profile_settings")
+        window_layout_page = self.view_stack.get_child_by_name("window_layout")
 
         if game_settings_page:
-            game_settings_page.set_enabled(is_game_selected)
+            game_settings_page.set_sensitive(is_game_selected)
         if profile_settings_page:
-            profile_settings_page.set_enabled(is_profile_selected)
+            profile_settings_page.set_sensitive(is_profile_selected)
         if window_layout_page:
-            window_layout_page.set_enabled(is_profile_selected)
+            window_layout_page.set_sensitive(is_profile_selected)
 
 
     def _load_game_data(self, game: Game):
