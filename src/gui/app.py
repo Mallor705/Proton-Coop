@@ -129,13 +129,6 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         self._connect_layout_signals()
 
         # --- Finalize Initialization ---
-        self.statusbar = Gtk.Label()
-        self.statusbar.set_halign(Gtk.Align.START)
-        self.statusbar.set_margin_start(10)
-        self.statusbar.set_margin_end(10)
-        self.statusbar.set_margin_top(5)
-        self.statusbar.set_margin_bottom(5)
-        main_vbox.append(self.statusbar)
 
         self.show()
         self._update_action_buttons_state()
@@ -474,7 +467,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             if file:
                 self.exe_path_entry.set_text(file.get_path())
         dialog.destroy()
-        self.statusbar.set_label("Executable path selected.") # Changed from push
+        self.logger.info("Executable path selected.")
 
     def _populate_game_library(self):
         """Populates the Adwaita list with games and profiles."""
@@ -572,43 +565,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     def _on_add_env_var_clicked(self, button):
         """Handles the 'Add Variable' button click for environment variables."""
         self._add_env_var_row()
-        self.statusbar.set_label("Environment variable added.") # Changed from push
-
-    def _add_env_var_row(self, key="", value=""):
-        """Adds a new row to the environment variables listbox."""
-        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-
-        key_entry = Gtk.Entry()
-        key_entry.set_placeholder_text("Variable Name")
-        key_entry.set_hexpand(True)
-        key_entry.set_text(key)
-        hbox.append(key_entry) # Changed from pack_start
-
-        value_entry = Gtk.Entry()
-        value_entry.set_placeholder_text("Value")
-        value_entry.set_hexpand(True)
-        value_entry.set_text(value)
-        hbox.append(value_entry) # Changed from pack_start
-
-        remove_button = Gtk.Button(label="-")
-        # remove_button.set_relief(Gtk.ReliefStyle.NONE) # set_relief is Gtk3 only
-        remove_button.set_tooltip_text("Remove this environment variable")
-
-        list_box_row = Gtk.ListBoxRow()
-        list_box_row.set_child(hbox) # Changed from add
-
-        remove_button.connect("clicked", lambda btn, row=list_box_row, k_entry=key_entry, v_entry=value_entry: self._remove_env_var_row(btn, row, k_entry, v_entry))
-        hbox.append(remove_button) # Changed from pack_end
-
-        self.env_vars_listbox.append(list_box_row) # Changed from add
-        list_box_row.show() # Explicitly show the row for Gtk4 ListBox
-        self.env_var_entries.append((key_entry, value_entry, list_box_row))
-
-    def _remove_env_var_row(self, button, row, key_entry, value_entry):
-        """Removes a row from the environment variables listbox."""
-        self.env_vars_listbox.remove(row)
-        self.env_var_entries.remove((key_entry, value_entry, row))
-        self.statusbar.set_label("Environment variable removed.") # Changed from push
+        self.logger.info("Environment variable added.")
 
     def _clear_environment_variables_ui(self):
         """Clears the environment variables from the UI."""
@@ -829,7 +786,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         """Handles the 'Number of Players' spin button value change."""
         num_players = spin_button.get_value_as_int()
         self._create_player_config_uis(num_players)
-        self.statusbar.set_label(f"Number of players changed to {num_players}.")
+        self.logger.info(f"Number of players changed to {num_players}.")
 
     def on_mode_changed(self, combo):
         """Shows or hides the splitscreen orientation dropdown based on the selected mode."""
@@ -837,9 +794,9 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         is_splitscreen = (mode == "splitscreen")
         self.splitscreen_orientation_row.set_visible(is_splitscreen)
         if is_splitscreen:
-            self.statusbar.set_label("Splitscreen mode activated.")
+            self.logger.info("Splitscreen mode activated.")
         else:
-            self.statusbar.set_label("Splitscreen mode deactivated.")
+            self.logger.info("Splitscreen mode deactivated.")
 
     def on_save_button_clicked(self, button):
         """Handles the 'Save' button click, saving data and restoring selection."""
@@ -851,7 +808,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             # as shared settings (like Proton version) might have been changed.
             game_to_reselect = self.game_name_row.get_text()
             profile_to_reselect = self.profile_name_row.get_text()
-            self.statusbar.set_label("Saving game and profile...")
+            self.logger.info("Saving game and profile...")
 
             try:
                 # First, save the game data
@@ -862,21 +819,21 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
                 updated_profile = self._get_profile_from_ui()
                 self.game_manager.save_profile(updated_game, updated_profile)
 
-                self.statusbar.set_label(f"Game and profile for '{updated_game.game_name}' saved.")
+                self.logger.info(f"Game and profile for '{updated_game.game_name}' saved.")
             except Exception as e:
                 self.logger.error(f"Failed to save game/profile: {e}")
-                self.statusbar.set_label(f"Error saving: {e}")
+                self.logger.info(f"Error saving: {e}")
 
         elif self.selected_game:
             game_to_reselect = self.game_name_row.get_text()
-            self.statusbar.set_label("Saving game...")
+            self.logger.info("Saving game...")
             try:
                 updated_game = self._get_game_from_ui()
                 self.game_manager.save_game(updated_game)
-                self.statusbar.set_label(f"Game '{updated_game.game_name}' saved.")
+                self.logger.info(f"Game '{updated_game.game_name}' saved.")
             except Exception as e:
                 self.logger.error(f"Failed to save game: {e}")
-                self.statusbar.set_label(f"Error saving game: {e}")
+                self.logger.info(f"Error saving game: {e}")
 
         self._populate_game_library()
         if game_to_reselect:
@@ -942,14 +899,14 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             return
 
         if not self.selected_game or not self.selected_profile:
-            self.statusbar.set_label("Error: No profile selected to launch.")
+            self.logger.info("Error: No profile selected to launch.")
             return
 
         # Store references before the auto-save potentially clears the selection
         game_to_launch = self.selected_game
         profile_to_launch = self.selected_profile
 
-        self.statusbar.set_label("Starting game...")
+        self.logger.info("Starting game...")
         self.on_save_button_clicked(widget) # Auto-save before launch
 
         # The profile name for the CLI is the sanitized game name
@@ -966,7 +923,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             python_exec = sys.executable # Use o interpretador Python atual do ambiente virtual
 
         if not python_exec:
-            self.statusbar.set_label("Error: Python interpreter not found.") # Changed from push
+            self.logger.info("Error: Python interpreter not found.") # Changed from push
             dialog = Adw.MessageDialog(
                 heading="Launch Error",
                 body="No Python interpreter found on the system.",
@@ -1006,13 +963,13 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             # Launch the CLI script as a separate process group
             process = subprocess.Popen(command, preexec_fn=os.setsid)
             self.cli_process_pid = process.pid
-            self.statusbar.set_label(f"Game '{cli_game_name}' launched successfully with PID: {self.cli_process_pid}.") # Changed from push
+            self.logger.info(f"Game '{cli_game_name}' launched successfully with PID: {self.cli_process_pid}.") # Changed from push
             self._update_action_buttons_state() # Update button to "Stop Gaming"
             # Start monitoring the process
             self.monitoring_timeout_id = GLib.timeout_add(1000, self._check_cli_process) # Corrigido para GLib.timeout_add
         except Exception as e:
             self.logger.error(f"Failed to launch game: {e}")
-            self.statusbar.set_label(f"Error launching game: {e}") # Changed from push
+            self.logger.info(f"Error launching game: {e}") # Changed from push
             dialog = Adw.MessageDialog(
                 heading="Launch Error",
                 body=f"Error launching game:\n{e}",
@@ -1030,10 +987,10 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     def _stop_game(self):
         """Terminates the running game process group."""
         if not self.cli_process_pid:
-            self.statusbar.set_label("No game process to stop.") # Changed from push
+            self.logger.info("No game process to stop.") # Changed from push
             return
 
-        self.statusbar.set_label("Stopping game...") # Changed from push
+        self.logger.info("Stopping game...") # Changed from push
         self.play_button.set_sensitive(False)
         self.play_button.set_label("Parando...")
 
@@ -1065,7 +1022,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         if self.monitoring_timeout_id:
             GLib.source_remove(self.monitoring_timeout_id) # Stop monitoring
             self.monitoring_timeout_id = None
-        self.statusbar.set_label("Game stopped.") # Changed from push
+        self.logger.info("Game stopped.") # Changed from push
         self._update_action_buttons_state() # Reset button to "Launch Game"
 
     def _is_process_running(self, pid):
@@ -1084,7 +1041,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
             self.logger.info(f"Detected CLI process {self.cli_process_pid} has terminated.")
             self.cli_process_pid = None
             self._update_play_button_state()
-            self.statusbar.set_label("Game process terminated.") # Changed from push
+            self.logger.info("Game process terminated.") # Changed from push
             if self.monitoring_timeout_id:
                 GLib.source_remove(self.monitoring_timeout_id)
                 self.monitoring_timeout_id = None
@@ -1622,7 +1579,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         try:
             profile = GameProfile.load_from_file(profile_path)
             self.load_profile_data(profile.model_dump(by_alias=True))
-            self.statusbar.set_label(f"Profile loaded: {profile_name_stem}") # Changed from push
+            self.logger.info(f"Profile loaded: {profile_name_stem}") # Changed from push
             # Switch to General Settings tab after loading
             self.view_stack.set_visible_child_name("game_settings")
         except Exception as e:
@@ -1695,12 +1652,12 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
                         new_game = Game(game_name=game_name, exe_path=Path(exe_path))
                         self.game_manager.add_game(new_game)
                         self._populate_game_library()
-                        self.statusbar.set_label(f"Game '{game_name}' added successfully.")
+                        self.logger.info(f"Game '{game_name}' added successfully.")
                     except Exception as e:
                         self.logger.error(f"Failed to add game: {e}")
-                        self.statusbar.set_label(f"Error: {e}")
+                        self.logger.info(f"Error: {e}")
                 else:
-                    self.statusbar.set_label("Game Name and Executable Path cannot be empty.")
+                    self.logger.info("Game Name and Executable Path cannot be empty.")
             d.destroy()
 
         dialog.connect("response", on_response)
@@ -1709,7 +1666,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
     def _on_add_profile_clicked(self, button):
         """Handles the 'Add Profile' button click by showing a dialog."""
         if not self.selected_game:
-            self.statusbar.set_label("Please select a game before adding a profile.")
+            self.logger.info("Please select a game before adding a profile.")
             return
 
         dialog = Gtk.Dialog(title=f"Add Profile to {self.selected_game.game_name}", transient_for=self, modal=True)
@@ -1742,13 +1699,13 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
                         )
                         game_name = self.selected_game.game_name
                         self.game_manager.add_profile(self.selected_game, new_profile)
-                        self.statusbar.set_label(f"Profile '{profile_name}' added to {game_name}.")
+                        self.logger.info(f"Profile '{profile_name}' added to {game_name}.")
                         self._populate_game_library()
                     except Exception as e:
                         self.logger.error(f"Failed to add profile: {e}")
-                        self.statusbar.set_label(f"Error: {e}")
+                        self.logger.info(f"Error: {e}")
                 else:
-                    self.statusbar.set_label("Profile name cannot be empty.")
+                    self.logger.info("Profile name cannot be empty.")
             d.destroy()
 
         dialog.connect("response", on_response)
@@ -1772,7 +1729,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         """Handles the window close request."""
         if self.cli_process_pid:
             self.logger.info("Close requested, but game is running. Stopping game first.")
-            self.statusbar.set_label("Game is running. Stopping instances before closing...")
+            self.logger.info("Game is running. Stopping instances before closing...")
             self._stop_game()
 
             # We can't immediately close because _stop_game is asynchronous in its effect.
@@ -1796,7 +1753,7 @@ class ProfileEditorWindow(Adw.ApplicationWindow):
         """Handles the window close request."""
         if self.cli_process_pid:
             self.logger.info("Close requested, but game is running. Stopping game first.")
-            self.statusbar.set_label("Game is running. Stopping instances before closing...")
+            self.logger.info("Game is running. Stopping instances before closing...")
             self._stop_game()
 
             # We can't immediately close because _stop_game is asynchronous in its effect.
