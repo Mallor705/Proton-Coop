@@ -49,22 +49,16 @@ class Profile(BaseModel):
     This model holds settings that can vary between different playthroughs
     of the same game, such as player counts, Proton versions, and device configs.
     """
-    model_config = ConfigDict(populate_by_name=True, extra='allow')
+    model_config = ConfigDict(populate_by_name=True, extra='ignore')
 
     profile_name: str = Field(..., alias="PROFILE_NAME")
-    num_players: int = Field(..., alias="NUM_PLAYERS")
-    instance_width: int = Field(..., alias="INSTANCE_WIDTH")
-    instance_height: int = Field(..., alias="INSTANCE_HEIGHT")
+    num_players: int = Field(default=2, alias="NUM_PLAYERS")
+    instance_width: Optional[int] = Field(default=None, alias="INSTANCE_WIDTH")
+    instance_height: Optional[int] = Field(default=None, alias="INSTANCE_HEIGHT")
     mode: Optional[str] = Field(default=None, alias="MODE")
     splitscreen: Optional[SplitscreenConfig] = Field(default=None, alias="SPLITSCREEN")
     player_configs: Optional[List[PlayerInstanceConfig]] = Field(default=None, alias="PLAYERS")
     selected_players: Optional[List[int]] = Field(default=None, alias="selected_players")
-
-    @validator('num_players')
-    def validate_num_players(cls, v):
-        if not (1 <= v <= 4):
-            raise ValueError("The number of players must be between 1 and 4.")
-        return v
 
     @classmethod
     def load_from_file(cls, profile_path: Path) -> "Profile":
@@ -93,9 +87,17 @@ class Profile(BaseModel):
         return profile
 
     def save_to_file(self, profile_path: Path):
-        """Saves the profile to a JSON file."""
+        """
+        Saves the profile to a JSON file, excluding any unset (None) values.
+        """
         profile_path.parent.mkdir(parents=True, exist_ok=True)
-        json_data = self.model_dump_json(by_alias=True, indent=4)
+
+        # Dump the model to a dictionary, excluding fields that are None
+        data_to_save = self.model_dump(by_alias=True, exclude_none=True)
+
+        # Manually serialize to JSON to ensure indentation and encoding
+        json_data = json.dumps(data_to_save, indent=4)
+
         profile_path.write_text(json_data, encoding='utf-8')
 
     @property

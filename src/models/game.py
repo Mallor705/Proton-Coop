@@ -36,6 +36,7 @@ class Game(BaseModel):
     apply_dxvk_vkd3d: bool = Field(default=True, alias="APPLY_DXVK_VKD3D")
     winetricks_verbs: Optional[List[str]] = Field(default=None, alias="WINETRICKS_VERBS")
     env_vars: Optional[Dict[str, str]] = Field(default_factory=dict, alias="ENV_VARS")
+    use_mangohud: bool = Field(default=False, alias="USE_MANGOHUD")
 
     @validator('exe_path')
     def validate_exe_path(cls, v):

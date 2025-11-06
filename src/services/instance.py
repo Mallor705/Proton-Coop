@@ -28,6 +28,10 @@ class InstanceService:
         self.proton_path: Optional[Path] = None
         self.termination_in_progress = False
 
+    def launch_game(self, profile: GameProfile) -> None:
+        """A wrapper for launch_instances that can be called from the GUI."""
+        self.launch_instances(profile, profile.profile_name)
+
     def validate_dependencies(self) -> None:
         """Validates if all necessary commands are available on the system."""
         self.logger.info("Validating dependencies...")
@@ -121,7 +125,8 @@ class InstanceService:
             dependency_manager = None
 
         # Iterates over the complete list of player configurations with its index
-        for i, player_config in enumerate(profile.player_configs):
+        player_configs = profile.player_configs or []
+        for i, player_config in enumerate(player_configs):
             instance_num = i + 1
 
             # Checks if this instance is in the list of selected players to launch.
@@ -319,6 +324,9 @@ class InstanceService:
             for key, value in profile.env_vars.items():
                 env[key] = value
 
+        if profile and profile.use_mangohud:
+            env['MANGOHUD'] = "1"
+
         # --- Device specific environment variables ---
         # Handle joystick assignment
         assigned_joystick_path = self._get_joystick_for_instance(instance, profile)
@@ -418,11 +426,23 @@ class InstanceService:
                 audio_device_id_for_instance = audio_device_id
                 self.logger.info(f"Instance {instance_num}: Audio device ID '{audio_device_id}' assigned.")
 
+        joystick_path_str_for_instance = None
+        if player_config:
+            joystick_path_str = player_config.PHYSICAL_DEVICE_ID
+            if joystick_path_str and joystick_path_str.strip():
+                joystick_path = Path(joystick_path_str)
+                if joystick_path.exists() and joystick_path.is_char_device():
+                    joystick_path_str_for_instance = str(joystick_path.resolve())
+                    self.logger.info(f"Instance {instance_num}: Joystick device '{joystick_path_str_for_instance}' assigned.")
+                else:
+                    self.logger.warning(f"Instance {instance_num}: Joystick device '{joystick_path_str}' specified in profile but not found or not a char device.")
+
         return {
             'has_dedicated_mouse': has_dedicated_mouse,
             'mouse_path_str_for_instance': mouse_path_str_for_instance,
             'has_dedicated_keyboard': has_dedicated_keyboard,
             'keyboard_path_str_for_instance': keyboard_path_str_for_instance,
+            'joystick_path_str_for_instance': joystick_path_str_for_instance,
             'audio_device_id_for_instance': audio_device_id_for_instance,
             'should_add_grab_flags': has_dedicated_mouse and has_dedicated_keyboard
         }
@@ -508,26 +528,17 @@ class InstanceService:
         collected_paths = []
 
         # Joysticks
-        # Get specific player config
-        player_config = profile.player_configs[instance_idx] if profile.player_configs and 0 <= instance_idx < len(profile.player_configs) else None
-
-        if player_config:
-            joystick_path_str = player_config.PHYSICAL_DEVICE_ID
-            if joystick_path_str and joystick_path_str.strip():
-                joystick_path = Path(joystick_path_str)
-                if joystick_path.exists() and joystick_path.is_char_device():
-                    collected_paths.append(str(joystick_path))
-                    self.logger.info(f"Instance {instance_num}: Queued joystick '{joystick_path}' for bwrap binding.")
-                else:
-                    self.logger.warning(f"Instance {instance_num}: Joystick device '{joystick_path_str}' specified in profile but not found or not a char device. Not binding.")
+        if device_info.get('joystick_path_str_for_instance'):
+            collected_paths.append(device_info['joystick_path_str_for_instance'])
+            self.logger.info(f"Instance {instance_num}: Queued joystick '{device_info['joystick_path_str_for_instance']}' for bwrap binding.")
 
         # Mice - uses already validated variables
-        if device_info['has_dedicated_mouse']:
+        if device_info.get('mouse_path_str_for_instance'):
             collected_paths.append(device_info['mouse_path_str_for_instance'])
             self.logger.info(f"Instance {instance_num}: Queued mouse device '{device_info['mouse_path_str_for_instance']}' for bwrap binding.")
 
         # Keyboards - uses already validated variables
-        if device_info['has_dedicated_keyboard']:
+        if device_info.get('keyboard_path_str_for_instance'):
             collected_paths.append(device_info['keyboard_path_str_for_instance'])
             self.logger.info(f"Instance {instance_num}: Queued keyboard device '{device_info['keyboard_path_str_for_instance']}' for bwrap binding.")
 

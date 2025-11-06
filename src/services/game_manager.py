@@ -63,19 +63,32 @@ class GameManager:
         return None
 
     def get_profiles(self, game: Game) -> List[Profile]:
-        """Loads all profiles for a specific game."""
+        """Loads all profiles for a specific game, excluding the default."""
         profiles_dir = self.get_profiles_dir(game.game_name)
         if not profiles_dir.exists():
             return []
 
         profiles = []
         for profile_file in profiles_dir.glob("*.json"):
-            try:
-                profile = Profile.load_from_file(profile_file)
-                profiles.append(profile)
-            except Exception as e:
-                self.logger.error(f"Failed to load profile from {profile_file}: {e}")
+            if profile_file.stem.lower() != 'default':
+                try:
+                    profile = Profile.load_from_file(profile_file)
+                    profiles.append(profile)
+                except Exception as e:
+                    self.logger.error(f"Failed to load profile from {profile_file}: {e}")
         return sorted(profiles, key=lambda p: p.profile_name)
+
+    def get_profile(self, game: Game, profile_name: str) -> Optional[Profile]:
+        """Loads a single profile by name for a specific game."""
+        profiles_dir = self.get_profiles_dir(game.game_name)
+        profile_filename = f"{self._sanitize_filename(profile_name)}.json"
+        profile_path = profiles_dir / profile_filename
+        if profile_path.exists():
+            try:
+                return Profile.load_from_file(profile_path)
+            except Exception as e:
+                self.logger.error(f"Failed to load profile '{profile_name}' from {profile_path}: {e}")
+        return None
 
     def save_game(self, game: Game):
         """Saves a game's data to its game.json file."""
@@ -93,7 +106,7 @@ class GameManager:
         self.logger.info(f"Profile '{profile.profile_name}' for game '{game.game_name}' saved to {profile_path}.")
 
     def add_game(self, game: Game) -> None:
-        """Adds a new game to the library."""
+        """Adds a new game to the library and creates a default profile."""
         game_dir = self.get_game_dir(game.game_name)
         if game_dir.exists():
             raise FileExistsError(f"A game with the name '{game.game_name}' already exists.")
@@ -102,7 +115,12 @@ class GameManager:
         profiles_dir = self.get_profiles_dir(game.game_name)
         profiles_dir.mkdir(parents=True, exist_ok=True)
         self.save_game(game)
-        self.logger.info(f"Added new game '{game.game_name}' at {game_dir}")
+
+        # Create a default profile
+        default_profile = Profile(profile_name="Default")
+        self.save_profile(game, default_profile)
+
+        self.logger.info(f"Added new game '{game.game_name}' at {game_dir} with a default profile.")
 
     def add_profile(self, game: Game, profile: Profile) -> None:
         """Adds a new profile to a game."""
