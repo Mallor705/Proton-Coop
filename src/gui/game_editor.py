@@ -14,7 +14,17 @@ from .dialogs import TextInputDialog
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, GObject, Gtk, Pango
+from gi.repository import Adw, GObject, Gtk, Pango, Gdk, Gio
+
+from .dialogs import ConfirmationDialog
+
+
+class ProfileRow(GObject.Object):
+    name = GObject.Property(type=str)
+
+    def __init__(self, name):
+        super().__init__()
+        self.name = name
 
 
 class GameEditor(Adw.PreferencesPage):
@@ -98,7 +108,11 @@ class GameEditor(Adw.PreferencesPage):
         profile_group = Adw.PreferencesGroup(title="Profile Management")
         self.add(profile_group)
 
-        self.profile_selector_row = Adw.ComboRow(title="Active Profile")
+        self.profile_model = Gio.ListStore.new(ProfileRow)
+        self.profile_selector_row = Adw.ComboRow(
+            title="Active Profile", model=self.profile_model
+        )
+        self._setup_profile_factory()
         self.profile_selector_row.connect(
             "notify::selected-item", self._on_profile_selected
         )
@@ -153,6 +167,108 @@ class GameEditor(Adw.PreferencesPage):
         self.players_group = Adw.PreferencesGroup(title="Player Configurations")
         self.add(self.players_group)
 
+    def _setup_profile_factory(self):
+        factory = Gtk.SignalListItemFactory()
+        factory.connect("setup", self._on_setup_profile_row)
+        factory.connect("bind", self._on_bind_profile_row)
+        self.profile_selector_row.set_factory(factory)
+
+    def _on_setup_profile_row(self, factory, list_item):
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        label = Gtk.Label()
+        box.append(label)
+        list_item.set_child(box)
+
+        popover = Gtk.Popover.new()
+        list_item.popover = popover
+        # A Gtk.ListItem não é um widget, então não podemos conectar "destroy" a ela.
+        # Conectamos ao seu filho widget, que é a Gtk.Box.
+        box.connect("destroy", lambda w: popover.unparent())
+
+        popover_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        popover.set_child(popover_box)
+
+        delete_button = Gtk.Button(label="Delete")
+        delete_button.get_style_context().add_class("flat")
+        popover_box.append(delete_button)
+
+        gesture = Gtk.GestureClick.new()
+        gesture.set_button(Gdk.BUTTON_SECONDARY)
+        gesture.connect("pressed", lambda g, n, x, y: popover.popup())
+        box.add_controller(gesture)
+
+    def _on_bind_profile_row(self, factory, list_item):
+        box = list_item.get_child()
+        label = box.get_first_child()
+        profile_row = list_item.get_item()
+        label.set_text(profile_row.name)
+
+        # Configurar o menu de contexto
+        popover = list_item.popover
+        popover.set_parent(list_item.get_child())
+        delete_button = popover.get_child().get_first_child()
+
+        # Desconectar manipuladores antigos para evitar múltiplos sinais
+        if hasattr(delete_button, "handler_id"):
+            delete_button.disconnect(delete_button.handler_id)
+
+        # Não permitir a exclusão do perfil 'Default'
+        if profile_row.name == "Default":
+            delete_button.set_sensitive(False)
+            delete_button.set_tooltip_text("The Default profile cannot be deleted.")
+        else:
+            delete_button.set_sensitive(True)
+            delete_button.set_tooltip_text("")
+            delete_button.handler_id = delete_button.connect(
+                "clicked", self._on_delete_profile, profile_row, popover
+            )
+
+    def _on_delete_profile(self, button, profile_row, popover):
+        popover.popdown()
+        profile = self.game_manager.get_profile(self.game, profile_row.name)
+        if profile:
+            dialog = ConfirmationDialog(
+                self.get_root(),
+                "Delete Profile?",
+                f"Are you sure you want to delete the profile '{profile.profile_name}'?",
+            )
+            dialog.connect(
+                "response", lambda d, r: self._on_delete_profile_confirmed(d, r, profile)
+            )
+            dialog.present()
+
+    def _on_delete_profile_confirmed(self, dialog, response_id, profile):
+        if response_id == "ok":
+            current_profile_name = self.profile.profile_name
+            self.game_manager.delete_profile(self.game, profile)
+
+            # Se o perfil excluído era o ativo, volte para 'Default'
+            if current_profile_name == profile.profile_name:
+                self.update_for_game(self.game)
+                self.profile_selector_row.set_selected(
+                    0
+                )  # Seleciona 'Default'
+            else:
+                # Apenas recarregue a lista de perfis mantendo a seleção atual
+                self.update_profile_list(current_profile_name)
+
+        dialog.destroy()
+
+    def update_profile_list(self, selected_name=None):
+        self.profile_model.remove_all()
+        profiles = self.game_manager.get_profiles(self.game)
+        profile_rows = [ProfileRow("Default")] + [
+            ProfileRow(p.profile_name) for p in profiles
+        ]
+
+        selected_idx = 0
+        for i, p_row in enumerate(profile_rows):
+            self.profile_model.append(p_row)
+            if selected_name and p_row.name == selected_name:
+                selected_idx = i
+
+        return selected_idx
+
     def update_for_game(self, game):
         self._is_loading = True
         try:
@@ -160,21 +276,17 @@ class GameEditor(Adw.PreferencesPage):
             self._selected_path = game.exe_path
             self.path_label.set_markup(f"<small><i>{self._selected_path}</i></small>")
 
-            profiles = self.game_manager.get_profiles(self.game)
-            profile_names = ["Default"] + [p.profile_name for p in profiles]
-            self.profile_selector_row.set_model(Gtk.StringList.new(profile_names))
+            selected_idx = self.update_profile_list()
 
             # Tenta carregar o 'Default' ou o primeiro perfil
             default_profile = self.game_manager.get_profile(self.game, "Default")
             if default_profile:
                 self.profile = default_profile
-                self.profile_selector_row.set_selected(0)
-            elif profiles:
-                self.profile = profiles[0]
-                self.profile_selector_row.set_selected(1)
-            else:
+                self.profile_selector_row.set_selected(selected_idx)
+            else: # Se o Default não existir (caso de erro), cria um
                 self.profile = Profile(profile_name="Default")
                 self.game_manager.add_profile(self.game, self.profile)
+                self.update_profile_list()
 
             self.load_game_data()
             self.load_profile_data()
@@ -183,14 +295,14 @@ class GameEditor(Adw.PreferencesPage):
 
     def _on_profile_selected(self, combo_row, selected_item_prop):
         # Adicionar uma proteção para evitar a execução durante a configuração inicial
-        if self.profile is None:
+        if self.profile is None or self._is_loading:
             return
 
         selected_item = combo_row.get_selected_item()
         if not selected_item:
             return
 
-        profile_name = selected_item.get_string()
+        profile_name = selected_item.name
         if profile_name == self.profile.profile_name:
             return  # Evitar recarregamento desnecessário
 
@@ -217,13 +329,9 @@ class GameEditor(Adw.PreferencesPage):
 
                 try:
                     self.game_manager.add_profile(self.game, new_profile)
-                    self.update_for_game(self.game)  # Recarregar para atualizar a lista
-                    # Selecionar o novo perfil
-                    model = self.profile_selector_row.get_model()
-                    for i, item in enumerate(model):
-                        if item.get_string() == profile_name:
-                            self.profile_selector_row.set_selected(i)
-                            break
+                    selected_idx = self.update_profile_list(profile_name)
+                    self.profile_selector_row.set_selected(selected_idx)
+
                 except FileExistsError:
                     self.logger.error(
                         f"Profile '{profile_name}' already exists."

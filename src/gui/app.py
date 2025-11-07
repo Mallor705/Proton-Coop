@@ -119,6 +119,8 @@ class ProtonCoopWindow(Adw.ApplicationWindow):
         for game in games:
             game_row = Adw.ActionRow(title=game.game_name)
             game_row.add_css_class("game-row")
+            game_row.set_activatable(True)
+            game_row.connect("activated", self.on_game_selected, game)
             self._setup_context_menu(game_row, game)
             self.games_group.add(game_row)
 
@@ -136,13 +138,8 @@ class ProtonCoopWindow(Adw.ApplicationWindow):
         box.append(delete_button)
 
         gesture = Gtk.GestureClick.new()
-        def on_game_pressed(g, n, x, y):
-            button = g.get_current_button()
-            if button == Gdk.BUTTON_PRIMARY:
-                self.on_game_selected(widget, game)
-            elif button == Gdk.BUTTON_SECONDARY:
-                popover.popup()
-        gesture.connect("pressed", on_game_pressed)
+        gesture.set_button(Gdk.BUTTON_SECONDARY)
+        gesture.connect("pressed", lambda g, n, x, y: popover.popup())
         widget.add_controller(gesture)
 
     def on_delete_game(self, button, game, popover):
