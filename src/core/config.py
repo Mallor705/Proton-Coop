@@ -51,6 +51,7 @@ class Config:
             return Path(__file__).parent.parent.parent
 
     SCRIPT_DIR: Path = _get_script_dir()
+    APP_DIR: Path = Path(__file__).parent.parent.parent
     GAMES_DIR: Path = Path.home() / ".config/proton-coop/games"
     LOG_DIR: Path = Path.home() / ".cache/proton-coop/logs"
     PREFIX_BASE_DIR: Path = Path.home() / "Games/proton-coop/prefixes/"

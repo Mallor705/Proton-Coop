@@ -1,20 +1,23 @@
 import sys
-import gi
 from pathlib import Path
+
+import gi
 from pydantic import ValidationError
 
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
 
-from gi.repository import Gtk, Adw, Gdk, Gio
+from gi.repository import Adw, Gdk, Gio, Gtk
+
+from ..core.config import Config
+from ..core.logger import Logger
+from ..models.game import Game
+from ..models.profile import GameProfile, Profile
 from ..services.game_manager import GameManager
 from ..services.instance import InstanceService
-from .game_editor import GameEditor, AdvancedSettingsPage
-from ..models.game import Game
-from ..models.profile import Profile, GameProfile
-from .dialogs import TextInputDialog, ConfirmationDialog, AddGameDialog
-from ..core.logger import Logger
-from ..core.config import Config
+from .dialogs import AddGameDialog, ConfirmationDialog, TextInputDialog
+from .game_editor import AdvancedSettingsPage, GameEditor
+
 
 class ProtonCoopWindow(Adw.ApplicationWindow):
     def __init__(self, *args, **kwargs):
@@ -36,12 +39,14 @@ class ProtonCoopWindow(Adw.ApplicationWindow):
         self._build_ui()
         self.load_games_into_sidebar()
 
+        # Drag and Drop
+        drop_target = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        drop_target.connect("drop", self._on_drop)
+        self.add_controller(drop_target)
+
     def _show_error_dialog(self, message):
         dialog = Adw.MessageDialog(
-            transient_for=self,
-            modal=True,
-            title="Error",
-            body=message
+            transient_for=self, modal=True, title="Error", body=message
         )
         dialog.add_response("ok", "OK")
         dialog.present()
@@ -81,7 +86,10 @@ class ProtonCoopWindow(Adw.ApplicationWindow):
         self.view_switcher.set_stack(self.view_stack)
 
         # Página de Boas-Vindas
-        self.welcome_page = Adw.StatusPage(title="Welcome to Proton Coop!", icon_name="co.uk.somnilok.Linux-Coop-symbolically")
+        self.welcome_page = Adw.StatusPage(
+            title="Welcome to Proton Coop!",
+            icon_name="co.uk.somnilok.Linux-Coop-symbolically",
+        )
         self.view_stack.add_titled(self.welcome_page, "welcome", "Welcome")
 
         # Barra de rodapé
@@ -144,8 +152,12 @@ class ProtonCoopWindow(Adw.ApplicationWindow):
 
     def on_delete_game(self, button, game, popover):
         popover.popdown()
-        dialog = ConfirmationDialog(self, "Delete Game?", f"Are you sure you want to delete {game.game_name}?")
-        dialog.connect("response", lambda d, r: self._on_delete_game_confirmed(d, r, game))
+        dialog = ConfirmationDialog(
+            self, "Delete Game?", f"Are you sure you want to delete {game.game_name}?"
+        )
+        dialog.connect(
+            "response", lambda d, r: self._on_delete_game_confirmed(d, r, game)
+        )
         dialog.present()
 
     def _on_delete_game_confirmed(self, dialog, response_id, game):
@@ -169,13 +181,22 @@ class ProtonCoopWindow(Adw.ApplicationWindow):
 
         if self.game_editor is None:
             self.game_editor = GameEditor(game)
-            self.game_editor.connect('profile-selected', self._on_profile_switched)
-            self.game_editor.connect('settings-changed', self._trigger_auto_save)
-            self.view_stack.add_titled_with_icon(self.game_editor, "game_settings", "Game Settings", "settings-symbolic")
+            self.game_editor.connect("profile-selected", self._on_profile_switched)
+            self.game_editor.connect("settings-changed", self._trigger_auto_save)
+            self.view_stack.add_titled_with_icon(
+                self.game_editor, "game_settings", "Game Settings", "settings-symbolic"
+            )
 
             self.advanced_settings_page = AdvancedSettingsPage(game)
-            self.advanced_settings_page.connect('settings-changed', self._trigger_auto_save)
-            self.view_stack.add_titled_with_icon(self.advanced_settings_page, "advanced_settings", "Advanced", "preferences-system-symbolic")
+            self.advanced_settings_page.connect(
+                "settings-changed", self._trigger_auto_save
+            )
+            self.view_stack.add_titled_with_icon(
+                self.advanced_settings_page,
+                "advanced_settings",
+                "Advanced",
+                "preferences-system-symbolic",
+            )
 
         self.game_editor.update_for_game(game)
         self.advanced_settings_page.update_for_game(game)
@@ -196,19 +217,70 @@ class ProtonCoopWindow(Adw.ApplicationWindow):
         dialog.present()
 
     def _on_add_game_dialog_response(self, dialog, response_id):
-        if response_id == "ok":
-            game_name, exe_path = dialog.get_game_details()
-            if game_name and exe_path:
+        if response_id == Gtk.ResponseType.OK:
+            file = dialog.get_file()
+            if file:
+                self._add_game_from_archive(Path(file.get_path()))
+        dialog.destroy()
+
+    def _add_game_from_archive(self, archive_path: Path):
+        try:
+            handler_data, _ = self.game_manager._extract_and_parse_handler(
+                archive_path
+            )
+            game_name = handler_data.get("GameName")
+            exe_name = handler_data.get("ExecutableName")
+        except (FileNotFoundError, ValueError) as e:
+            self._show_error_dialog(str(e))
+            return
+
+        dialog = Gtk.FileChooserDialog(
+            title=f"Select the executable {exe_name}",
+            transient_for=self,
+            modal=True,
+            action=Gtk.FileChooserAction.OPEN,
+        )
+        dialog.add_buttons(
+            "_Cancel", Gtk.ResponseType.CANCEL, "_Open", Gtk.ResponseType.OK
+        )
+        dialog.connect("response", self._on_exe_selected, archive_path, exe_name)
+        dialog.present()
+
+    def _on_exe_selected(self, dialog, response_id, archive_path, exe_name):
+        if response_id == Gtk.ResponseType.OK:
+            file = dialog.get_file()
+            if file:
+                selected_path = Path(file.get_path())
+                if selected_path.name != exe_name:
+                    self._show_error_dialog(
+                        f"Invalid executable selected. Please select '{exe_name}'."
+                    )
+                    dialog.destroy()
+                    # Re-trigger the process
+                    self._add_game_from_archive(archive_path)
+                    return
+
                 try:
-                    new_game = Game(game_name=game_name, exe_path=Path(exe_path))
-                    self.game_manager.add_game(new_game)
+                    self.game_manager.add_game_from_archive(archive_path, selected_path)
                     self.load_games_into_sidebar()
                 except (ValidationError, FileExistsError) as e:
                     self._show_error_dialog(str(e))
                 except Exception as e:
                     self.logger.error(f"Failed to add new game: {e}")
-                    self._show_error_dialog("An unexpected error occurred. See logs for details.")
+                    self._show_error_dialog(
+                        "An unexpected error occurred. See logs for details."
+                    )
         dialog.destroy()
+
+    def _on_drop(self, drop_target, value, x, y):
+        file_list = value.get_files()
+        for file in file_list:
+            path = file.get_path()
+            if path.endswith(".nc") or path.endswith(".zip"):
+                self._add_game_from_archive(Path(path))
+            else:
+                self.logger.warning(f"Ignoring unsupported file type: {path}")
+        return True
 
     def _trigger_auto_save(self, *args):
         if self.game_editor and self.advanced_settings_page:
@@ -228,18 +300,20 @@ class ProtonCoopWindow(Adw.ApplicationWindow):
                 return
 
             self.selected_profile.selected_players = selected_players
-            game_profile = GameProfile(game=self.selected_game, profile=self.selected_profile)
+            game_profile = GameProfile(
+                game=self.selected_game, profile=self.selected_profile
+            )
 
             self.instance_service.launch_game(game_profile)
             self.launch_button.set_visible(False)
             self.stop_button.set_visible(True)
-            self.split_view.set_sensitive(False) # Disable UI
+            self.split_view.set_sensitive(False)  # Disable UI
 
     def on_stop_clicked(self, button):
         self.instance_service.terminate_all()
         self.launch_button.set_visible(True)
         self.stop_button.set_visible(False)
-        self.split_view.set_sensitive(True) # Enable UI
+        self.split_view.set_sensitive(True)  # Enable UI
 
 
 class ProtonCoopApplication(Adw.Application):
@@ -247,7 +321,7 @@ class ProtonCoopApplication(Adw.Application):
         super().__init__(application_id="com.github.jules.protoncoop", **kwargs)
         resource_path = str(Path(__file__).parent / "resources" / "compiled.gresource")
         Gio.Resource.load(resource_path)._register()
-        self.connect('activate', self.on_activate)
+        self.connect("activate", self.on_activate)
 
         # Carregar o CSS
         css_provider = Gtk.CssProvider()
@@ -256,12 +330,13 @@ class ProtonCoopApplication(Adw.Application):
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
             css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
 
     def on_activate(self, app):
         self.win = ProtonCoopWindow(application=app)
         self.win.present()
+
 
 def run_gui():
     """Lança a aplicação GUI."""

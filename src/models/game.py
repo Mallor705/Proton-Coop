@@ -27,6 +27,7 @@ class Game(BaseModel):
         winetricks_verbs (Optional[List[str]]): Winetricks verbs to run for this game.
         env_vars (Optional[Dict[str, str]]): Environment variables to set for this game.
     """
+    guid: Optional[str] = Field(default=None, alias="GUID")
     game_name: str = Field(..., alias="GAME_NAME")
     exe_path: Path = Field(..., alias="EXE_PATH")
     app_id: Optional[str] = Field(default=None, alias="APP_ID")
@@ -37,6 +38,8 @@ class Game(BaseModel):
     winetricks_verbs: Optional[List[str]] = Field(default=None, alias="WINETRICKS_VERBS")
     env_vars: Optional[Dict[str, str]] = Field(default_factory=dict, alias="ENV_VARS")
     use_mangohud: bool = Field(default=False, alias="USE_MANGOHUD")
+    executable_to_launch: Optional[str] = Field(default=None, alias="EXECUTABLE_TO_LAUNCH")
+    launcher_exe: Optional[str] = Field(default=None, alias="LAUNCHER_EXE")
 
     @validator('exe_path')
     def validate_exe_path(cls, v):

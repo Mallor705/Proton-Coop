@@ -14,7 +14,7 @@ from .dialogs import TextInputDialog
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, GObject, Gtk, Pango, Gdk, Gio
+from gi.repository import Adw, Gdk, Gio, GObject, Gtk, Pango
 
 from .dialogs import ConfirmationDialog
 
@@ -233,7 +233,8 @@ class GameEditor(Adw.PreferencesPage):
                 f"Are you sure you want to delete the profile '{profile.profile_name}'?",
             )
             dialog.connect(
-                "response", lambda d, r: self._on_delete_profile_confirmed(d, r, profile)
+                "response",
+                lambda d, r: self._on_delete_profile_confirmed(d, r, profile),
             )
             dialog.present()
 
@@ -245,9 +246,7 @@ class GameEditor(Adw.PreferencesPage):
             # Se o perfil excluído era o ativo, volte para 'Default'
             if current_profile_name == profile.profile_name:
                 self.update_for_game(self.game)
-                self.profile_selector_row.set_selected(
-                    0
-                )  # Seleciona 'Default'
+                self.profile_selector_row.set_selected(0)  # Seleciona 'Default'
             else:
                 # Apenas recarregue a lista de perfis mantendo a seleção atual
                 self.update_profile_list(current_profile_name)
@@ -283,7 +282,7 @@ class GameEditor(Adw.PreferencesPage):
             if default_profile:
                 self.profile = default_profile
                 self.profile_selector_row.set_selected(selected_idx)
-            else: # Se o Default não existir (caso de erro), cria um
+            else:  # Se o Default não existir (caso de erro), cria um
                 self.profile = Profile(profile_name="Default")
                 self.game_manager.add_profile(self.game, self.profile)
                 self.update_profile_list()
@@ -481,7 +480,7 @@ class GameEditor(Adw.PreferencesPage):
                         self.proton_version_row.set_selected(i)
                         break
             else:
-                self.proton_version_row.set_selected(Gtk.INVALID_LIST_POSITION)
+                self.proton_version_row.set_selected(0)
         finally:
             self._is_loading = False
 
@@ -591,7 +590,13 @@ class GameEditor(Adw.PreferencesPage):
         self.game.game_args = self.game_args_row.get_text() or None
         self.game.is_native = False
         selected_item = self.proton_version_row.get_selected_item()
-        self.game.proton_version = selected_item.get_string() if selected_item else None
+        if selected_item:
+            selected_string = selected_item.get_string()
+            self.game.proton_version = (
+                None if selected_string == "None" else selected_string
+            )
+        else:
+            self.game.proton_version = None
 
         # Atualizar dados do Perfil
         self.profile.num_players = int(self.num_players_row.get_value())

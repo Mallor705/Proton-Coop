@@ -1,12 +1,15 @@
 import json
 import shutil
+import tempfile
+import zipfile
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from ..core.config import Config
 from ..core.logger import Logger
 from ..models.game import Game
 from ..models.profile import Profile
+from .handler_parser import HandlerParser
 
 
 class GameManager:
@@ -22,6 +25,7 @@ class GameManager:
         self.logger = logger
         self.games_dir = Config.GAMES_DIR
         self.games_dir.mkdir(parents=True, exist_ok=True)
+        self.handler_parser = HandlerParser(logger)
 
     @staticmethod
     def _sanitize_filename(name: str) -> str:
@@ -105,6 +109,40 @@ class GameManager:
         profile.save_to_file(profile_path)
         self.logger.info(f"Profile '{profile.profile_name}' for game '{game.game_name}' saved to {profile_path}.")
 
+    def _extract_and_parse_handler(self, archive_path: Path) -> (Dict, str):
+        """Extracts and parses the handler.js file from a game archive."""
+        temp_dir = tempfile.mkdtemp(prefix="proton-coop-")
+        with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+
+        handler_js_path = Path(temp_dir) / "handler.js"
+        if not handler_js_path.exists():
+            raise FileNotFoundError("handler.js not found in the archive.")
+
+        handler_data = self.handler_parser.parse_handler(handler_js_path)
+        if not handler_data:
+            raise ValueError("Failed to parse handler.js.")
+
+        return handler_data, temp_dir
+
+
+    def add_game_from_archive(self, archive_path: Path, exe_path: Path) -> Game:
+        """Adds a new game from a .nc or .zip archive."""
+        handler_data, temp_dir = self._extract_and_parse_handler(archive_path)
+
+        new_game = Game(
+            game_name=handler_data.get("GameName"),
+            exe_path=exe_path,
+            guid=handler_data.get("GUID"),
+            app_id=handler_data.get("SteamID"),
+            executable_to_launch=handler_data.get("ExecutableToLaunch"),
+            launcher_exe=handler_data.get("LauncherExe"),
+        )
+        self.add_game(new_game)
+        self._move_handler_files(new_game, temp_dir)
+
+        return new_game
+
     def add_game(self, game: Game) -> None:
         """Adds a new game to the library and creates a default profile."""
         game_dir = self.get_game_dir(game.game_name)
@@ -121,6 +159,12 @@ class GameManager:
         self.save_profile(game, default_profile)
 
         self.logger.info(f"Added new game '{game.game_name}' at {game_dir} with a default profile.")
+
+    def _move_handler_files(self, game: Game, temp_dir: str):
+        """Moves the handler files to the game directory."""
+        handler_dir = self.get_game_dir(game.game_name) / "handler"
+        shutil.move(temp_dir, handler_dir)
+        self.logger.info(f"Moved handler files to {handler_dir}")
 
     def add_profile(self, game: Game, profile: Profile) -> None:
         """Adds a new profile to a game."""

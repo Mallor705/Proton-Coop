@@ -79,7 +79,9 @@ class ProtonService:
         return tuple(valid_paths)
 
     @lru_cache(maxsize=64)
-    def _search_proton_in_steam_path(self, steam_path: Path, version: str) -> Optional[Path]:
+    def _search_proton_in_steam_path(
+        self, steam_path: Path, version: str
+    ) -> Optional[Path]:
         """
         Searches for a Proton version within a single Steam library path.
 
@@ -93,7 +95,7 @@ class ProtonService:
         """
         search_dirs = [
             steam_path / "steamapps/common",
-            steam_path / "compatibilitytools.d"
+            steam_path / "compatibilitytools.d",
         ]
         version_names = [version, f"Proton {version}", f"GE-Proton{version}"]
         if version == "Experimental":
@@ -113,7 +115,8 @@ class ProtonService:
         Scans all Steam libraries and returns a list of installed Proton versions.
 
         Returns:
-            List[str]: A sorted list of the names of all found Proton versions.
+            List[str]: A sorted list of the names of all found Proton versions,
+                       with "None" as the first option.
         """
         self.logger.info("Discovering installed Proton versions...")
         installed_versions = set()
@@ -122,7 +125,7 @@ class ProtonService:
         for steam_path in valid_steam_paths:
             search_dirs = [
                 steam_path / "steamapps/common",
-                steam_path / "compatibilitytools.d"
+                steam_path / "compatibilitytools.d",
             ]
             for search_dir in search_dirs:
                 if search_dir.exists():
@@ -133,4 +136,4 @@ class ProtonService:
 
         sorted_versions = sorted(list(installed_versions))
         self.logger.info(f"Found Proton versions: {sorted_versions}")
-        return sorted_versions
+        return ["None"] + sorted_versions

@@ -43,22 +43,8 @@ class InstanceService:
     def launch_instances(self, profile: GameProfile, profile_name: str) -> None:
             """Launches all game instances according to the provided profile."""
             if not profile.exe_path:
-                self.logger.errgor(f"Executable path is not configured for profile '{profile_name}'. Cannot launch.")
+                self.logger.error(f"Executable path is not configured for profile '{profile_name}'. Cannot launch.")
                 return
-
-            # # Validate gamescope if needed
-            # if profile.use_gamescope:
-            #     if not shutil.which('gamescope'):
-            #         raise DependencyError("Gamescope is enabled for this profile but 'gamescope' command not found. Please install gamescope or disable it in the profile settings.")
-            #     self.logger.info("Gamescope is enabled and available for this profile.")
-
-            # # Validate bwrap if needed
-            # if not profile.disable_bwrap:
-            #     if not shutil.which('bwrap'):
-            #         raise DependencyError("bwrap is required but not found. Please install bubblewrap or enable 'Disable bwrap' in the profile settings (not recommended).")
-            #     self.logger.info("bwrap is enabled and available for this profile.")
-            # else:
-            #     self.logger.warning("⚠️  bwrap is disabled for this profile. Input device isolation will NOT work!")
 
             if profile.is_native:
                 self.proton_path = None
@@ -135,9 +121,10 @@ class InstanceService:
                 self.logger.info(f"Skipping instance {instance_num} as it's not selected by the user.")
                 continue  # Skip to the next player if not selected
 
-            # Organizes prefixes by game and by instance.
-            # Uses the sanitized `profile.game_name` to ensure paths are clean.
-            prefix_dir = Config.get_prefix_base_dir(profile.game_name) / f"instance_{instance_num}"
+            # Organizes prefixes by game GUID and by instance.
+            if not profile.guid:
+                raise ValueError(f"Game '{profile.game_name}' is missing a GUID. Cannot create instance.")
+            prefix_dir = Config.PREFIX_BASE_DIR / profile.guid / f"instance_{instance_num}"
             log_file = Config.LOG_DIR / f"{profile.game_name}_instance_{instance_num}.log"
             prefix_dir.mkdir(parents=True, exist_ok=True)
             (prefix_dir / "pfx").mkdir(exist_ok=True)
@@ -248,15 +235,20 @@ class InstanceService:
             instance,
             original_game_path,
             profile.exe_path,
-            profile # Passing the complete profile object
+            profile
         )
 
-        # Validate devices for this instance
         instance_idx = instance.instance_num - 1
         device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
 
         env = self._prepare_environment(instance, steam_root, proton_path, profile, device_info)
-        cmd = self._build_command(profile, proton_path, instance, symlinked_executable_path, cpu_affinity)
+
+        # Determine the actual executable to launch
+        executable_to_run = profile.executable_to_launch or profile.launcher_exe or symlinked_executable_path
+        if isinstance(executable_to_run, str):
+            executable_to_run = symlinked_executable_path.parent / executable_to_run
+
+        cmd = self._build_command(profile, proton_path, instance, executable_to_run, cpu_affinity)
 
         self.logger.info(f"Launching instance {instance.instance_num} (Log: {instance.log_file})")
         try:
@@ -270,11 +262,31 @@ class InstanceService:
                     preexec_fn=os.setpgrp
                 )
             pid = process.pid
+
+            if profile.launcher_exe:
+                self.logger.info(f"Launcher for instance {instance.instance_num} started with PID: {pid}. Waiting for game process '{profile.exe_path.name}'...")
+                game_pid = self._wait_for_game_process(profile.exe_path.name)
+                if game_pid:
+                    self.logger.info(f"Game process for instance {instance.instance_num} found with PID: {game_pid}")
+                    pid = game_pid # The game process is the one we want to manage
+                else:
+                    self.logger.warning(f"Could not find game process for instance {instance.instance_num}. Positioning and resizing might not work.")
+
             self.pids.append(pid)
             instance.pid = pid
             self.logger.info(f"Instance {instance.instance_num} started with PID: {pid}")
         except Exception as e:
             self.logger.error(f"Failed to launch instance {instance.instance_num}: {e}")
+
+    def _wait_for_game_process(self, process_name: str, timeout: int = 30) -> Optional[int]:
+        """Waits for a process with a given name to appear."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            for proc in psutil.process_iter(['pid', 'name']):
+                if proc.info['name'] == process_name:
+                    return proc.info['pid']
+            time.sleep(1)
+        return None
 
     def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], proton_path: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = {}) -> dict:
         """Prepares a minimal environment for the game instance, plus device-specific vars."""
@@ -384,8 +396,9 @@ class InstanceService:
 
         # 5. Build the Gamescope command and prepend it to the bwrap+game command
         gamescope_cmd = self._build_gamescope_command(profile, device_info['should_add_grab_flags'], instance.instance_num)
-        # Add the '--' separator before the command Gamescope will run
-        final_cmd = gamescope_cmd + ['--'] + final_cmd
+        if gamescope_cmd:
+            # Add the '--' separator before the command Gamescope will run
+            final_cmd = gamescope_cmd + ['--'] + final_cmd
 
         self.logger.info(f"Instance {instance.instance_num}: Full command: {shlex.join(final_cmd)}")
 
