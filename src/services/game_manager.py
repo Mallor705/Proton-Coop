@@ -137,6 +137,20 @@ class GameManager:
             app_id=handler_data.get("SteamID"),
             executable_to_launch=handler_data.get("ExecutableToLaunch"),
             launcher_exe=handler_data.get("LauncherExe"),
+            symlink_game=handler_data.get("SymlinkGame", True),
+            symlink_exe=handler_data.get("SymlinkExe", False),
+            symlink_folders=handler_data.get("SymlinkFolders", False),
+            keep_symlink_on_exit=handler_data.get("KeepSymLinkOnExit", True),
+            symlink_files=handler_data.get("SymlinkFiles", []),
+            copy_files=handler_data.get("CopyFiles", []),
+            hardcopy_game=handler_data.get("HardcopyGame", False),
+            hardlink_game=handler_data.get("HardlinkGame", False),
+            force_symlink=handler_data.get("ForceSymlink", False),
+            dir_symlink_exclusions=handler_data.get("DirSymlinkExclusions", []),
+            file_symlink_exclusions=handler_data.get("FileSymlinkExclusions", []),
+            file_symlink_copy_instead=handler_data.get("FileSymlinkCopyInstead", []),
+            dir_symlink_copy_instead=handler_data.get("DirSymlinkCopyInstead", []),
+            dir_symlink_copy_instead_include_sub_folders=handler_data.get("DirSymlinkCopyInsteadIncludeSubFolders", False),
         )
         self.add_game(new_game)
         self._move_handler_files(new_game, temp_dir)

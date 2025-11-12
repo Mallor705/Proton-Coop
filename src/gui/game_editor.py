@@ -804,4 +804,5 @@ class AdvancedSettingsPage(Adw.PreferencesPage):
             if key:
                 env_vars[key] = value
         self.game.env_vars = env_vars if env_vars else None
+
         return self.game

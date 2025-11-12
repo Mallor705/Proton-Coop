@@ -39,6 +39,7 @@ class GameInstance(BaseModel):
     gamescope_pid: Optional[int] = None
     player_config: Optional[PlayerInstanceConfig] = None
     is_native: bool = False
+    keep_symlinks_on_exit: bool = True
 
     def __init__(self, **data):
         """

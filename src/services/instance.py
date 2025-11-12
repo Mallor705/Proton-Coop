@@ -1,23 +1,27 @@
 import os
-import time
+import shlex
 import shutil
 import signal
-import subprocess
-import shlex
 import stat
+import subprocess
+import time
 from pathlib import Path
+from typing import Dict, List, Optional
+
 import psutil
-from typing import List, Optional, Dict
+
 from ..core.config import Config
 from ..core.exceptions import DependencyError
 from ..core.logger import Logger
-from ..models.profile import GameProfile, PlayerInstanceConfig
 from ..models.instance import GameInstance
-from .proton import ProtonService
+from ..models.profile import GameProfile, PlayerInstanceConfig
 from .dependency_manager import DependencyManager
+from .proton import ProtonService
+
 
 class InstanceService:
     """Service responsible for managing game instances, including dependency validation, creation, launching, and monitoring."""
+
     def __init__(self, logger: Logger):
         """Initializes the instance service with logger and ProtonService."""
         self.logger = logger
@@ -41,67 +45,87 @@ class InstanceService:
         self.logger.info("Dependencies validated successfully")
 
     def launch_instances(self, profile: GameProfile, profile_name: str) -> None:
-            """Launches all game instances according to the provided profile."""
-            if not profile.exe_path:
-                self.logger.error(f"Executable path is not configured for profile '{profile_name}'. Cannot launch.")
-                return
+        """Launches all game instances according to the provided profile."""
+        if not profile.exe_path:
+            self.logger.error(
+                f"Executable path is not configured for profile '{profile_name}'. Cannot launch."
+            )
+            return
 
-            if profile.is_native:
-                self.proton_path = None
-                steam_root = None
-            else:
-                self.proton_path, steam_root = self.proton_service.find_proton_path(profile.proton_version or "Experimental")
+        if profile.is_native:
+            self.proton_path = None
+            steam_root = None
+        else:
+            self.proton_path, steam_root = self.proton_service.find_proton_path(
+                profile.proton_version or "Experimental"
+            )
 
-            proton_path = self.proton_path # Use local variable for the rest of the function
+        proton_path = (
+            self.proton_path
+        )  # Use local variable for the rest of the function
 
-            # Create directories in batch
-            directories = [
-                Config.LOG_DIR,
-                Config.PREFIX_BASE_DIR
-            ]
-            for directory in directories:
-                directory.mkdir(parents=True, exist_ok=True)
+        # Create directories in batch
+        directories = [Config.LOG_DIR, Config.PREFIX_BASE_DIR]
+        for directory in directories:
+            directory.mkdir(parents=True, exist_ok=True)
 
-            instances = self._create_instances(profile, profile_name, proton_path, steam_root)
+        instances = self._create_instances(
+            profile, profile_name, proton_path, steam_root
+        )
 
-            # Calculate CPU core assignments for each instance
-            num_instances = len(instances)
-            if num_instances == 0:
-                self.logger.info("No instances to launch.")
-                return
+        # Calculate CPU core assignments for each instance
+        num_instances = len(instances)
+        if num_instances == 0:
+            self.logger.info("No instances to launch.")
+            return
 
-            cores_per_instance = self.cpu_count // num_instances
-            remaining_cores = self.cpu_count % num_instances
-            core_assignments = []
-            current_core_start = 0
+        cores_per_instance = self.cpu_count // num_instances
+        remaining_cores = self.cpu_count % num_instances
+        core_assignments = []
+        current_core_start = 0
 
-            for i in range(num_instances):
-                num_cores_for_instance = cores_per_instance
-                if remaining_cores > 0:
-                    num_cores_for_instance += 1
-                    remaining_cores -= 1
+        for i in range(num_instances):
+            num_cores_for_instance = cores_per_instance
+            if remaining_cores > 0:
+                num_cores_for_instance += 1
+                remaining_cores -= 1
 
-                # Build the core string, e.g., "0-3" or "4,5,6"
-                cores_list = []
-                for j in range(num_cores_for_instance):
-                    cores_list.append(str(current_core_start + j))
-                core_assignments.append(",".join(cores_list))
-                current_core_start += num_cores_for_instance
+            # Build the core string, e.g., "0-3" or "4,5,6"
+            cores_list = []
+            for j in range(num_cores_for_instance):
+                cores_list.append(str(current_core_start + j))
+            core_assignments.append(",".join(cores_list))
+            current_core_start += num_cores_for_instance
 
-            self.logger.info(f"Launching {num_instances} instance(s) of '{profile.game_name}'...")
+        self.logger.info(
+            f"Launching {num_instances} instance(s) of '{profile.game_name}'..."
+        )
 
-            original_game_path = profile.exe_path.parent
+        original_game_path = profile.exe_path.parent
 
-            for i, instance in enumerate(instances):
-                cpu_affinity = core_assignments[i]
-                self._launch_single_instance(instance, profile, proton_path, steam_root, original_game_path, cpu_affinity)
-                time.sleep(5)
+        for i, instance in enumerate(instances):
+            cpu_affinity = core_assignments[i]
+            self._launch_single_instance(
+                instance,
+                profile,
+                proton_path,
+                steam_root,
+                original_game_path,
+                cpu_affinity,
+            )
+            time.sleep(5)
 
-            self.logger.info(f"All {num_instances} instances launched")
-            self.logger.info(f"PIDs: {self.pids}")
-            self.logger.info("Press CTRL+C to terminate all instances")
+        self.logger.info(f"All {num_instances} instances launched")
+        self.logger.info(f"PIDs: {self.pids}")
+        self.logger.info("Press CTRL+C to terminate all instances")
 
-    def _create_instances(self, profile: GameProfile, profile_name: str, proton_path: Optional[Path], steam_root: Optional[Path]) -> List[GameInstance]:
+    def _create_instances(
+        self,
+        profile: GameProfile,
+        profile_name: str,
+        proton_path: Optional[Path],
+        steam_root: Optional[Path],
+    ) -> List[GameInstance]:
         """Creates instance models for each player."""
         instances = []
 
@@ -117,15 +141,26 @@ class InstanceService:
 
             # Checks if this instance is in the list of selected players to launch.
             # If the selection list is empty or None, all players are launched.
-            if profile.selected_players and instance_num not in profile.selected_players:
-                self.logger.info(f"Skipping instance {instance_num} as it's not selected by the user.")
+            if (
+                profile.selected_players
+                and instance_num not in profile.selected_players
+            ):
+                self.logger.info(
+                    f"Skipping instance {instance_num} as it's not selected by the user."
+                )
                 continue  # Skip to the next player if not selected
 
             # Organizes prefixes by game GUID and by instance.
             if not profile.guid:
-                raise ValueError(f"Game '{profile.game_name}' is missing a GUID. Cannot create instance.")
-            prefix_dir = Config.PREFIX_BASE_DIR / profile.guid / f"instance_{instance_num}"
-            log_file = Config.LOG_DIR / f"{profile.game_name}_instance_{instance_num}.log"
+                raise ValueError(
+                    f"Game '{profile.game_name}' is missing a GUID. Cannot create instance."
+                )
+            prefix_dir = (
+                Config.PREFIX_BASE_DIR / profile.guid / f"instance_{instance_num}"
+            )
+            log_file = (
+                Config.LOG_DIR / f"{profile.game_name}_instance_{instance_num}.log"
+            )
             prefix_dir.mkdir(parents=True, exist_ok=True)
             (prefix_dir / "pfx").mkdir(exist_ok=True)
 
@@ -133,7 +168,9 @@ class InstanceService:
                 # Only initialize the prefix if we intend to modify it with DXVK or Winetricks.
                 # Otherwise, we let Proton/Wine create it on the first actual game launch.
                 if profile.apply_dxvk_vkd3d or profile.winetricks_verbs:
-                    self.logger.info(f"Instance {instance_num}: DXVK/VKD3D or Winetricks verbs configured. Initializing prefix before launch.")
+                    self.logger.info(
+                        f"Instance {instance_num}: DXVK/VKD3D or Winetricks verbs configured. Initializing prefix before launch."
+                    )
                     # Initialize the prefix first. This is a crucial, one-time setup.
                     dependency_manager.initialize_prefix(prefix_dir)
 
@@ -141,9 +178,13 @@ class InstanceService:
                     if profile.apply_dxvk_vkd3d:
                         dependency_manager.apply_dxvk_vkd3d(prefix_dir)
                     if profile.winetricks_verbs:
-                        dependency_manager.apply_winetricks(prefix_dir, profile.winetricks_verbs)
+                        dependency_manager.apply_winetricks(
+                            prefix_dir, profile.winetricks_verbs
+                        )
                 else:
-                    self.logger.info(f"Instance {instance_num}: No prefix modifications required. Skipping explicit initialization.")
+                    self.logger.info(
+                        f"Instance {instance_num}: No prefix modifications required. Skipping explicit initialization."
+                    )
 
             instance = GameInstance(
                 instance_num=instance_num,
@@ -151,185 +192,329 @@ class InstanceService:
                 prefix_dir=prefix_dir,
                 log_file=log_file,
                 player_config=player_config,
-                is_native=profile.is_native
+                is_native=profile.is_native,
+                keep_symlinks_on_exit=profile.keep_symlinks_on_exit,
             )
             instances.append(instance)
         self.managed_instances = instances
         return instances
 
-    def _create_game_directory_symlink_structure(self, instance: GameInstance, original_game_path: Path, original_exe_path: Path, profile: GameProfile) -> Path:
-        """Creates a mirrored directory structure with symlinks for the original game folder.
-        Returns the path to the main executable's symlink.
+    def _create_game_directory_structure(
+        self,
+        instance: GameInstance,
+        original_game_path: Path,
+        original_exe_path: Path,
+        profile: GameProfile,
+    ) -> Path:
         """
-        instance_game_root = instance.prefix_dir / "game_files" / original_game_path.name
+        Creates the game directory structure for an instance based on all file handling settings.
+        This is a complex process with a clear order of priority.
+        Returns the path to the executable that should be used for launching.
+        """
+        if not profile.symlink_game:
+            self.logger.info(
+                f"Instance {instance.instance_num}: SymlinkGame is false. Launching directly from {original_exe_path}"
+            )
+            return original_exe_path
+
+        instance_game_root = instance.prefix_dir / "game_files"
+
+        if profile.force_symlink and instance_game_root.exists():
+            self.logger.info(
+                f"Instance {instance.instance_num}: ForceSymlink is true. Removing existing game files directory: {instance_game_root}"
+            )
+            shutil.rmtree(instance_game_root)
+
         instance_game_root.mkdir(parents=True, exist_ok=True)
+        self.logger.info(
+            f"Instance {instance.instance_num}: Creating file structure for {original_game_path} at {instance_game_root}"
+        )
 
-        self.logger.info(f"Instance {instance.instance_num}: Creating symlink structure for {original_game_path} at {instance_game_root}")
+        # Normalize and combine lists for faster lookups
+        dir_exclusions = set(profile.dir_symlink_exclusions or [])
+        file_exclusions = set(profile.file_symlink_exclusions or [])
+        file_copy_instead = set(profile.file_symlink_copy_instead or []) | set(
+            profile.copy_files or []
+        )
+        dir_copy_instead = set(profile.dir_symlink_copy_instead or [])
+        symlink_files = set(profile.symlink_files or [])
 
-        # Determines the relative path of the original executable in relation to the game's root folder.
-        try:
-            relative_exe_path = original_exe_path.relative_to(original_game_path)
-        except ValueError as e:
-            # This can happen if original_exe_path is not inside original_game_path
-            self.logger.error(f"Instance {instance.instance_num}: Executable path {original_exe_path} is not inside game path {original_game_path}. Error: {e}")
-            raise
+        for root, dirs, files in os.walk(original_game_path, topdown=True):
+            current_root = Path(root)
+            relative_root_str = str(current_root.relative_to(original_game_path))
+            if relative_root_str == ".":
+                relative_root_str = ""
 
-        # Expected path for the executable symlink
-        symlinked_exe_path_target = instance_game_root / relative_exe_path
-
-        self._process_game_files(instance, original_game_path, instance_game_root, profile)
-        self._verify_executable_symlink(instance, symlinked_exe_path_target, original_exe_path)
-
-        return symlinked_exe_path_target
-
-    def _process_game_files(self, instance: GameInstance, original_game_path: Path, instance_game_root: Path, profile: GameProfile) -> None:
-        """Processes all game files, creating symlinks and configuring the Goldberg Emulator."""
-        self.logger.info(f"Instance {instance.instance_num}: Processing game files")
-
-        # Create directory structure
-        instance_game_root.mkdir(parents=True, exist_ok=True)
-
-        # Create symlinks for game files
-        for item in original_game_path.rglob("*"):
-            relative_item_path = item.relative_to(original_game_path)
-            target_path_for_item = instance_game_root / relative_item_path
-
-            # Ensures the parent directory exists
-            target_path_for_item.parent.mkdir(parents=True, exist_ok=True)
-
-            if item.is_dir():
-                target_path_for_item.mkdir(parents=True, exist_ok=True)
-            else:
-                # If a file already exists at the target path, log it and skip.
-                # This allows users to place custom/original files that won't be overwritten.
-                if target_path_for_item.exists():
-                    self.logger.info(f"Instance {instance.instance_num}: Skipped symlink, file already exists: {target_path_for_item}")
+            # --- Directory Handling ---
+            dirs_to_process = []
+            for i in range(len(dirs) - 1, -1, -1):
+                dir_name = dirs[i]
+                relative_dir_str = str(Path(relative_root_str) / dir_name)
+                if relative_dir_str in dir_exclusions:
+                    src_dir = current_root / dir_name
+                    dest_dir = instance_game_root / relative_dir_str
+                    self.logger.info(
+                        f"Instance {instance.instance_num}: Hardcopying directory as per DirSymlinkExclusions: {relative_dir_str}"
+                    )
+                    shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
+                    del dirs[i]  # Prune from walk
                 else:
-                    try:
-                        target_path_for_item.symlink_to(item)
-                        self.logger.info(f"Instance {instance.instance_num}: Created symlink: {target_path_for_item} -> {item}")
-                    except Exception as e:
-                        self.logger.warning(f"Instance {instance.instance_num}: Failed to create symlink for {item}: {e}")
+                    dirs_to_process.insert(0, dir_name)
 
-    def _verify_executable_symlink(self, instance: GameInstance, symlinked_exe_path_target: Path, original_exe_path: Path) -> None:
-        """Verifies if the executable file exists at the target path, regardless of whether it's a symlink or a regular file."""
-        if not symlinked_exe_path_target.exists():
-            self.logger.error(f"Instance {instance.instance_num}: Executable file not found at the expected path: {symlinked_exe_path_target}")
-            raise FileNotFoundError(f"Executable file not found for instance {instance.instance_num} at {symlinked_exe_path_target}")
+            dirs[:] = dirs_to_process
 
-        if symlinked_exe_path_target.is_symlink():
-            self.logger.info(f"Instance {instance.instance_num}: Verified symlinked executable: {symlinked_exe_path_target}")
-        else:
-            self.logger.info(f"Instance {instance.instance_num}: Verified executable (not a symlink): {symlinked_exe_path_target}")
+            for dir_name in dirs_to_process:
+                src_dir = current_root / dir_name
+                dest_dir = instance_game_root / relative_root_str / dir_name
+                relative_dir_str = str(dest_dir.relative_to(instance_game_root))
 
-    def _launch_single_instance(self, instance: GameInstance, profile: GameProfile,
-                              proton_path: Optional[Path], steam_root: Optional[Path], original_game_path: Path, cpu_affinity: str) -> None:
+                if dest_dir.exists() or dest_dir.is_symlink():
+                    continue
+
+                if (
+                    profile.symlink_folders
+                    and not profile.hardcopy_game
+                    and relative_dir_str not in dir_copy_instead
+                ):
+                    self.logger.info(
+                        f"Instance {instance.instance_num}: Symlinking directory {relative_dir_str} as per symlink_folders=True"
+                    )
+                    os.symlink(src_dir, dest_dir, target_is_directory=True)
+                    # Don't walk into symlinked dirs
+                    if dir_name in dirs:
+                        dirs.remove(dir_name)
+                else:
+                    if relative_dir_str in dir_copy_instead:
+                        self.logger.info(
+                            f"Instance {instance.instance_num}: Creating directory {relative_dir_str} to copy its contents."
+                        )
+                    dest_dir.mkdir()
+
+            # --- File Handling ---
+            for file_name in files:
+                src_path = current_root / file_name
+                relative_file_str = str(src_path.relative_to(original_game_path))
+                dest_path = instance_game_root / relative_file_str
+
+                if dest_path.exists() or dest_path.is_symlink():
+                    continue
+
+                # --- Decision Tree for Action ---
+                if relative_file_str in file_exclusions:
+                    self.logger.info(
+                        f"Instance {instance.instance_num}: Excluding file as per FileSymlinkExclusions: {relative_file_str}"
+                    )
+                    continue
+
+                should_copy = False
+                if relative_file_str in file_copy_instead:
+                    self.logger.info(
+                        f"Instance {instance.instance_num}: Copying file as per copy lists: {relative_file_str}"
+                    )
+                    should_copy = True
+                elif any(
+                    relative_file_str.startswith(str(d)) for d in dir_copy_instead
+                ):
+                    is_direct_child = (
+                        str(Path(relative_file_str).parent) in dir_copy_instead
+                    )
+                    if (
+                        profile.dir_symlink_copy_instead_include_sub_folders
+                        or is_direct_child
+                    ):
+                        self.logger.info(
+                            f"Instance {instance.instance_num}: Copying file in DirSymlinkCopyInstead: {relative_file_str}"
+                        )
+                        should_copy = True
+                elif src_path == original_exe_path and not profile.symlink_exe:
+                    self.logger.info(
+                        f"Instance {instance.instance_num}: Copying main executable as per symlink_exe=False"
+                    )
+                    should_copy = True
+                elif profile.hardcopy_game:
+                    self.logger.info(
+                        f"Instance {instance.instance_num}: Copying file as per hardcopy_game=True: {relative_file_str}"
+                    )
+                    should_copy = True
+
+                if should_copy:
+                    shutil.copy2(src_path, dest_path)
+                    continue
+
+                if relative_file_str in symlink_files:
+                    self.logger.info(
+                        f"Instance {instance.instance_num}: Explicitly symlinking file as per SymlinkFiles: {relative_file_str}"
+                    )
+                    os.symlink(src_path, dest_path)
+                    continue
+
+                if profile.hardlink_game:
+                    self.logger.info(
+                        f"Instance {instance.instance_num}: Hardlinking file as per hardlink_game=True: {relative_file_str}"
+                    )
+                    os.link(src_path, dest_path)
+                    continue
+
+                self.logger.info(
+                    f"Instance {instance.instance_num}: Symlinking file by default: {relative_file_str}"
+                )
+                os.symlink(src_path, dest_path)
+
+        final_exe_path = instance_game_root / original_exe_path.relative_to(
+            original_game_path
+        )
+        if not final_exe_path.exists():
+            raise FileNotFoundError(
+                f"Executable for instance {instance.instance_num} not found at expected path {final_exe_path} after setup. It might have been excluded."
+            )
+
+        return final_exe_path
+
+    def _launch_single_instance(
+        self,
+        instance: GameInstance,
+        profile: GameProfile,
+        proton_path: Optional[Path],
+        steam_root: Optional[Path],
+        original_game_path: Path,
+        cpu_affinity: str,
+    ) -> None:
         """Launches a single game instance with CPU affinity."""
-        self.logger.info(f"Preparing instance {instance.instance_num} with CPU affinity: {cpu_affinity}...")
+        self.logger.info(
+            f"Preparing instance {instance.instance_num} with CPU affinity: {cpu_affinity}..."
+        )
 
         if not profile.exe_path:
-            self.logger.error(f"Instance {instance.instance_num}: Executable path is missing in profile, cannot launch.")
+            self.logger.error(
+                f"Instance {instance.instance_num}: Executable path is missing in profile, cannot launch."
+            )
             return
 
-        symlinked_executable_path = self._create_game_directory_symlink_structure(
-            instance,
-            original_game_path,
-            profile.exe_path,
-            profile
+        final_executable_path = self._create_game_directory_structure(
+            instance, original_game_path, profile.exe_path, profile
         )
 
         instance_idx = instance.instance_num - 1
-        device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
+        device_info = self._validate_input_devices(
+            profile, instance_idx, instance.instance_num
+        )
 
-        env = self._prepare_environment(instance, steam_root, proton_path, profile, device_info)
+        env = self._prepare_environment(
+            instance, steam_root, proton_path, profile, device_info
+        )
 
         # Determine the actual executable to launch
-        executable_to_run = profile.executable_to_launch or profile.launcher_exe or symlinked_executable_path
+        executable_to_run = (
+            profile.executable_to_launch
+            or profile.launcher_exe
+            or final_executable_path
+        )
         if isinstance(executable_to_run, str):
-            executable_to_run = symlinked_executable_path.parent / executable_to_run
+            executable_to_run = final_executable_path.parent / executable_to_run
 
-        cmd = self._build_command(profile, proton_path, instance, executable_to_run, cpu_affinity)
+        cmd = self._build_command(
+            profile, proton_path, instance, executable_to_run, cpu_affinity
+        )
 
-        self.logger.info(f"Launching instance {instance.instance_num} (Log: {instance.log_file})")
+        self.logger.info(
+            f"Launching instance {instance.instance_num} (Log: {instance.log_file})"
+        )
         try:
-            with open(instance.log_file, 'w') as log:
+            with open(instance.log_file, "w") as log:
                 process = subprocess.Popen(
                     cmd,
                     stdout=log,
                     stderr=subprocess.STDOUT,
                     env=env,
-                    cwd=symlinked_executable_path.parent,
-                    preexec_fn=os.setpgrp
+                    cwd=final_executable_path.parent,
+                    preexec_fn=os.setpgrp,
                 )
             pid = process.pid
 
             if profile.launcher_exe:
-                self.logger.info(f"Launcher for instance {instance.instance_num} started with PID: {pid}. Waiting for game process '{profile.exe_path.name}'...")
+                self.logger.info(
+                    f"Launcher for instance {instance.instance_num} started with PID: {pid}. Waiting for game process '{profile.exe_path.name}'..."
+                )
                 game_pid = self._wait_for_game_process(profile.exe_path.name)
                 if game_pid:
-                    self.logger.info(f"Game process for instance {instance.instance_num} found with PID: {game_pid}")
-                    pid = game_pid # The game process is the one we want to manage
+                    self.logger.info(
+                        f"Game process for instance {instance.instance_num} found with PID: {game_pid}"
+                    )
+                    pid = game_pid  # The game process is the one we want to manage
                 else:
-                    self.logger.warning(f"Could not find game process for instance {instance.instance_num}. Positioning and resizing might not work.")
+                    self.logger.warning(
+                        f"Could not find game process for instance {instance.instance_num}. Positioning and resizing might not work."
+                    )
 
             self.pids.append(pid)
             instance.pid = pid
-            self.logger.info(f"Instance {instance.instance_num} started with PID: {pid}")
+            self.logger.info(
+                f"Instance {instance.instance_num} started with PID: {pid}"
+            )
         except Exception as e:
             self.logger.error(f"Failed to launch instance {instance.instance_num}: {e}")
 
-    def _wait_for_game_process(self, process_name: str, timeout: int = 30) -> Optional[int]:
+    def _wait_for_game_process(
+        self, process_name: str, timeout: int = 30
+    ) -> Optional[int]:
         """Waits for a process with a given name to appear."""
         start_time = time.time()
         while time.time() - start_time < timeout:
-            for proc in psutil.process_iter(['pid', 'name']):
-                if proc.info['name'] == process_name:
-                    return proc.info['pid']
+            for proc in psutil.process_iter(["pid", "name"]):
+                if proc.info["name"] == process_name:
+                    return proc.info["pid"]
             time.sleep(1)
         return None
 
-    def _prepare_environment(self, instance: GameInstance, steam_root: Optional[Path], proton_path: Optional[Path], profile: Optional[GameProfile] = None, device_info: dict = {}) -> dict:
+    def _prepare_environment(
+        self,
+        instance: GameInstance,
+        steam_root: Optional[Path],
+        proton_path: Optional[Path],
+        profile: Optional[GameProfile] = None,
+        device_info: dict = {},
+    ) -> dict:
         """Prepares a minimal environment for the game instance, plus device-specific vars."""
         env = os.environ.copy()
-        original_path = env.get('PATH', '')
+        original_path = env.get("PATH", "")
 
         # Clean up potentially conflicting Python variables
-        env.pop('PYTHONHOME', None)
-        env.pop('PYTHONPATH', None)
+        env.pop("PYTHONHOME", None)
+        env.pop("PYTHONPATH", None)
 
         if not (profile and profile.is_native):
             # --- Essential Proton/Wine variables ---
             if steam_root:
-                env['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = str(steam_root)
-            env['STEAM_COMPAT_DATA_PATH'] = str(instance.prefix_dir)
-            env['WINEPREFIX'] = str(instance.prefix_dir / 'pfx')
+                env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = str(steam_root)
+            env["STEAM_COMPAT_DATA_PATH"] = str(instance.prefix_dir)
+            env["WINEPREFIX"] = str(instance.prefix_dir / "pfx")
 
             # --- PATH modification ---
             if proton_path:
                 proton_bin_dir = proton_path.parent
-                env['PATH'] = f"{str(proton_bin_dir)}:{original_path}"
+                env["PATH"] = f"{str(proton_bin_dir)}:{original_path}"
 
             # --- Sane defaults ---
-            if 'PROTON_NO_ESYNC' not in env:
-                env['PROTON_NO_ESYNC'] = "0"
-            if 'PROTON_NO_FSYNC' not in env:
-                env['PROTON_NO_FSYNC'] = "0"
+            if "PROTON_NO_ESYNC" not in env:
+                env["PROTON_NO_ESYNC"] = "0"
+            if "PROTON_NO_FSYNC" not in env:
+                env["PROTON_NO_FSYNC"] = "0"
 
             # --- Steam Integration ---
             if profile and profile.app_id:
-                env['SteamAppId'] = profile.app_id
-                env['SteamGameId'] = profile.app_id
+                env["SteamAppId"] = profile.app_id
+                env["SteamGameId"] = profile.app_id
 
             # --- Force Host Network ---
             # This is critical for allowing instances to communicate via localhost (127.0.0.1)
             # by disabling Proton's network namespacing.
-            env['PV_NET_SHARE'] = "1"
+            env["PV_NET_SHARE"] = "1"
 
         # --- Gamescope WSI ---
         # This is critical for preventing system crashes and graphical glitches.
         # It forces Gamescope to use its own Wayland-based WSI, avoiding conflicts
         # with Proton's Vulkan environment.
-        env['ENABLE_GAMESCOPE_WSI'] = "1"
+        env["ENABLE_GAMESCOPE_WSI"] = "1"
 
         # --- Add environment variables defined in the profile ---
         if profile and profile.env_vars:
@@ -337,31 +522,43 @@ class InstanceService:
                 env[key] = value
 
         if profile and profile.use_mangohud:
-            env['MANGOHUD'] = "1"
+            env["MANGOHUD"] = "1"
 
         # --- Device specific environment variables ---
         # Handle joystick assignment
         assigned_joystick_path = self._get_joystick_for_instance(instance, profile)
         if assigned_joystick_path:
-            env['SDL_JOYSTICK_DEVICE'] = assigned_joystick_path
-            self.logger.info(f"Instance {instance.instance_num}: Setting SDL_JOYSTICK_DEVICE to '{assigned_joystick_path}'.")
+            env["SDL_JOYSTICK_DEVICE"] = assigned_joystick_path
+            self.logger.info(
+                f"Instance {instance.instance_num}: Setting SDL_JOYSTICK_DEVICE to '{assigned_joystick_path}'."
+            )
         else:
-            env.pop('SDL_JOYSTICK_DEVICE', None)
+            env.pop("SDL_JOYSTICK_DEVICE", None)
 
         # Handle audio device assignment (PULSE_SINK for PulseAudio)
-        if device_info.get('audio_device_id_for_instance'):
-            audio_device_id = device_info['audio_device_id_for_instance']
-            env['PULSE_SINK'] = audio_device_id
-            self.logger.info(f"Instance {instance.instance_num}: Setting PULSE_SINK to '{audio_device_id}'.")
+        if device_info.get("audio_device_id_for_instance"):
+            audio_device_id = device_info["audio_device_id_for_instance"]
+            env["PULSE_SINK"] = audio_device_id
+            self.logger.info(
+                f"Instance {instance.instance_num}: Setting PULSE_SINK to '{audio_device_id}'."
+            )
         else:
-            env.pop('PULSE_SINK', None)
+            env.pop("PULSE_SINK", None)
 
-        self.logger.info(f"Instance {instance.instance_num}: Final environment prepared.")
+        self.logger.info(
+            f"Instance {instance.instance_num}: Final environment prepared."
+        )
         return env
 
-    def _get_joystick_for_instance(self, instance: GameInstance, profile: Optional[GameProfile]) -> Optional[str]:
+    def _get_joystick_for_instance(
+        self, instance: GameInstance, profile: Optional[GameProfile]
+    ) -> Optional[str]:
         """Get joystick path for instance."""
-        if not profile or not profile.player_configs or not (0 <= instance.instance_num - 1 < len(profile.player_configs)):
+        if (
+            not profile
+            or not profile.player_configs
+            or not (0 <= instance.instance_num - 1 < len(profile.player_configs))
+        ):
             return None
 
         idx = instance.instance_num - 1
@@ -375,7 +572,14 @@ class InstanceService:
             return device_from_profile
         return None
 
-    def _build_command(self, profile: GameProfile, proton_path: Optional[Path], instance: GameInstance, symlinked_exe_path: Path, cpu_affinity: str) -> List[str]:
+    def _build_command(
+        self,
+        profile: GameProfile,
+        proton_path: Optional[Path],
+        instance: GameInstance,
+        symlinked_exe_path: Path,
+        cpu_affinity: str,
+    ) -> List[str]:
         """
         Builds the final command array in the correct order:
         [gamescope?] -> [bwrap] -> [proton/native]
@@ -383,34 +587,51 @@ class InstanceService:
         instance_idx = instance.instance_num - 1
 
         # 1. Validate input devices to determine flags for bwrap and gamescope
-        device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
+        device_info = self._validate_input_devices(
+            profile, instance_idx, instance.instance_num
+        )
 
         # 2. Build the innermost game command (Proton or native)
-        game_cmd = self._build_base_game_command(profile, proton_path, symlinked_exe_path, instance.instance_num)
+        game_cmd = self._build_base_game_command(
+            profile, proton_path, symlinked_exe_path, instance.instance_num
+        )
 
         # 3. Build the bwrap command, which will wrap the game command
-        bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num)
+        bwrap_cmd = self._build_bwrap_command(
+            profile, instance_idx, device_info, instance.instance_num
+        )
 
         # 4. Prepend bwrap to the game command
         final_cmd = bwrap_cmd + game_cmd
 
         # 5. Build the Gamescope command and prepend it to the bwrap+game command
-        gamescope_cmd = self._build_gamescope_command(profile, device_info['should_add_grab_flags'], instance.instance_num)
+        gamescope_cmd = self._build_gamescope_command(
+            profile, device_info["should_add_grab_flags"], instance.instance_num
+        )
         if gamescope_cmd:
             # Add the '--' separator before the command Gamescope will run
-            final_cmd = gamescope_cmd + ['--'] + final_cmd
+            final_cmd = gamescope_cmd + ["--"] + final_cmd
 
-        self.logger.info(f"Instance {instance.instance_num}: Full command: {shlex.join(final_cmd)}")
+        self.logger.info(
+            f"Instance {instance.instance_num}: Full command: {shlex.join(final_cmd)}"
+        )
 
         return final_cmd
 
-    def _validate_input_devices(self, profile: GameProfile, instance_idx: int, instance_num: int) -> dict:
+    def _validate_input_devices(
+        self, profile: GameProfile, instance_idx: int, instance_num: int
+    ) -> dict:
         """Validates input devices and returns information about them."""
         has_dedicated_mouse = False
         mouse_path_str_for_instance = None
 
         # Get specific player config
-        player_config = profile.player_configs[instance_idx] if profile.player_configs and 0 <= instance_idx < len(profile.player_configs) else None
+        player_config = (
+            profile.player_configs[instance_idx]
+            if profile.player_configs
+            and 0 <= instance_idx < len(profile.player_configs)
+            else None
+        )
 
         if player_config:
             mouse_path_str_for_instance = player_config.MOUSE_EVENT_PATH
@@ -419,25 +640,34 @@ class InstanceService:
                 if mouse_path_obj.exists() and mouse_path_obj.is_char_device():
                     has_dedicated_mouse = True
                 else:
-                    self.logger.warning(f"Instance {instance_num}: Mouse device '{mouse_path_str_for_instance}' specified in profile but not found or not a char device.")
+                    self.logger.warning(
+                        f"Instance {instance_num}: Mouse device '{mouse_path_str_for_instance}' specified in profile but not found or not a char device."
+                    )
 
         has_dedicated_keyboard = False
         keyboard_path_str_for_instance = None
         if player_config:
             keyboard_path_str_for_instance = player_config.KEYBOARD_EVENT_PATH
-            if keyboard_path_str_for_instance and keyboard_path_str_for_instance.strip():
+            if (
+                keyboard_path_str_for_instance
+                and keyboard_path_str_for_instance.strip()
+            ):
                 keyboard_path_obj = Path(keyboard_path_str_for_instance)
                 if keyboard_path_obj.exists() and keyboard_path_obj.is_char_device():
                     has_dedicated_keyboard = True
                 else:
-                    self.logger.warning(f"Instance {instance_num}: Keyboard device '{keyboard_path_str_for_instance}' specified in profile but not found or not a char device.")
+                    self.logger.warning(
+                        f"Instance {instance_num}: Keyboard device '{keyboard_path_str_for_instance}' specified in profile but not found or not a char device."
+                    )
 
         audio_device_id_for_instance = None
         if player_config:
             audio_device_id = player_config.AUDIO_DEVICE_ID
             if audio_device_id and audio_device_id.strip():
                 audio_device_id_for_instance = audio_device_id
-                self.logger.info(f"Instance {instance_num}: Audio device ID '{audio_device_id}' assigned.")
+                self.logger.info(
+                    f"Instance {instance_num}: Audio device ID '{audio_device_id}' assigned."
+                )
 
         joystick_path_str_for_instance = None
         if player_config:
@@ -446,114 +676,171 @@ class InstanceService:
                 joystick_path = Path(joystick_path_str)
                 if joystick_path.exists() and joystick_path.is_char_device():
                     joystick_path_str_for_instance = str(joystick_path.resolve())
-                    self.logger.info(f"Instance {instance_num}: Joystick device '{joystick_path_str_for_instance}' assigned.")
+                    self.logger.info(
+                        f"Instance {instance_num}: Joystick device '{joystick_path_str_for_instance}' assigned."
+                    )
                 else:
-                    self.logger.warning(f"Instance {instance_num}: Joystick device '{joystick_path_str}' specified in profile but not found or not a char device.")
+                    self.logger.warning(
+                        f"Instance {instance_num}: Joystick device '{joystick_path_str}' specified in profile but not found or not a char device."
+                    )
 
         return {
-            'has_dedicated_mouse': has_dedicated_mouse,
-            'mouse_path_str_for_instance': mouse_path_str_for_instance,
-            'has_dedicated_keyboard': has_dedicated_keyboard,
-            'keyboard_path_str_for_instance': keyboard_path_str_for_instance,
-            'joystick_path_str_for_instance': joystick_path_str_for_instance,
-            'audio_device_id_for_instance': audio_device_id_for_instance,
-            'should_add_grab_flags': has_dedicated_mouse and has_dedicated_keyboard
+            "has_dedicated_mouse": has_dedicated_mouse,
+            "mouse_path_str_for_instance": mouse_path_str_for_instance,
+            "has_dedicated_keyboard": has_dedicated_keyboard,
+            "keyboard_path_str_for_instance": keyboard_path_str_for_instance,
+            "joystick_path_str_for_instance": joystick_path_str_for_instance,
+            "audio_device_id_for_instance": audio_device_id_for_instance,
+            "should_add_grab_flags": has_dedicated_mouse and has_dedicated_keyboard,
         }
 
-    def _build_gamescope_command(self, profile: GameProfile, should_add_grab_flags: bool, instance_num: int) -> List[str]:
+    def _build_gamescope_command(
+        self, profile: GameProfile, should_add_grab_flags: bool, instance_num: int
+    ) -> List[str]:
         """Builds the Gamescope command."""
-        gamescope_path = 'gamescope'
+        gamescope_path = "gamescope"
 
         # Get instance dimensions directly from the profile
-        effective_width, effective_height = profile.get_instance_dimensions(instance_num)
+        effective_width, effective_height = profile.get_instance_dimensions(
+            instance_num
+        )
 
         gamescope_cli_options = [
             gamescope_path,
-            '-W', str(effective_width),
-            '-H', str(effective_height),
-            '-w', str(effective_width),
-            '-h', str(effective_height),
+            "-W",
+            str(effective_width),
+            "-H",
+            str(effective_height),
+            "-w",
+            str(effective_width),
+            "-h",
+            str(effective_height),
         ]
 
         # Always set an unfocused FPS limit to a very high value
-        gamescope_cli_options.extend(['-o', '999'])
-        self.logger.info(f"Instance {instance_num}: Setting unfocused FPS limit to 999.")
+        gamescope_cli_options.extend(["-o", "999"])
+        self.logger.info(
+            f"Instance {instance_num}: Setting unfocused FPS limit to 999."
+        )
 
         # Always set a focused FPS limit to a very high value
-        gamescope_cli_options.extend(['-r', '999'])
+        gamescope_cli_options.extend(["-r", "999"])
         self.logger.info(f"Instance {instance_num}: Setting focused FPS limit to 999.")
 
         # Add adaptive sync if not in splitscreen mode
         if not profile.is_splitscreen_mode:
-            gamescope_cli_options.extend(['-f', '--adaptive-sync'])
+            gamescope_cli_options.extend(["-f", "--adaptive-sync"])
         else:
-            gamescope_cli_options.extend(['-b'])
+            gamescope_cli_options.extend(["-b"])
 
         if should_add_grab_flags:
-            self.logger.info(f"Instance {instance_num}: Using dedicated mouse and keyboard. Adding --grab and --force-grab-cursor to Gamescope.")
-            gamescope_cli_options.extend(['--grab', '--force-grab-cursor'])
+            self.logger.info(
+                f"Instance {instance_num}: Using dedicated mouse and keyboard. Adding --grab and --force-grab-cursor to Gamescope."
+            )
+            gamescope_cli_options.extend(["--grab", "--force-grab-cursor"])
 
         return gamescope_cli_options
 
-    def _build_base_game_command(self, profile: GameProfile, proton_path: Optional[Path], symlinked_exe_path: Path, instance_num: int) -> List[str]:
+    def _build_base_game_command(
+        self,
+        profile: GameProfile,
+        proton_path: Optional[Path],
+        symlinked_exe_path: Path,
+        instance_num: int,
+    ) -> List[str]:
         """Builds the base game command (Proton or native)."""
         # Add game arguments defined in the profile, if any
         game_specific_args = []
         if profile.game_args:
             # Use shlex.split for safer parsing of arguments
             game_specific_args = shlex.split(profile.game_args)
-            self.logger.info(f"Instance {instance_num}: Adding game arguments: {game_specific_args}")
+            self.logger.info(
+                f"Instance {instance_num}: Adding game arguments: {game_specific_args}"
+            )
 
         if profile.is_native:
             base_cmd = [str(symlinked_exe_path)] + game_specific_args
         else:
-            base_cmd = [str(proton_path), 'run', str(symlinked_exe_path)] + game_specific_args
+            base_cmd = [
+                str(proton_path),
+                "run",
+                str(symlinked_exe_path),
+            ] + game_specific_args
 
         return base_cmd
 
-    def _build_bwrap_command(self, profile: GameProfile, instance_idx: int, device_info: dict, instance_num: int) -> List[str]:
+    def _build_bwrap_command(
+        self,
+        profile: GameProfile,
+        instance_idx: int,
+        device_info: dict,
+        instance_num: int,
+    ) -> List[str]:
         """Builds the bwrap command, including device bindings."""
         bwrap_cmd = [
-            'bwrap',
-            '--die-with-parent',
-            '--dev-bind', '/', '/',
-            '--proc', '/proc',
-            '--tmpfs', '/tmp',
-            '--cap-add', 'all',
-            '--share-net',
+            "bwrap",
+            "--die-with-parent",
+            "--dev-bind",
+            "/",
+            "/",
+            "--proc",
+            "/proc",
+            "--tmpfs",
+            "/tmp",
+            "--cap-add",
+            "all",
+            "--share-net",
         ]
 
-        device_paths_to_bind = self._collect_device_paths(profile, instance_idx, device_info, instance_num)
+        device_paths_to_bind = self._collect_device_paths(
+            profile, instance_idx, device_info, instance_num
+        )
 
         if device_paths_to_bind:
-            bwrap_cmd.extend(['--tmpfs', '/dev/input'])
+            bwrap_cmd.extend(["--tmpfs", "/dev/input"])
             for device_path in device_paths_to_bind:
-                bwrap_cmd.extend(['--dev-bind', device_path, device_path])
-                self.logger.info(f"Instance {instance_num}: bwrap will bind '{device_path}' to '{device_path}'.")
+                bwrap_cmd.extend(["--dev-bind", device_path, device_path])
+                self.logger.info(
+                    f"Instance {instance_num}: bwrap will bind '{device_path}' to '{device_path}'."
+                )
         else:
-            self.logger.info(f"Instance {instance_num}: No specific input devices to bind with bwrap. Creating an empty isolated /dev/input.")
-            bwrap_cmd.extend(['--tmpfs', '/dev/input'])
+            self.logger.info(
+                f"Instance {instance_num}: No specific input devices to bind with bwrap. Creating an empty isolated /dev/input."
+            )
+            bwrap_cmd.extend(["--tmpfs", "/dev/input"])
 
         return bwrap_cmd
 
-    def _collect_device_paths(self, profile: GameProfile, instance_idx: int, device_info: dict, instance_num: int) -> List[str]:
+    def _collect_device_paths(
+        self,
+        profile: GameProfile,
+        instance_idx: int,
+        device_info: dict,
+        instance_num: int,
+    ) -> List[str]:
         """Collects all necessary device paths for bwrap."""
         collected_paths = []
 
         # Joysticks
-        if device_info.get('joystick_path_str_for_instance'):
-            collected_paths.append(device_info['joystick_path_str_for_instance'])
-            self.logger.info(f"Instance {instance_num}: Queued joystick '{device_info['joystick_path_str_for_instance']}' for bwrap binding.")
+        if device_info.get("joystick_path_str_for_instance"):
+            collected_paths.append(device_info["joystick_path_str_for_instance"])
+            self.logger.info(
+                f"Instance {instance_num}: Queued joystick '{device_info['joystick_path_str_for_instance']}' for bwrap binding."
+            )
 
         # Mice - uses already validated variables
-        if device_info.get('mouse_path_str_for_instance'):
-            collected_paths.append(device_info['mouse_path_str_for_instance'])
-            self.logger.info(f"Instance {instance_num}: Queued mouse device '{device_info['mouse_path_str_for_instance']}' for bwrap binding.")
+        if device_info.get("mouse_path_str_for_instance"):
+            collected_paths.append(device_info["mouse_path_str_for_instance"])
+            self.logger.info(
+                f"Instance {instance_num}: Queued mouse device '{device_info['mouse_path_str_for_instance']}' for bwrap binding."
+            )
 
         # Keyboards - uses already validated variables
-        if device_info.get('keyboard_path_str_for_instance'):
-            collected_paths.append(device_info['keyboard_path_str_for_instance'])
-            self.logger.info(f"Instance {instance_num}: Queued keyboard device '{device_info['keyboard_path_str_for_instance']}' for bwrap binding.")
+        if device_info.get("keyboard_path_str_for_instance"):
+            collected_paths.append(device_info["keyboard_path_str_for_instance"])
+            self.logger.info(
+                f"Instance {instance_num}: Queued keyboard device '{device_info['keyboard_path_str_for_instance']}' for bwrap binding."
+            )
 
         return collected_paths
 
@@ -573,26 +860,36 @@ class InstanceService:
         or the parent process disappears.
         """
         if parent_pid:
-            self.logger.info(f"CLI process is monitoring parent GUI with PID: {parent_pid}")
+            self.logger.info(
+                f"CLI process is monitoring parent GUI with PID: {parent_pid}"
+            )
 
         try:
             while True:
                 # 1. Check if the parent GUI process is still alive
                 if parent_pid and not psutil.pid_exists(parent_pid):
-                    self.logger.warning(f"Parent GUI process (PID {parent_pid}) terminated. Shutting down all instances.")
+                    self.logger.warning(
+                        f"Parent GUI process (PID {parent_pid}) terminated. Shutting down all instances."
+                    )
                     break  # Exit the loop to trigger final termination
 
                 # 2. Check if any game instances have terminated
                 if not self._is_any_process_running():
                     self.logger.info("All game instances have terminated.")
                     if parent_pid:
-                        self.logger.info(f"Notifying parent GUI (PID {parent_pid}) to close.")
+                        self.logger.info(
+                            f"Notifying parent GUI (PID {parent_pid}) to close."
+                        )
                         try:
                             os.kill(parent_pid, signal.SIGUSR1)
                         except ProcessLookupError:
-                            self.logger.warning(f"Parent GUI (PID {parent_pid}) not found. Cannot send close signal.")
+                            self.logger.warning(
+                                f"Parent GUI (PID {parent_pid}) not found. Cannot send close signal."
+                            )
                         except Exception as e:
-                            self.logger.error(f"Failed to send SIGUSR1 to parent GUI (PID {parent_pid}): {e}")
+                            self.logger.error(
+                                f"Failed to send SIGUSR1 to parent GUI (PID {parent_pid}): {e}"
+                            )
                     break  # Exit if no instances are left
 
                 time.sleep(2)  # Poll every 2 seconds
@@ -621,52 +918,92 @@ class InstanceService:
                         os.killpg(pid, signal.SIGKILL)
                         self.logger.info(f"Sent SIGKILL to process group of PID {pid}")
                     except ProcessLookupError:
-                        self.logger.info(f"Process group for PID {pid} not found, likely already terminated.")
+                        self.logger.info(
+                            f"Process group for PID {pid} not found, likely already terminated."
+                        )
                     except Exception as e:
-                        self.logger.error(f"Failed to kill process group for PID {pid}: {e}")
+                        self.logger.error(
+                            f"Failed to kill process group for PID {pid}: {e}"
+                        )
             else:
                 self.logger.info("No PIDs to terminate.")
 
             # Gracefully stop the wineserver for each non-native instance
             if self.managed_instances:
-                self.logger.info(f"Stopping wineserver for {len(self.managed_instances)} instance(s).")
+                self.logger.info(
+                    f"Stopping wineserver for {len(self.managed_instances)} instance(s)."
+                )
 
                 wineserver_executable = None
                 if self.proton_path:
                     proton_bin_dir = self.proton_path.parent
-                    wineserver_executable = shutil.which('wineserver', path=str(proton_bin_dir))
+                    wineserver_executable = shutil.which(
+                        "wineserver", path=str(proton_bin_dir)
+                    )
 
                 if not wineserver_executable:
-                    self.logger.warning("Could not find 'wineserver' executable in Proton directory. Falling back to system 'wineserver'. This may not work as expected.")
-                    wineserver_executable = 'wineserver' # Fallback
+                    self.logger.warning(
+                        "Could not find 'wineserver' executable in Proton directory. Falling back to system 'wineserver'. This may not work as expected."
+                    )
+                    wineserver_executable = "wineserver"  # Fallback
 
                 for instance in self.managed_instances:
                     if not instance.is_native:
-                        wine_prefix_path = instance.prefix_dir / 'pfx'
+                        wine_prefix_path = instance.prefix_dir / "pfx"
                         if wine_prefix_path.is_dir():
                             try:
-                                self.logger.info(f"Attempting to stop wineserver for prefix: {wine_prefix_path}")
+                                self.logger.info(
+                                    f"Attempting to stop wineserver for prefix: {wine_prefix_path}"
+                                )
                                 env = os.environ.copy()
-                                env['WINEPREFIX'] = str(wine_prefix_path)
+                                env["WINEPREFIX"] = str(wine_prefix_path)
 
                                 result = subprocess.run(
                                     [wineserver_executable, "-k"],
-                                    env=env, check=False, capture_output=True, text=True, errors='replace'
+                                    env=env,
+                                    check=False,
+                                    capture_output=True,
+                                    text=True,
+                                    errors="replace",
                                 )
                                 if result.returncode == 0:
-                                    self.logger.info(f"Successfully sent 'wineserver -k' for prefix: {wine_prefix_path}")
+                                    self.logger.info(
+                                        f"Successfully sent 'wineserver -k' for prefix: {wine_prefix_path}"
+                                    )
                                 else:
-                                    self.logger.warning(f"'wineserver -k' for prefix {wine_prefix_path} exited with code {result.returncode}. stderr: {result.stderr}")
+                                    self.logger.warning(
+                                        f"'wineserver -k' for prefix {wine_prefix_path} exited with code {result.returncode}. stderr: {result.stderr}"
+                                    )
                             except FileNotFoundError:
-                                self.logger.warning(f"'{wineserver_executable}' command not found. Cannot stop wineserver for prefix: {wine_prefix_path}")
+                                self.logger.warning(
+                                    f"'{wineserver_executable}' command not found. Cannot stop wineserver for prefix: {wine_prefix_path}"
+                                )
                             except Exception as e:
-                                self.logger.error(f"Failed to stop wineserver for prefix {wine_prefix_path}: {e}")
+                                self.logger.error(
+                                    f"Failed to stop wineserver for prefix {wine_prefix_path}: {e}"
+                                )
             else:
                 self.logger.info("No managed instances to clean up wineservers for.")
+            # Clean up instance game directories if configured
+            for instance in self.managed_instances:
+                if not instance.keep_symlinks_on_exit:
+                    instance_game_root = instance.prefix_dir / "game_files"
+                    if instance_game_root.exists():
+                        try:
+                            self.logger.info(
+                                f"Instance {instance.instance_num}: KeepSymLinkOnExit is false. Removing game files directory: {instance_game_root}"
+                            )
+                            shutil.rmtree(instance_game_root)
+                        except OSError as e:
+                            self.logger.error(
+                                f"Instance {instance.instance_num}: Failed to remove game files directory {instance_game_root}: {e}"
+                            )
+
+            self.logger.info("Instance termination and cleanup complete.")
 
             # Clear internal state
             self.pids = []
             self.managed_instances = []
-            self.logger.info("Instance termination and cleanup complete.")
+
         finally:
             self.termination_in_progress = False
