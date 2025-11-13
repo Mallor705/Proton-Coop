@@ -25,10 +25,10 @@ char* get_log_path() {
     if (log_path[0] == '\0') {
         // Se já descobrimos o diretório da biblioteca, use-o
         if (library_dir[0] != '\0') {
-            snprintf(log_path, sizeof(log_path), "%s/game_workdir.log", library_dir);
+            snprintf(log_path, sizeof(log_path), "%s/game_cwd.log", library_dir);
         } else {
             // Fallback para o diretório atual
-            strcpy(log_path, "game_workdir.log");
+            strcpy(log_path, "game_cwd.log");
         }
     }
     return log_path;
