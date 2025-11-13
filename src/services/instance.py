@@ -246,49 +246,57 @@ class InstanceService:
                 relative_root_str = ""
 
             # --- Directory Handling ---
-            dirs_to_process = []
-            for i in range(len(dirs) - 1, -1, -1):
-                dir_name = dirs[i]
-                relative_dir_str = str(Path(relative_root_str) / dir_name)
-                if relative_dir_str in dir_exclusions:
-                    src_dir = current_root / dir_name
-                    dest_dir = instance_game_root / relative_dir_str
-                    self.logger.info(
-                        f"Instance {instance.instance_num}: Hardcopying directory as per DirSymlinkExclusions: {relative_dir_str}"
-                    )
-                    shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
-                    del dirs[i]  # Prune from walk
-                else:
-                    dirs_to_process.insert(0, dir_name)
+            # To prevent os.walk from being pruned incorrectly, we iterate through a copy of dirs
+            # and modify the original dirs list to control the traversal.
+            original_dirs = list(dirs)
+            dirs[:] = []  # Clear the list that os.walk will use for traversal
 
-            dirs[:] = dirs_to_process
-
-            for dir_name in dirs_to_process:
+            for dir_name in original_dirs:
                 src_dir = current_root / dir_name
-                dest_dir = instance_game_root / relative_root_str / dir_name
-                relative_dir_str = str(dest_dir.relative_to(instance_game_root))
+                relative_dir_str = str(Path(relative_root_str) / dir_name)
+                dest_dir = instance_game_root / relative_dir_str
 
                 if dest_dir.exists() or dest_dir.is_symlink():
+                    # If it exists but is a symlink, we shouldn't traverse it.
+                    # If it's a real directory, os.walk will handle it if we add it back.
+                    if not dest_dir.is_symlink() and dest_dir.is_dir():
+                        dirs.append(dir_name)
                     continue
 
-                if (
-                    profile.symlink_folders
-                    and not profile.hardcopy_game
-                    and relative_dir_str not in dir_copy_instead
+                # Decision to create a real directory instead of symlinking
+                create_real_dir = False
+                if not profile.symlink_folders or profile.hardcopy_game:
+                    create_real_dir = True
+                elif relative_dir_str in dir_copy_instead:
+                    self.logger.info(
+                        f"Instance {instance.instance_num}: Creating directory {relative_dir_str} as per DirSymlinkCopyInstead."
+                    )
+                    create_real_dir = True
+                elif relative_dir_str in dir_exclusions:
+                    self.logger.info(
+                        f"Instance {instance.instance_num}: Creating directory {relative_dir_str} as per DirSymlinkExclusions."
+                    )
+                    create_real_dir = True
+                elif any(
+                    ex.startswith(relative_dir_str + os.sep) for ex in dir_exclusions
                 ):
                     self.logger.info(
-                        f"Instance {instance.instance_num}: Symlinking directory {relative_dir_str} as per symlink_folders=True"
+                        f"Instance {instance.instance_num}: Creating parent directory {relative_dir_str} due to exclusion of a child directory."
+                    )
+                    create_real_dir = True
+
+                if create_real_dir:
+                    dest_dir.mkdir()
+                    dirs.append(
+                        dir_name
+                    )  # Add back to the list so os.walk traverses it
+                else:
+                    # If none of the above, we symlink the directory.
+                    self.logger.info(
+                        f"Instance {instance.instance_num}: Symlinking directory {relative_dir_str}"
                     )
                     os.symlink(src_dir, dest_dir, target_is_directory=True)
-                    # Don't walk into symlinked dirs
-                    if dir_name in dirs:
-                        dirs.remove(dir_name)
-                else:
-                    if relative_dir_str in dir_copy_instead:
-                        self.logger.info(
-                            f"Instance {instance.instance_num}: Creating directory {relative_dir_str} to copy its contents."
-                        )
-                    dest_dir.mkdir()
+                    # DO NOT add to dirs, as we don't want os.walk to traverse symlinks.
 
             # --- File Handling ---
             for file_name in files:
