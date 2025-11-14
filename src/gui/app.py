@@ -249,64 +249,46 @@ class ProtonCoopWindow(Adw.ApplicationWindow):
 
     def _add_game_from_archive(self, archive_path: Path):
         try:
-            handler_data, _ = self.game_manager._extract_and_parse_handler(archive_path)
+            handler_data, _ = self.game_manager._extract_and_parse_handler(
+                archive_path
+            )
             exe_name = handler_data.get("ExecutableName")
         except (FileNotFoundError, ValueError) as e:
             self._show_error_dialog(str(e))
             return
 
-        folder_dialog = Gtk.FileChooserDialog(
-            title="Select the game's root folder",
+        exe_dialog = Gtk.FileChooserDialog(
+            title=f"Select the executable '{exe_name}'",
             transient_for=self,
             modal=True,
-            action=Gtk.FileChooserAction.SELECT_FOLDER,
+            action=Gtk.FileChooserAction.OPEN,
         )
-        folder_dialog.add_buttons(
-            "_Cancel", Gtk.ResponseType.CANCEL, "_Select", Gtk.ResponseType.OK
+        exe_dialog.add_buttons(
+            "_Cancel", Gtk.ResponseType.CANCEL, "_Open", Gtk.ResponseType.OK
         )
-        folder_dialog.connect("response", self._on_game_root_selected, archive_path, exe_name)
-        folder_dialog.present()
+        exe_dialog.connect("response", self._on_exe_selected, archive_path, exe_name)
+        exe_dialog.present()
 
-    def _on_game_root_selected(self, dialog, response_id, archive_path, exe_name):
-        if response_id == Gtk.ResponseType.OK:
-            folder = dialog.get_file()
-            if folder:
-                game_cwd = Path(folder.get_path())
-
-                exe_dialog = Gtk.FileChooserDialog(
-                    title=f"Select the executable '{exe_name}'",
-                    transient_for=self,
-                    modal=True,
-                    action=Gtk.FileChooserAction.OPEN,
-                )
-                exe_dialog.add_buttons(
-                    "_Cancel", Gtk.ResponseType.CANCEL, "_Open", Gtk.ResponseType.OK
-                )
-
-                # Start browsing from the selected game root path
-                folder_gfile = Gio.File.new_for_path(str(game_cwd))
-                exe_dialog.set_current_folder(folder_gfile)
-
-                exe_dialog.connect("response", self._on_exe_selected, archive_path, game_cwd, exe_name)
-                exe_dialog.present()
-        dialog.destroy()
-
-    def _on_exe_selected(self, dialog, response_id, archive_path, game_cwd, exe_name):
+    def _on_exe_selected(self, dialog, response_id, archive_path, exe_name):
         if response_id == Gtk.ResponseType.OK:
             file = dialog.get_file()
             if file:
                 exe_path = Path(file.get_path())
 
-                if exe_path.name != exe_name:
+                # A verificação do nome do executável pode ser opcional ou mais flexível
+                # dependendo do caso de uso. Por enquanto, mantemos a verificação estrita.
+                if exe_name and exe_path.name != exe_name:
                     self._show_error_dialog(
                         f"Invalid executable selected. Please select '{exe_name}'."
                     )
-                    # Re-open the dialog in the same folder
-                    dialog.present()
+                    dialog.present()  # Re-apresenta o diálogo
                     return
 
                 try:
-                    self.game_manager.add_game_from_archive(archive_path, exe_path, game_cwd)
+                    # Passamos game_cwd=None para indicar que o CWD não foi definido
+                    self.game_manager.add_game_from_archive(
+                        archive_path, exe_path, game_cwd=None
+                    )
                     self.load_games_into_sidebar()
                 except (ValidationError, FileExistsError) as e:
                     self._show_error_dialog(str(e))

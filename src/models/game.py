@@ -30,7 +30,7 @@ class Game(BaseModel):
     """
     guid: Optional[str] = Field(default=None, alias="GUID")
     game_name: str = Field(..., alias="GAME_NAME")
-    game_cwd: Path = Field(..., alias="GAME_CWD")
+    game_cwd: Optional[Path] = Field(default=None, alias="GAME_CWD")
     exe_path: str = Field(..., alias="EXE_PATH")
     app_id: Optional[str] = Field(default=None, alias="APP_ID")
     game_args: Optional[str] = Field(default=None, alias="GAME_ARGS")
@@ -64,8 +64,13 @@ class Game(BaseModel):
 
     @property
     def absolute_exe_path(self) -> Path:
-        """Returns the absolute path to the game executable."""
-        return self.game_cwd / self.exe_path
+        """
+        Returns the absolute path to the game executable.
+        If game_cwd is not set, exe_path is assumed to be absolute.
+        """
+        if self.game_cwd:
+            return self.game_cwd / self.exe_path
+        return Path(self.exe_path)
 
     @validator('game_name')
     def sanitize_game_name(cls, v):
