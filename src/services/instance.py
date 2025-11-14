@@ -13,18 +13,22 @@ import psutil
 from ..core.config import Config
 from ..core.exceptions import DependencyError
 from ..core.logger import Logger
+from ..models.game import Game
 from ..models.instance import GameInstance
 from ..models.profile import GameProfile, PlayerInstanceConfig
+from ..models.profile import GameProfile
 from .dependency_manager import DependencyManager
+from .game_manager import GameManager
 from .proton import ProtonService
 
 
 class InstanceService:
     """Service responsible for managing game instances, including dependency validation, creation, launching, and monitoring."""
 
-    def __init__(self, logger: Logger):
+    def __init__(self, logger: Logger, game_manager: GameManager):
         """Initializes the instance service with logger and ProtonService."""
         self.logger = logger
+        self.game_manager = game_manager
         self.proton_service = ProtonService(logger)
         self.pids: List[int] = []
         self.managed_instances: List[GameInstance] = []
@@ -34,7 +38,95 @@ class InstanceService:
 
     def launch_game(self, profile: GameProfile) -> None:
         """A wrapper for launch_instances that can be called from the GUI."""
+        if not profile.game.game_cwd:
+            self._discover_and_save_game_cwd(profile.game)
+
         self.launch_instances(profile, profile.profile_name)
+
+    def _discover_and_save_game_cwd(self, game: Game):
+        """
+        Executes the game once with a preloaded library to intercept and save
+        the correct working directory (CWD).
+        """
+        self.logger.info(f"Game '{game.game_name}' is missing CWD. Starting discovery process...")
+
+        interceptor_lib_path = Config.APP_DIR / "intercept_cwd.so"
+        interceptor_src_path = Config.APP_DIR / "src" / "intercept_cwd.c"
+
+        # Compile the interceptor library if it doesn't exist
+        if not interceptor_lib_path.exists():
+            self.logger.info(f"Interceptor library not found. Compiling '{interceptor_src_path}'...")
+            compile_cmd = [
+                "gcc",
+                "-shared",
+                "-fPIC",
+                "-ldl",
+                str(interceptor_src_path),
+                "-o",
+                str(interceptor_lib_path),
+            ]
+            try:
+                subprocess.run(compile_cmd, check=True, capture_output=True, text=True)
+                self.logger.info(f"Successfully compiled '{interceptor_lib_path}'.")
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                error_msg = f"Failed to compile interceptor library: {e}"
+                if isinstance(e, subprocess.CalledProcessError):
+                    error_msg += f"\nSTDOUT: {e.stdout}\nSTDERR: {e.stderr}"
+                self.logger.error(error_msg)
+                # We can't proceed without the library
+                raise DependencyError("Could not compile interceptor library for CWD discovery.")
+
+        # Prepare the environment for the discovery run
+        env = os.environ.copy()
+        env["LD_PRELOAD"] = str(interceptor_lib_path)
+        log_file_path = interceptor_lib_path.parent / "game_cwd.log"
+
+        # Ensure the log file does not exist from a previous failed run
+        if log_file_path.exists():
+            log_file_path.unlink()
+
+        self.logger.info(f"Running '{game.absolute_exe_path}' with LD_PRELOAD to find CWD...")
+        try:
+            # We run the process and expect it to be killed by the interceptor library
+            subprocess.run(
+                [str(game.absolute_exe_path)],
+                env=env,
+                cwd=game.absolute_exe_path.parent,
+                timeout=10,  # Add a timeout as a safeguard
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.TimeoutExpired:
+            self.logger.warning("CWD discovery process timed out. The interceptor may not have worked.")
+        except Exception as e:
+            self.logger.error(f"An error occurred during CWD discovery execution: {e}")
+
+        # Check if the log file was created and read the CWD
+        if not log_file_path.exists():
+            self.logger.error("CWD discovery failed: 'game_cwd.log' was not created.")
+            return # Or raise an exception
+
+        content = log_file_path.read_text().strip()
+        # The expected format is "GETCWD: /path/to/cwd"
+        prefix = "GETCWD: "
+        if not content.startswith(prefix):
+            self.logger.error(f"CWD discovery failed: Log file has unexpected content: '{content}'")
+            return
+
+        discovered_cwd_str = content[len(prefix):]
+        discovered_cwd = Path(discovered_cwd_str)
+        self.logger.info(f"Successfully discovered CWD: '{discovered_cwd}'")
+
+        # Update the game object with the new CWD and relative exe_path
+        game.game_cwd = discovered_cwd
+        game.exe_path = str(game.absolute_exe_path.relative_to(discovered_cwd))
+
+        # Persist the changes to game.json
+        self.game_manager.save_game(game)
+        self.logger.info(f"Game '{game.game_name}' updated with new CWD and saved.")
+
+        # Clean up the log file
+        log_file_path.unlink()
 
     def validate_dependencies(self) -> None:
         """Validates if all necessary commands are available on the system."""
@@ -101,7 +193,7 @@ class InstanceService:
             f"Launching {num_instances} instance(s) of '{profile.game_name}'..."
         )
 
-        original_game_path = profile.game_cwd
+        original_game_path = profile.game.game_cwd
 
         for i, instance in enumerate(instances):
             cpu_affinity = core_assignments[i]
