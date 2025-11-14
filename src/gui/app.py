@@ -29,9 +29,7 @@ class ProtonCoopWindow(Adw.ApplicationWindow):
 
         self.logger = Logger("ProtonCoop-GUI", Config.LOG_DIR, reset=True)
         self.game_manager = GameManager(logger=self.logger)
-        self.instance_service = InstanceService(
-            logger=self.logger, game_manager=self.game_manager
-        )
+        self.instance_service = InstanceService(logger=self.logger)
 
         self.selected_game = None
         self.selected_profile = None
