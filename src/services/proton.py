@@ -33,14 +33,14 @@ class ProtonService:
         Finds the correct Steam Linux Runtime for a given Proton version.
 
         It determines whether to use 'sniper' (for Proton 8.0+) or 'soldier'
-        (for Proton 5.13-7.0) and locates the 'pressure-vessel-wrap' executable.
-        The result is cached.
+        (for older versions) and locates the appropriate wrapper script
+        ('run-in-sniper' or 'run-in-soldier'). The result is cached.
 
         Args:
             proton_version (str): The name of the Proton version.
 
         Returns:
-            Path: The path to the 'pressure-vessel-wrap' executable.
+            Path: The path to the runtime wrapper executable.
 
         Raises:
             RuntimeNotFoundError: If the appropriate Steam Linux Runtime cannot be found.
@@ -53,16 +53,17 @@ class ProtonService:
         if "experimental" in proton_version.lower() or major_version >= 8:
             runtime_name = "sniper"
             runtime_display_name = "Steam Linux Runtime 3.0 (sniper)"
+            executable_name = "run-in-sniper"
         else:
             runtime_name = "soldier"
             runtime_display_name = "Steam Linux Runtime 2.0 (soldier)"
+            executable_name = "run-in-soldier"
 
         self.logger.info(
             f"Searching for {runtime_display_name} for Proton '{proton_version}'..."
         )
 
         valid_steam_paths = self._get_valid_steam_paths()
-        executable_name = "pressure-vessel-wrap"
 
         for steam_path in valid_steam_paths:
             common_dir = steam_path / "steamapps/common"
@@ -81,12 +82,6 @@ class ProtonService:
                     if executable_path.exists():
                         self.logger.info(f"Steam Runtime found at: {executable_path}")
                         return executable_path
-
-                    # Also check inside the amd64/ bin directory as a fallback
-                    fallback_path = item / "amd64/bin" / executable_name
-                    if fallback_path.exists():
-                        self.logger.info(f"Steam Runtime found at: {fallback_path}")
-                        return fallback_path
 
         raise RuntimeNotFoundError(f"{runtime_display_name} not found.")
 
