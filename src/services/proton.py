@@ -1,3 +1,4 @@
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -26,41 +27,68 @@ class ProtonService:
         self.logger = logger
         self._proton_cache: Dict[str, Tuple[Optional[Path], Optional[Path]]] = {}
 
-    @lru_cache(maxsize=1)
-    def find_steam_runtime_path(self) -> Path:
+    @lru_cache(maxsize=8)
+    def find_steam_runtime_path(self, proton_version: str) -> Path:
         """
-        Finds the path to the Steam Linux Runtime 'pressure-vessel' executable.
+        Finds the correct Steam Linux Runtime for a given Proton version.
 
-        It prioritizes the 'Steam Linux Runtime - Soldier' version, which is
-        used by modern Proton versions. The result is cached.
+        It determines whether to use 'sniper' (for Proton 8.0+) or 'soldier'
+        (for Proton 5.13-7.0) and locates the 'pressure-vessel-wrap' executable.
+        The result is cached.
+
+        Args:
+            proton_version (str): The name of the Proton version.
 
         Returns:
             Path: The path to the 'pressure-vessel-wrap' executable.
 
         Raises:
-            RuntimeNotFoundError: If the Steam Linux Runtime cannot be found in
-                                  any of the standard Steam library locations.
+            RuntimeNotFoundError: If the appropriate Steam Linux Runtime cannot be found.
         """
-        self.logger.info("Searching for Steam Linux Runtime...")
+        major_version = 0
+        match = re.search(r"(\d+)", proton_version)
+        if match:
+            major_version = int(match.group(1))
+
+        if "experimental" in proton_version.lower() or major_version >= 8:
+            runtime_name = "sniper"
+            runtime_display_name = "Steam Linux Runtime 3.0 (sniper)"
+        else:
+            runtime_name = "soldier"
+            runtime_display_name = "Steam Linux Runtime 2.0 (soldier)"
+
+        self.logger.info(
+            f"Searching for {runtime_display_name} for Proton '{proton_version}'..."
+        )
+
         valid_steam_paths = self._get_valid_steam_paths()
-        runtime_name = "Steam Linux Runtime - Soldier"
         executable_name = "pressure-vessel-wrap"
 
         for steam_path in valid_steam_paths:
-            runtime_dir = steam_path / "steamapps/common" / runtime_name
-            if runtime_dir.is_dir():
-                executable_path = runtime_dir / executable_name
-                if executable_path.exists():
-                    self.logger.info(f"Steam Runtime found at: {executable_path}")
-                    return executable_path
+            common_dir = steam_path / "steamapps/common"
+            if not common_dir.is_dir():
+                continue
 
-                # Also check inside the amd64/ bin directory as a fallback
-                fallback_path = runtime_dir / "amd64/bin" / executable_name
-                if fallback_path.exists():
-                    self.logger.info(f"Steam Runtime found at: {fallback_path}")
-                    return fallback_path
+            for item in common_dir.iterdir():
+                item_name_lower = item.name.lower()
+                if (
+                    item.is_dir()
+                    and "runtime" in item_name_lower
+                    and runtime_name in item_name_lower
+                ):
+                    self.logger.info(f"Found potential runtime directory: {item.name}")
+                    executable_path = item / executable_name
+                    if executable_path.exists():
+                        self.logger.info(f"Steam Runtime found at: {executable_path}")
+                        return executable_path
 
-        raise RuntimeNotFoundError(f"'{runtime_name}' not found.")
+                    # Also check inside the amd64/ bin directory as a fallback
+                    fallback_path = item / "amd64/bin" / executable_name
+                    if fallback_path.exists():
+                        self.logger.info(f"Steam Runtime found at: {fallback_path}")
+                        return fallback_path
+
+        raise RuntimeNotFoundError(f"{runtime_display_name} not found.")
 
     def find_proton_path(self, version: str) -> Tuple[Path, Path]:
         """

@@ -61,8 +61,11 @@ class InstanceService:
             self.proton_path, steam_root = self.proton_service.find_proton_path(
                 profile.proton_version or "Experimental"
             )
+            proton_version = profile.proton_version or "Experimental"
             try:
-                self.runtime_path = self.proton_service.find_steam_runtime_path()
+                self.runtime_path = self.proton_service.find_steam_runtime_path(
+                    proton_version
+                )
             except RuntimeNotFoundError as e:
                 self.logger.warning(
                     f"{e} Protonfixes may not work correctly."
