@@ -39,3 +39,11 @@ class GameNotFoundError(LinuxCoopError):
     Raised when a specified game cannot be found in the library.
     """
     pass
+
+
+class RuntimeNotFoundError(LinuxCoopError):
+    """
+    Raised when the Steam Linux Runtime container tool (`pressure-vessel`)
+    cannot be located.
+    """
+    pass

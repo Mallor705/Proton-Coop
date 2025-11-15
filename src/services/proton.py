@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from ..core.config import Config
-from ..core.exceptions import ProtonNotFoundError
+from ..core.exceptions import ProtonNotFoundError, RuntimeNotFoundError
 from ..core.logger import Logger
 
 
@@ -25,6 +25,42 @@ class ProtonService:
         """
         self.logger = logger
         self._proton_cache: Dict[str, Tuple[Optional[Path], Optional[Path]]] = {}
+
+    @lru_cache(maxsize=1)
+    def find_steam_runtime_path(self) -> Path:
+        """
+        Finds the path to the Steam Linux Runtime 'pressure-vessel' executable.
+
+        It prioritizes the 'Steam Linux Runtime - Soldier' version, which is
+        used by modern Proton versions. The result is cached.
+
+        Returns:
+            Path: The path to the 'pressure-vessel-wrap' executable.
+
+        Raises:
+            RuntimeNotFoundError: If the Steam Linux Runtime cannot be found in
+                                  any of the standard Steam library locations.
+        """
+        self.logger.info("Searching for Steam Linux Runtime...")
+        valid_steam_paths = self._get_valid_steam_paths()
+        runtime_name = "Steam Linux Runtime - Soldier"
+        executable_name = "pressure-vessel-wrap"
+
+        for steam_path in valid_steam_paths:
+            runtime_dir = steam_path / "steamapps/common" / runtime_name
+            if runtime_dir.is_dir():
+                executable_path = runtime_dir / executable_name
+                if executable_path.exists():
+                    self.logger.info(f"Steam Runtime found at: {executable_path}")
+                    return executable_path
+
+                # Also check inside the amd64/ bin directory as a fallback
+                fallback_path = runtime_dir / "amd64/bin" / executable_name
+                if fallback_path.exists():
+                    self.logger.info(f"Steam Runtime found at: {fallback_path}")
+                    return fallback_path
+
+        raise RuntimeNotFoundError(f"'{runtime_name}' not found.")
 
     def find_proton_path(self, version: str) -> Tuple[Path, Path]:
         """
