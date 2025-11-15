@@ -30,7 +30,6 @@ class InstanceService:
         self.managed_instances: List[GameInstance] = []
         self.cpu_count = psutil.cpu_count(logical=True)
         self.proton_path: Optional[Path] = None
-        self.runtime_path: Optional[Path] = None
         self.termination_in_progress = False
 
     def launch_game(self, profile: GameProfile) -> None:
@@ -55,22 +54,11 @@ class InstanceService:
 
         if profile.is_native:
             self.proton_path = None
-            self.runtime_path = None
             steam_root = None
         else:
             self.proton_path, steam_root = self.proton_service.find_proton_path(
                 profile.proton_version or "Experimental"
             )
-            proton_version = profile.proton_version or "Experimental"
-            try:
-                self.runtime_path = self.proton_service.find_steam_runtime_path(
-                    proton_version
-                )
-            except RuntimeNotFoundError as e:
-                self.logger.warning(
-                    f"{e} Protonfixes may not work correctly."
-                )
-                self.runtime_path = None
 
         proton_path = (
             self.proton_path
@@ -754,24 +742,18 @@ class InstanceService:
     ) -> List[str]:
         """
         Builds the final command array in the correct order:
-        [runtime?] -> [gamescope?] -> [bwrap] -> [proton/native]
+        [gamescope?] -> [bwrap] -> [proton/native]
         """
         instance_idx = instance.instance_num - 1
 
         # 1. Validate input devices to determine flags for bwrap and gamescope
-        device_info = self._validate_input_devices(
-            profile, instance_idx, instance.instance_num
-        )
+        device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
 
         # 2. Build the innermost game command (Proton or native)
-        game_cmd = self._build_base_game_command(
-            profile, proton_path, symlinked_exe_path, instance.instance_num
-        )
+        game_cmd = self._build_base_game_command(profile, proton_path, symlinked_exe_path, instance.instance_num)
 
         # 3. Build the bwrap command, which will wrap the game command
-        bwrap_cmd = self._build_bwrap_command(
-            profile, instance_idx, device_info, instance.instance_num
-        )
+        bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num)
 
         # 4. Prepend bwrap to the game command
         final_cmd = bwrap_cmd + game_cmd
@@ -785,16 +767,19 @@ class InstanceService:
             final_cmd = gamescope_cmd + ["--"] + final_cmd
 
         # 6. If not a native game, wrap the entire command with the Steam Runtime
-        if not profile.is_native and self.runtime_path:
-            self.logger.info(
-                f"Instance {instance.instance_num}: Wrapping command with Steam Runtime: {self.runtime_path}"
-            )
-            # The runtime expects the command to be executed after '--'
-            final_cmd = [str(self.runtime_path), "--"] + final_cmd
-        elif not profile.is_native and not self.runtime_path:
-            self.logger.warning(
-                f"Instance {instance.instance_num}: Non-native game but Steam Runtime not found. Protonfixes may not work correctly."
-            )
+        if not profile.is_native:
+            try:
+                runtime_path = self.proton_service.find_steam_runtime_path(
+                    profile.proton_version or "Experimental"
+                )
+                self.logger.info(
+                    f"Instance {instance.instance_num}: Wrapping command with Steam Runtime: {runtime_path}"
+                )
+                final_cmd = [str(runtime_path), "--"] + final_cmd
+            except RuntimeNotFoundError:
+                self.logger.warning(
+                    f"Instance {instance.instance_num}: Steam Runtime not found. Protonfixes may not work correctly."
+                )
 
         self.logger.info(
             f"Instance {instance.instance_num}: Full command: {shlex.join(final_cmd)}"
@@ -882,7 +867,10 @@ class InstanceService:
         self, profile: GameProfile, should_add_grab_flags: bool, instance_num: int
     ) -> List[str]:
         """Builds the Gamescope command."""
-        gamescope_path = "gamescope"
+        gamescope_path = shutil.which("gamescope")
+        if not gamescope_path:
+            # This should ideally be caught by validate_dependencies, but as a fallback
+            raise DependencyError("gamescope executable not found in PATH")
 
         # Get instance dimensions directly from the profile
         effective_width, effective_height = profile.get_instance_dimensions(
