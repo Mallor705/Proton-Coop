@@ -626,6 +626,33 @@ class InstanceService:
             time.sleep(1)
         return None
 
+    def _process_game_args(
+        self,
+        args_template: str,
+        instance: GameInstance,
+        profile: GameProfile,
+        instance_game_root: Path,
+    ) -> List[str]:
+        """Processes game arguments, replacing placeholders with instance-specific values."""
+        if not args_template:
+            return []
+
+        width, height = profile.get_instance_dimensions(instance.instance_num)
+        instance_count = len(profile.player_configs) if profile.player_configs else 0
+        handler_dir = Config.GAMES_DIR / profile.game_name / "handler"
+
+        processed_args = args_template.replace("$PROFILE", profile.profile_name)
+        processed_args = processed_args.replace("$WIDTH", str(width))
+        processed_args = processed_args.replace("$HEIGHT", str(height))
+        processed_args = processed_args.replace("$RESOLUTION", f"{width}x{height}")
+        processed_args = processed_args.replace("$INSTANCECOUNT", str(instance_count))
+        # Partydeck uses a 0-based index. Our instance_num is 1-based.
+        processed_args = processed_args.replace("$INSTANCENUM", str(instance.instance_num - 1))
+        processed_args = processed_args.replace("$GAMEDIR", str(instance_game_root))
+        processed_args = processed_args.replace("$HANDLERDIR", str(handler_dir))
+
+        return shlex.split(processed_args)
+
     def _prepare_environment(
         self,
         instance: GameInstance,
@@ -653,12 +680,17 @@ class InstanceService:
             if proton_path:
                 proton_bin_dir = proton_path.parent
                 env["PATH"] = f"{str(proton_bin_dir)}:{original_path}"
+                env["PROTONPATH"] = str(proton_path.parent.parent)
 
             # --- Sane defaults ---
             if "PROTON_NO_ESYNC" not in env:
                 env["PROTON_NO_ESYNC"] = "0"
             if "PROTON_NO_FSYNC" not in env:
                 env["PROTON_NO_FSYNC"] = "0"
+
+            env["PROTON_VERB"] = "run"
+            env["SDL_JOYSTICK_HIDAPI"] = "0"
+            env["PROTON_DISABLE_HIDRAW"] = "1"
 
             # --- Steam Integration ---
             if profile and profile.app_id:
@@ -671,10 +703,8 @@ class InstanceService:
             env["PV_NET_SHARE"] = "1"
 
         # --- Gamescope WSI ---
-        # This is critical for preventing system crashes and graphical glitches.
-        # It forces Gamescope to use its own Wayland-based WSI, avoiding conflicts
-        # with Proton's Vulkan environment.
-        env["ENABLE_GAMESCOPE_WSI"] = "1"
+        # Partydeck uses '0', which is often more stable.
+        env["ENABLE_GAMESCOPE_WSI"] = "0"
 
         # --- Add environment variables defined in the profile ---
         if profile and profile.env_vars:
@@ -750,7 +780,7 @@ class InstanceService:
         device_info = self._validate_input_devices(profile, instance_idx, instance.instance_num)
 
         # 2. Build the innermost game command (Proton or native)
-        game_cmd = self._build_base_game_command(profile, proton_path, symlinked_exe_path, instance.instance_num)
+        game_cmd = self._build_base_game_command(profile, proton_path, symlinked_exe_path, instance)
 
         # 3. Build the bwrap command, which will wrap the game command
         bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance.instance_num)
@@ -892,20 +922,20 @@ class InstanceService:
         profile: GameProfile,
         proton_path: Optional[Path],
         symlinked_exe_path: Path,
-        instance_num: int,
+        instance: GameInstance,
     ) -> List[str]:
         """Builds the base game command (Proton or native)."""
-        # Add game arguments defined in the profile, if any
-        game_specific_args = []
-        if profile.game_args:
-            # Use shlex.split for safer parsing of arguments
-            game_specific_args = shlex.split(profile.game_args)
-            self.logger.info(f"Instance {instance_num}: Adding game arguments: {game_specific_args}")
+        instance_game_root = instance.prefix_dir / "game_files"
+
+        game_specific_args = self._process_game_args(
+            profile.game_args or "", instance, profile, instance_game_root
+        )
+        self.logger.info(f"Instance {instance.instance_num}: Adding processed game arguments: {game_specific_args}")
 
         if profile.is_native:
             base_cmd = [str(symlinked_exe_path)] + game_specific_args
         else:
-            base_cmd = [str(proton_path), "run", str(symlinked_exe_path)] + game_specific_args
+            base_cmd = ["umu-run", str(symlinked_exe_path)] + game_specific_args
 
         return base_cmd
 
@@ -917,7 +947,6 @@ class InstanceService:
             "--dev-bind", "/", "/",
             "--proc", "/proc",
             "--tmpfs", "/tmp",
-            "--cap-add", "all",
             "--share-net",
         ]
 
