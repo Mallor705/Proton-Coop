@@ -106,10 +106,13 @@ class InstanceService:
             self.logger.error(f"Failed to launch instance {instance_num}: {e}")
 
     def _share_steam_data(self, home_path: Path) -> None:
-        """Shares game data and compatibility tools from the main Steam installation."""
-        self.logger.info(f"Sharing Steam data for instance at {home_path}...")
+        """
+        Prepares the Steam directory structure for the sandbox.
+        Creates writable directories and copies files that need to be instance-specific.
+        Shared directories (common, compatdata) will be bind-mounted via bwrap.
+        """
+        self.logger.info(f"Preparing Steam data structure for instance at {home_path}...")
 
-        # Get the path to the real user's home directory
         real_user_home = Path.home()
         source_steam_dir = real_user_home / ".local/share/Steam"
         if not source_steam_dir.is_dir():
@@ -130,43 +133,29 @@ class InstanceService:
             self.logger.error(f"Failed to create destination directories: {e}")
             return
 
-        # Share compatibility tools
-        source_compat_dir = source_steam_dir / "compatibilitytools.d"
-        dest_compat_dir = dest_steam_dir / "compatibilitytools.d"
-        dest_compat_dir.mkdir(exist_ok=True) # Ensure the parent directory exists
-        if source_compat_dir.is_dir():
-            for item in source_compat_dir.iterdir():
-                if item.name == "LegacyRuntime":
-                    continue # Skip this folder
+        # Create mount point directories (will be bind-mounted via bwrap)
+        (dest_steam_dir / "compatibilitytools.d").mkdir(exist_ok=True)
 
-                dest_item_path = dest_compat_dir / item.name
-                if not dest_item_path.exists():
-                    try:
-                        dest_item_path.symlink_to(item)
-                        self.logger.info(f"Symlinked {item.name} to {dest_item_path}")
-                    except OSError as e:
-                        self.logger.error(f"Failed to symlink compat tool {item.name}: {e}")
-
-        # Share steamapps content
+        # Create mount points for all steamapps subdirectories
         source_steamapps_dir = source_steam_dir / "steamapps"
         if source_steamapps_dir.is_dir():
             for item in source_steamapps_dir.iterdir():
-                if item.name == "libraryfolders.vdf":
-                    continue
+                if item.is_dir():
+                    mount_point = dest_steamapps_dir / item.name
+                    mount_point.mkdir(exist_ok=True)
+                    self.logger.info(f"Created mount point for: {mount_point}")
 
-                dest_item_path = dest_steamapps_dir / item.name
-                if dest_item_path.exists():
-                    continue
-
-                try:
-                    if item.is_dir():
-                        dest_item_path.symlink_to(item, target_is_directory=True)
-                        self.logger.info(f"Symlinked directory {item.name} to {dest_item_path}")
-                    elif item.is_file():
-                        shutil.copy2(item, dest_item_path)
-                        self.logger.info(f"Copied file {item.name} to {dest_item_path}")
-                except OSError as e:
-                    self.logger.error(f"Failed to process {item.name}: {e}")
+        # Copy .acf manifest files - each instance needs its own copy
+        if source_steamapps_dir.is_dir():
+            for item in source_steamapps_dir.iterdir():
+                if item.is_file() and item.suffix == ".acf":
+                    dest_item_path = dest_steamapps_dir / item.name
+                    if not dest_item_path.exists():
+                        try:
+                            shutil.copy2(item, dest_item_path)
+                            self.logger.info(f"Copied manifest {item.name}")
+                        except OSError as e:
+                            self.logger.error(f"Failed to copy {item.name}: {e}")
 
     def _create_user_files(self, home_path: Path) -> None:
         """
@@ -318,7 +307,7 @@ class InstanceService:
         return ["steam", "-gamepadui"]
 
     def _build_bwrap_command(self, profile: Profile, instance_idx: int, device_info: dict, instance_num: int, home_path: Path) -> List[str]:
-        """Builds the bwrap command, including device bindings."""
+        """Builds the bwrap command, including device bindings and Steam directory mounts."""
         # Define paths for the fake user files
         passwd_path = home_path / "etc/passwd"
         group_path = home_path / "etc/group"
@@ -330,7 +319,7 @@ class InstanceService:
             "--dev-bind", "/", "/",
             "--proc", "/proc",
             "--tmpfs", "/tmp",
-            "--tmpfs", "/home", # Create a writable /home for the user mount
+            "--tmpfs", "/home",  # Create a writable /home for the user mount
             "--share-net",
             # Mount the fake user files
             "--ro-bind", str(passwd_path), "/etc/passwd",
@@ -339,6 +328,10 @@ class InstanceService:
             "--bind", str(home_path), self._SANDBOX_HOME,
         ]
 
+        # Add bind mounts for shared Steam directories
+        cmd.extend(self._get_steam_bind_mounts(home_path, instance_num))
+
+        # Handle input device bindings
         device_paths_to_bind = [
             p for p in [
                 device_info.get("joystick_path_str_for_instance"),
@@ -353,7 +346,6 @@ class InstanceService:
                 cmd.extend(["--dev-bind", device_path, device_path])
                 self.logger.info(f"Instance {instance_num}: bwrap will bind '{device_path}'.")
         else:
-            # Create an empty isolated /dev/input if no devices are specified
             cmd.extend(["--tmpfs", "/dev/input"])
 
         # Ensure custom ENV variables reach Steam inside the sandbox
@@ -368,6 +360,43 @@ class InstanceService:
         except Exception as e:
             self.logger.error(f"Instance {instance_num}: Failed to add --setenv entries: {e}")
         return cmd
+
+    def _get_steam_bind_mounts(self, home_path: Path, instance_num: int) -> List[str]:
+        """
+        Returns bwrap bind mount arguments for sharing Steam directories.
+        This replaces symlinks with proper bind mounts that work correctly in the sandbox.
+        """
+        bind_args = []
+        real_user_home = Path.home()
+        source_steam_dir = real_user_home / ".local/share/Steam"
+
+        if not source_steam_dir.is_dir():
+            return bind_args
+
+        # Sandbox destination base path
+        sandbox_steam_dir = f"{self._SANDBOX_HOME}/.local/share/Steam"
+
+        # Bind mount compatibilitytools.d (read-only is fine)
+        source_compat = source_steam_dir / "compatibilitytools.d"
+        if source_compat.is_dir():
+            bind_args.extend([
+                "--ro-bind", str(source_compat), f"{sandbox_steam_dir}/compatibilitytools.d"
+            ])
+            self.logger.info(f"Instance {instance_num}: Will bind-mount compatibilitytools.d")
+
+        # Bind mount ALL steamapps subdirectories
+        source_steamapps = source_steam_dir / "steamapps"
+        if source_steamapps.is_dir():
+            sandbox_steamapps = f"{sandbox_steam_dir}/steamapps"
+
+            for item in source_steamapps.iterdir():
+                if item.is_dir():
+                    bind_args.extend([
+                        "--bind", str(item), f"{sandbox_steamapps}/{item.name}"
+                    ])
+                    self.logger.info(f"Instance {instance_num}: Will bind-mount steamapps/{item.name}")
+
+        return bind_args
 
     def terminate_all(self) -> None:
         """Terminates all managed steam instances."""
