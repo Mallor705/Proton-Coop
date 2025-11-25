@@ -72,6 +72,14 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         )
         self.orientation_row.connect("notify::selected-item", self._on_setting_changed)
         layout_group.add(self.orientation_row)
+
+        # Gamescope toggle
+        self.use_gamescope_row = Adw.SwitchRow(
+            title="Use Gamescope",
+            subtitle="Disable to run Steam directly in bwrap without Gamescope"
+        )
+        self.use_gamescope_row.connect("notify::active", self._on_setting_changed)
+        layout_group.add(self.use_gamescope_row)
         
         # Global environment variables
         self.env_group = Adw.PreferencesGroup(title="Environment Variables (Global)")
@@ -109,6 +117,9 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         is_splitscreen = self.profile.mode == "splitscreen"
         self.screen_mode_row.set_selected(1 if is_splitscreen else 0)
         self.orientation_row.set_visible(is_splitscreen)
+
+        # Load gamescope setting
+        self.use_gamescope_row.set_active(self.profile.use_gamescope)
 
         if is_splitscreen and self.profile.splitscreen:
             orientation = self.profile.splitscreen.orientation.capitalize()
@@ -181,6 +192,9 @@ class LayoutSettingsPage(Adw.PreferencesPage):
             self.profile.splitscreen = SplitscreenConfig(orientation=orientation)
         else:
             self.profile.splitscreen = None
+
+        # Save gamescope setting
+        self.profile.use_gamescope = self.use_gamescope_row.get_active()
 
         # Collect global environment variables
         self.profile.env = self._collect_env_from_rows(self.global_env_rows)

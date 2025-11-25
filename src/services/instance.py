@@ -36,10 +36,12 @@ class InstanceService:
         """A wrapper for launch_steam_instances that can be called from the GUI."""
         self.launch_steam_instances(profile)
 
-    def validate_dependencies(self) -> None:
+    def validate_dependencies(self, use_gamescope: bool = True) -> None:
         """Validates if all necessary commands are available on the system."""
         self.logger.info("Validating dependencies...")
-        required_commands = ["gamescope", "bwrap", "steam"]
+        required_commands = ["bwrap", "steam"]
+        if use_gamescope:
+            required_commands.insert(0, "gamescope")
         for cmd in required_commands:
             if not shutil.which(cmd):
                 raise DependencyError(f"Required command '{cmd}' not found")
@@ -47,7 +49,7 @@ class InstanceService:
 
     def launch_steam_instances(self, profile: Profile) -> None:
         """Launches all Steam instances according to the provided profile."""
-        self.validate_dependencies()
+        self.validate_dependencies(use_gamescope=profile.use_gamescope)
 
         Config.LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -189,12 +191,13 @@ class InstanceService:
     def _build_command(self, profile: Profile, device_info: dict, instance_num: int, home_path: Path) -> List[str]:
         """
         Builds the final command array in the correct order:
-        [gamescope] -> [bwrap] -> [steam]
+        [gamescope] -> [bwrap] -> [steam]  (when gamescope is enabled)
+        [bwrap] -> [steam]                  (when gamescope is disabled)
         """
         instance_idx = instance_num - 1
 
         # 1. Build the innermost steam command
-        steam_cmd = self._build_base_steam_command(instance_num)
+        steam_cmd = self._build_base_steam_command(instance_num, profile.use_gamescope)
 
         # 2. Build the bwrap command, which will wrap the steam command
         bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance_num, home_path)
@@ -202,12 +205,16 @@ class InstanceService:
         # 3. Prepend bwrap to the steam command
         final_cmd = bwrap_cmd + steam_cmd
 
-        # 4. Build the Gamescope command and prepend it
-        should_add_grab_flags = device_info.get("should_add_grab_flags", False)
-        gamescope_cmd = self._build_gamescope_command(profile, should_add_grab_flags, instance_num)
+        # 4. Build the Gamescope command and prepend it (if enabled)
+        if profile.use_gamescope:
+            should_add_grab_flags = device_info.get("should_add_grab_flags", False)
+            gamescope_cmd = self._build_gamescope_command(profile, should_add_grab_flags, instance_num)
 
-        # Add the '--' separator before the command Gamescope will run
-        final_cmd = gamescope_cmd + ["--"] + final_cmd
+            # Add the '--' separator before the command Gamescope will run
+            final_cmd = gamescope_cmd + ["--"] + final_cmd
+            self.logger.info(f"Instance {instance_num}: Launching with Gamescope")
+        else:
+            self.logger.info(f"Instance {instance_num}: Launching without Gamescope (bwrap only)")
 
         self.logger.info(f"Instance {instance_num}: Full command: {shlex.join(final_cmd)}")
         return final_cmd
@@ -263,7 +270,7 @@ class InstanceService:
             "-H", str(height),
             "-w", str(width),
             "-h", str(height),
-            "--mangoapp",
+            # "--mangoapp",
         ]
 
         if not profile.is_splitscreen_mode:
@@ -277,10 +284,14 @@ class InstanceService:
 
         return cmd
 
-    def _build_base_steam_command(self, instance_num: int) -> List[str]:
+    def _build_base_steam_command(self, instance_num: int, use_gamescope: bool = True) -> List[str]:
         """Builds the base steam command."""
-        self.logger.info(f"Instance {instance_num}: Using base Steam command.")
-        return ["steam", "-gamepadui", "-steamos", "-pipewire-dmabuf"]
+        if use_gamescope:
+            self.logger.info(f"Instance {instance_num}: Using Steam command with Gamescope flags.")
+            return ["steam", "-gamepadui", "-steamos3", "-steamdeck", "-pipewire-dmabuf"]
+        else:
+            self.logger.info(f"Instance {instance_num}: Using plain Steam command.")
+            return ["steam"]
 
     def _build_bwrap_command(self, profile: Profile, instance_idx: int, device_info: dict, instance_num: int, home_path: Path) -> List[str]:
         """Builds the bwrap command, including device bindings and Steam directory mounts."""
