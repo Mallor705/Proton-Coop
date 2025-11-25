@@ -1,10 +1,10 @@
-# Proton-Coop
+# MultiScope
 
 [Ver en portugués](README.pt.md) | [Ver en inglés](../README.md) | [Ver en francés](README.fr.md)
 
-# Proton-Coop
+# MultiScope
 
-![Banner de Proton-Coop](https://github.com/Mallor705/Proton-Coop/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
+![Banner de MultiScope](https://github.com/Mallor705/MultiScope/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
 
 Permite jugar títulos de Windows en modo cooperativo local en Linux, ejecutando múltiples instancias del mismo juego a través de Proton y Gamescope, con perfiles independientes y soporte para controladores.
 
@@ -32,7 +32,7 @@ Permite jugar títulos de Windows en modo cooperativo local en Linux, ejecutando
 
 ## Requisitos del Sistema
 
-Para asegurar el correcto funcionamiento de Proton-Coop, los siguientes requisitos previos son esenciales:
+Para asegurar el correcto funcionamiento de MultiScope, los siguientes requisitos previos son esenciales:
 
 - **Steam:** Debe estar instalado y configurado en tu sistema.
 - **Proton:** Instala Proton (o GE-Proton) a través de Steam.
@@ -46,8 +46,8 @@ Para asegurar el correcto funcionamiento de Proton-Coop, los siguientes requisit
 
 1.  **Clona el repositorio:**
     ```bash
-    git clone https://github.com/Mallor705/Proton-Coop.git
-    cd Proton-Coop
+    git clone https://github.com/Mallor705/MultiScope.git
+    cd MultiScope
     ```
 2.  **Instala las dependencias:**
     ```bash
@@ -181,9 +181,9 @@ Crea un archivo JSON en la carpeta `profiles/` con un nombre descriptivo (ej: `M
 From the project root, execute the command, replacing `<profile_name>` with the name of your profile JSON file (without the `.json` extension):
 
 ```bash
-python ./protoncoop.py <profile_name>
+python ./multiscope.py <profile_name>
 # Or, if installed via setuptools:
-proton-coop <profile_name>
+multi-scope <profile_name>
 ```
 
 Upon execution, the script will:
@@ -192,7 +192,7 @@ Upon execution, the script will:
 - Load the specified game profile.
 - Create separate Proton prefixes for each game instance.
 - Launch both game windows via Gamescope.
-- Generate detailed logs in `~/.local/share/proton-coop/logs/` for debugging.
+- Generate detailed logs in `~/.local/share/multi-scope/logs/` for debugging.
 
 ### 3. Controller Mapping
 
@@ -220,7 +220,7 @@ bwrap --version
       *   `Super + PgUp`: Maximizes the active window.
       *   `Alt + Tab`: Switches between open windows of different applications.
       *   `Super + D`: Minimizes all windows and shows the desktop.
--   **Debugging logs:** Consult the `~/.local/share/proton-coop/logs/` directory for detailed information about errors and script behavior.
+-   **Debugging logs:** Consult the `~/.local/share/multi-scope/logs/` directory for detailed information about errors and script behavior.
 
 ## Important Notes
 

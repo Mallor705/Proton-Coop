@@ -1,8 +1,8 @@
-# Proton-Coop
+# MultiScope
 
 [Ver em inglês](../README.md) | [Ver em espanhol](README.es.md) | [Ver em francês](README.fr.md)
 
-![Banner Proton-Coop](https://github.com/Mallor705/Proton-Coop/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
+![Banner MultiScope](https://github.com/Mallor705/MultiScope/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
 
 Permite jogar títulos Windows em modo cooperativo local no Linux, executando múltiplas instâncias do mesmo jogo via Proton e Gamescope, com perfis independentes e suporte a controles.
 
@@ -30,7 +30,7 @@ Permite jogar títulos Windows em modo cooperativo local no Linux, executando m�
 
 ## Pré-requisitos do Sistema
 
-Para garantir o correto funcionamento do Proton-Coop, os seguintes pré-requisitos são essenciais:
+Para garantir o correto funcionamento do MultiScope, os seguintes pré-requisitos são essenciais:
 
 - **Steam:** Deve estar instalado e configurado em seu sistema.
 - **Proton:** Instale o Proton (ou GE-Proton) via Steam.
@@ -44,8 +44,8 @@ Para garantir o correto funcionamento do Proton-Coop, os seguintes pré-requisit
 
 1.  **Clone o repositório:**
     ```bash
-    git clone https://github.com/Mallor705/Proton-Coop.git
-    cd Proton-Coop
+    git clone https://github.com/Mallor705/MultiScope.git
+    cd MultiScope
     ```
 2.  **Instale as dependências:**
     ```bash
@@ -178,9 +178,9 @@ Crie um arquivo JSON na pasta `profiles/` com um nome descritivo (ex: `MeuJogo.j
 A partir da raiz do projeto, execute o comando, substituindo `<nome_do_perfil>` pelo nome do seu arquivo JSON de perfil (sem a extensão `.json`):
 
 ```bash
-python ./protoncoop.py <nome_do_perfil>
+python ./multiscope.py <nome_do_perfil>
 # Ou, se instalado via setuptools:
-proton-coop <nome_do_perfil>
+multi-scope <nome_do_perfil>
 ```
 
 Após a execução, o script irá:
@@ -189,7 +189,7 @@ Após a execução, o script irá:
 - Carregar o perfil de jogo especificado.
 - Criar prefixos Proton separados para cada instância do jogo.
 - Lançar ambas as janelas do jogo via Gamescope.
-- Gerar logs detalhados em `~/.local/share/proton-coop/logs/` para depuração.
+- Gerar logs detalhados em `~/.local/share/multi-scope/logs/` para depuração.
 
 ### 3. Mapeamento de Controles
 
@@ -217,7 +217,7 @@ bwrap --version
       *   `Super + PgUp`: Maximiza a janela ativa.
       *   `Alt + Tab`: Alterna entre as janelas abertas de diferentes aplicativos.
       *   `Super + D`: Minimiza todas as janelas e mostra a área de trabalho.
--   **Logs de depuração:** Consulte o diretório `~/.local/share/proton-coop/logs/` para obter informações detalhadas sobre erros e comportamento do script.
+-   **Logs de depuração:** Consulte o diretório `~/.local/share/multi-scope/logs/` para obter informações detalhadas sobre erros e comportamento do script.
 
 ## Notas Importantes
 
