@@ -6,7 +6,7 @@ from pathlib import Path
 
 class Logger:
     """
-    A custom logger for Proton-Coop providing console and file output.
+    A custom logger for MultiScope providing console and file output.
 
     This class configures a logger that writes to both stderr and a log file
     in the specified directory. It's designed to be efficient by avoiding

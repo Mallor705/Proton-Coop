@@ -1,8 +1,8 @@
-# Proton-Coop
+# MultiScope
 
-![Proton-Coop Banner](https://github.com/Mallor705/Proton-Coop/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
+![MultiScope Banner](https://github.com/Mallor705/MultiScope/assets/80993074/399081e7-295e-4c55-b040-02d242407559)
 
-**Proton-Coop** is a powerful tool for Linux that enables local co-op for PC games that don't natively support it. It works by running multiple instances of a game simultaneously, each sandboxed with its own Proton prefix, controller, and display settings. This allows you to play games with separate saves and configurations on the same machine, as if you were on different computers.
+**MultiScope** is a powerful tool for Linux that enables local co-op for PC games that don't natively support it. It works by running multiple instances of a game simultaneously, each sandboxed with its own Proton prefix, controller, and display settings. This allows you to play games with separate saves and configurations on the same machine, as if you were on different computers.
 
 ## 🚀 Key Features
 
@@ -41,8 +41,8 @@ Before you begin, ensure you have the following installed on your system:
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/Mallor705/Proton-Coop.git
-    cd Proton-Coop
+    git clone https://github.com/Mallor705/MultiScope.git
+    cd MultiScope
     ```
 2.  **Install Python dependencies:**
     ```bash
@@ -55,7 +55,7 @@ Before you begin, ensure you have the following installed on your system:
       ```
     - To use the CLI:
       ```bash
-      ./protoncoop.py <game_name> --profile <profile_name>
+      ./multiscope.py <game_name> --profile <profile_name>
       ```
 
 ## 🎮 How to Use
@@ -82,13 +82,13 @@ For advanced users and automation, the CLI provides full control.
 1.  **Create a Game and Profile:** You can create a game and profile using the GUI first, or manually create the necessary `.json` files.
 2.  **Launch a Game:**
     ```bash
-    ./protoncoop.py <game_name> --profile <profile_name>
+    ./multiscope.py <game_name> --profile <profile_name>
     ```
     (Replace `<game_name>` with the name of the game and `<profile_name>` with the name of the profile).
 
 ### Configuration File Structure
 
-Proton-Coop uses a game-centric configuration structure. Each game has its own directory in `~/.config/proton-coop/games/`, which contains a `game.json` file and a `profiles` subdirectory.
+MultiScope uses a game-centric configuration structure. Each game has its own directory in `~/.config/multi-scope/games/`, which contains a `game.json` file and a `profiles` subdirectory.
 
 #### `game.json`
 

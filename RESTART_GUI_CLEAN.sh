@@ -10,7 +10,7 @@ echo ""
 echo "1️⃣  Matando todos os processos Python..."
 killall -9 python 2>/dev/null || true
 killall -9 python3 2>/dev/null || true
-pkill -9 -f protoncoop 2>/dev/null || true
+pkill -9 -f multiscope 2>/dev/null || true
 sleep 1
 echo "   ✅ Processos finalizados"
 
@@ -58,4 +58,4 @@ echo "🚀 Iniciando a GUI..."
 sleep 1
 
 cd /workspace
-python3 protoncoop.py gui
+python3 multiscope.py gui

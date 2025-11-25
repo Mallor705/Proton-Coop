@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Proton-Coop PyInstaller Build Script
-# This script compiles the Proton-Coop project into a standalone executable
+# MultiScope PyInstaller Build Script
+# This script compiles the MultiScope project into a standalone executable
 
 set -e  # Exit on any error
 
-echo "🚀 Starting Proton-Coop Build Process..."
+echo "🚀 Starting MultiScope Build Process..."
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,7 +37,7 @@ rm -rf build/ dist/ *.spec
 
 # Create PyInstaller spec file
 echo "📝 Creating PyInstaller spec file..."
-cat > proton-coop.spec << 'EOF'
+cat > multi-scope.spec << 'EOF'
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
@@ -78,7 +78,7 @@ hidden_imports = [
 block_cipher = None
 
 a = Analysis(
-    ['protoncoop.py'],
+    ['multiscope.py'],
     pathex=[str(project_root)],
     binaries=[],
     datas=data_files,
@@ -102,7 +102,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='proton-coop',
+    name='multi-scope',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -120,28 +120,28 @@ EOF
 
 # Build with PyInstaller
 echo "🔨 Building executable with PyInstaller..."
-pyinstaller proton-coop.spec --clean --noconfirm
+pyinstaller multi-scope.spec --clean --noconfirm
 
 # Check if build was successful
-if [ -f "dist/proton-coop" ]; then
+if [ -f "dist/multi-scope" ]; then
     echo "✅ Build successful!"
-    echo "📁 Executable created at: dist/proton-coop"
-    echo "📏 File size: $(du -h dist/proton-coop | cut -f1)"
+    echo "📁 Executable created at: dist/multi-scope"
+    echo "📏 File size: $(du -h dist/multi-scope | cut -f1)"
 
     # Make executable
-    chmod +x dist/proton-coop
+    chmod +x dist/multi-scope
 
     echo ""
-    echo "🎉 Proton-Coop has been successfully compiled!"
+    echo "🎉 MultiScope has been successfully compiled!"
     echo ""
     echo "To run the compiled version:"
-    echo "  ./dist/proton-coop"
+    echo "  ./dist/multi-scope"
     echo ""
     echo "To open GUI:"
-    echo "  ./dist/proton-coop gui"
+    echo "  ./dist/multi-scope gui"
     echo ""
     echo "To run a profile:"
-    echo "  ./dist/proton-coop <profile_name>"
+    echo "  ./dist/multi-scope <profile_name>"
     echo ""
 
 else
@@ -150,10 +150,10 @@ else
 fi
 
 # Optional: Create a symlink for easier access
-if [ ! -L "proton-coop" ]; then
+if [ ! -L "multi-scope" ]; then
     echo "🔗 Creating symlink for easier access..."
-    ln -s dist/proton-coop proton-coop
-    echo "   You can now run: ./proton-coop"
+    ln -s dist/multi-scope multi-scope
+    echo "   You can now run: ./multi-scope"
 fi
 
 echo "✨ Build process complete!"

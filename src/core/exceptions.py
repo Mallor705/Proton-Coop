@@ -1,6 +1,6 @@
 class LinuxCoopError(Exception):
     """
-    Base exception for all custom errors raised by the Proton-Coop application.
+    Base exception for all custom errors raised by the MultiScope application.
 
     Catching this exception allows for handling of all application-specific
     errors.
