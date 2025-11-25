@@ -53,6 +53,7 @@ class Profile(BaseModel):
     instance_width: Optional[int] = Field(default=1280, alias="INSTANCE_WIDTH")
     instance_height: Optional[int] = Field(default=720, alias="INSTANCE_HEIGHT")
     mode: Optional[str] = Field(default="fullscreen", alias="MODE")
+    use_gamescope: bool = Field(default=True, alias="USE_GAMESCOPE")
     splitscreen: Optional[SplitscreenConfig] = Field(default=None, alias="SPLITSCREEN")
     env: Optional[Dict[str, str]] = Field(default=None, alias="ENV")
     player_configs: List[PlayerInstanceConfig] = Field(default_factory=lambda: [PlayerInstanceConfig(), PlayerInstanceConfig()], alias="PLAYERS")
