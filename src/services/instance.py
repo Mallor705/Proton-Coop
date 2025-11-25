@@ -74,9 +74,6 @@ class InstanceService:
         home_path.mkdir(parents=True, exist_ok=True)
         self.logger.info(f"Instance {instance_num}: Using isolated home path '{home_path}'")
 
-        # Create fake user files for bwrap isolation
-        self._create_user_files(home_path)
-
         # Share data from the main Steam installation
         self._share_steam_data(home_path)
 
@@ -156,28 +153,6 @@ class InstanceService:
                             self.logger.info(f"Copied manifest {item.name}")
                         except OSError as e:
                             self.logger.error(f"Failed to copy {item.name}: {e}")
-
-    def _create_user_files(self, home_path: Path) -> None:
-        """
-        Creates passwd and group files inside the steam home path for user isolation.
-        This allows bwrap to run in a user namespace with a fake user.
-        """
-        etc_path = home_path / "etc"
-        etc_path.mkdir(exist_ok=True)
-
-        passwd_content = (
-            f"{self._SANDBOX_USER}:x:{self._SANDBOX_UID}:{self._SANDBOX_GID}::"
-            f"{self._SANDBOX_HOME}:/bin/sh\n"
-        )
-        group_content = f"{self._SANDBOX_USER}:x:{self._SANDBOX_GID}:\n"
-
-        try:
-            (etc_path / "passwd").write_text(passwd_content)
-            (etc_path / "group").write_text(group_content)
-            self.logger.info(f"Created fake user files in {etc_path}")
-        except IOError as e:
-            self.logger.error(f"Failed to write user files in {etc_path}: {e}")
-            raise
 
     def _prepare_environment(self, profile: Profile, device_info: dict, instance_num: int) -> dict:
         """Prepares a minimal environment for the Steam instance."""
@@ -288,6 +263,7 @@ class InstanceService:
             "-H", str(height),
             "-w", str(width),
             "-h", str(height),
+            "--mangoapp",
         ]
 
         if not profile.is_splitscreen_mode:
@@ -304,14 +280,10 @@ class InstanceService:
     def _build_base_steam_command(self, instance_num: int) -> List[str]:
         """Builds the base steam command."""
         self.logger.info(f"Instance {instance_num}: Using base Steam command.")
-        return ["steam", "-gamepadui"]
+        return ["steam", "-gamepadui", "-steamos", "-pipewire-dmabuf"]
 
     def _build_bwrap_command(self, profile: Profile, instance_idx: int, device_info: dict, instance_num: int, home_path: Path) -> List[str]:
         """Builds the bwrap command, including device bindings and Steam directory mounts."""
-        # Define paths for the fake user files
-        passwd_path = home_path / "etc/passwd"
-        group_path = home_path / "etc/group"
-
         cmd = [
             "bwrap",
             "--die-with-parent",
@@ -321,9 +293,6 @@ class InstanceService:
             "--tmpfs", "/tmp",
             "--tmpfs", "/home",  # Create a writable /home for the user mount
             "--share-net",
-            # Mount the fake user files
-            "--ro-bind", str(passwd_path), "/etc/passwd",
-            "--ro-bind", str(group_path), "/etc/group",
             # Mount the isolated home directory to the fake user's home
             "--bind", str(home_path), self._SANDBOX_HOME,
         ]
