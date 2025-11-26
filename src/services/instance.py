@@ -261,13 +261,17 @@ class InstanceService:
         Each instance has its own completely independent Steam installation.
         Steam will auto-install on first run - no bind mounts needed.
         """
+        uid = str(os.getuid())
+        gid = str(os.getgid())
+        runtime_dir = f"/run/user/{uid}"
+
         cmd = [
             "bwrap",
             "--ro-bind", "/", "/",
             "--die-with-parent",
             "--unshare-user",  # Isolate user namespace
-            "--uid", "1001",
-            "--gid", "1001",
+            "--uid", uid,
+            "--gid", gid,
             "--proc", "/proc",
             "--tmpfs", "/tmp",
             "--tmpfs", "/home",  # Create a writable /home for the user mount
@@ -279,6 +283,20 @@ class InstanceService:
         # Bind /dev to make /dev/null, /dev/zero, etc. available to Steam's runtime.
         # This is safer than it looks, as bwrap filters sensitive device nodes.
         cmd.extend(["--dev-bind", "/dev", "/dev"])
+
+        # [FIX] Provide passwd and group files for user resolution inside the sandbox.
+        cmd.extend(["--ro-bind", "/etc/passwd", "/etc/passwd"])
+        cmd.extend(["--ro-bind", "/etc/group", "/etc/group"])
+
+        # [FIX] Bind the host's D-Bus socket and runtime dir for essential services.
+        if os.path.exists(runtime_dir):
+            cmd.extend(["--bind", runtime_dir, runtime_dir])
+            cmd.extend(["--setenv", "XDG_RUNTIME_DIR", runtime_dir])
+        else:
+            self.logger.warning(
+                f"Instance {instance_idx + 1}: Host XDG_RUNTIME_DIR '{runtime_dir}' not found. "
+                "D-Bus and other services may not work correctly."
+            )
 
         # Handle specific input device bindings, if any are configured
         device_paths_to_bind = [
@@ -302,10 +320,6 @@ class InstanceService:
         cmd.extend(["--setenv", "XDG_DATA_HOME", f"{self._SANDBOX_HOME}/.local/share"])
         cmd.extend(["--setenv", "XDG_CACHE_HOME", f"{self._SANDBOX_HOME}/.cache"])
         cmd.extend(["--setenv", "XDG_STATE_HOME", f"{self._SANDBOX_HOME}/.local/state"])
-
-        # Unset XDG_RUNTIME_DIR to prevent sandboxed apps from trying to access
-        # the host's /run/user/<uid> directory, which would cause permission errors.
-        cmd.extend(["--unsetenv", "XDG_RUNTIME_DIR"])
 
         # Ensure custom ENV variables reach Steam inside the sandbox
         try:
