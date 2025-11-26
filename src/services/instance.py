@@ -132,8 +132,32 @@ class InstanceService:
             self.logger.error(f"Failed to create destination directories: {e}")
             return
 
-        # Create mount point directories (will be bind-mounted via bwrap)
-        (dest_steam_dir / "compatibilitytools.d").mkdir(exist_ok=True)
+        # Essential Steam directories that will be bind-mounted via bwrap
+        essential_dirs = [
+            "ubuntu12_32",
+            "ubuntu12_64",
+            "linux32",
+            "linux64",
+            "bin",
+            "package",
+            "public",
+            "resource",
+            "graphics",
+            "friends",
+            "controller_base",
+            "clientui",
+            "steam",
+            "legacycompat",
+            "compatibilitytools.d",
+        ]
+
+        # Create mount point directories for essential Steam directories
+        for dir_name in essential_dirs:
+            source_dir = source_steam_dir / dir_name
+            if source_dir.is_dir():
+                mount_point = dest_steam_dir / dir_name
+                mount_point.mkdir(exist_ok=True)
+                self.logger.info(f"Created mount point for essential dir: {mount_point}")
 
         # Create mount points for all steamapps subdirectories
         source_steamapps_dir = source_steam_dir / "steamapps"
@@ -356,15 +380,52 @@ class InstanceService:
         # Sandbox destination base path
         sandbox_steam_dir = f"{self._SANDBOX_HOME}/.local/share/Steam"
 
-        # Bind mount compatibilitytools.d (read-only is fine)
-        source_compat = source_steam_dir / "compatibilitytools.d"
-        if source_compat.is_dir():
-            bind_args.extend([
-                "--ro-bind", str(source_compat), f"{sandbox_steam_dir}/compatibilitytools.d"
-            ])
-            self.logger.info(f"Instance {instance_num}: Will bind-mount compatibilitytools.d")
+        # Essential Steam directories that must be shared (read-only) for Steam to run
+        # These contain the Steam client binaries and runtime
+        essential_ro_dirs = [
+            "ubuntu12_32",
+            "ubuntu12_64",
+            "linux32",
+            "linux64",
+            "bin",
+            "package",
+            "public",
+            "resource",
+            "graphics",
+            "friends",
+            "controller_base",
+            "clientui",
+            "steam",
+            "legacycompat",
+            "compatibilitytools.d",
+        ]
 
-        # Bind mount ALL steamapps subdirectories
+        # Essential files that need to be shared (read-only)
+        essential_ro_files = [
+            "steam.sh",
+            "bootstrap.tar.xz",
+            "fossilize_engine_filters.json",
+        ]
+
+        # Bind mount essential directories as read-only
+        for dir_name in essential_ro_dirs:
+            source_dir = source_steam_dir / dir_name
+            if source_dir.is_dir():
+                bind_args.extend([
+                    "--ro-bind", str(source_dir), f"{sandbox_steam_dir}/{dir_name}"
+                ])
+                self.logger.info(f"Instance {instance_num}: Will bind-mount {dir_name} (ro)")
+
+        # Bind mount essential files as read-only
+        for file_name in essential_ro_files:
+            source_file = source_steam_dir / file_name
+            if source_file.is_file():
+                bind_args.extend([
+                    "--ro-bind", str(source_file), f"{sandbox_steam_dir}/{file_name}"
+                ])
+                self.logger.info(f"Instance {instance_num}: Will bind-mount {file_name} (ro)")
+
+        # Bind mount ALL steamapps subdirectories (read-write for game data)
         source_steamapps = source_steam_dir / "steamapps"
         if source_steamapps.is_dir():
             sandbox_steamapps = f"{sandbox_steam_dir}/steamapps"
