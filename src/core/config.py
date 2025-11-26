@@ -27,11 +27,6 @@ class Config:
         return Config.CONFIG_DIR / "profile.json"
 
     @staticmethod
-    def get_steam_data_path(instance_num: int) -> Path:
-        """Returns the isolated Steam data path for a given instance."""
-        return Config.CONFIG_DIR / f"steam_instance_{instance_num}"
-
-    @staticmethod
     def get_steam_home_path(instance_num: int) -> Path:
         """Returns the isolated Steam home path for a given instance."""
         return Config.CONFIG_DIR / f"steam_home_{instance_num}"

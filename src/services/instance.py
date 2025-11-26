@@ -113,7 +113,7 @@ class InstanceService:
         """
         Prepares the Steam directory structure for the sandbox.
         Creates writable directories and copies files that need to be instance-specific.
-        Shared directories (common, compatdata) will be bind-mounted via bwrap.
+        Shared directories (common) will be bind-mounted via bwrap.
         """
         self.logger.info(f"Preparing Steam data structure for instance at {home_path}...")
 
@@ -164,11 +164,12 @@ class InstanceService:
                 mount_point.mkdir(exist_ok=True)
                 self.logger.info(f"Created mount point for essential dir: {mount_point}")
 
-        # Create mount points for all steamapps subdirectories
+        # Create mount points for steamapps subdirectories
         source_steamapps_dir = source_steam_dir / "steamapps"
         if source_steamapps_dir.is_dir():
+            excluded_dirs = {"compatdata"}
             for item in source_steamapps_dir.iterdir():
-                if item.is_dir():
+                if item.is_dir() and item.name not in excluded_dirs:
                     mount_point = dest_steamapps_dir / item.name
                     mount_point.mkdir(exist_ok=True)
                     self.logger.info(f"Created mount point for: {mount_point}")
@@ -196,11 +197,6 @@ class InstanceService:
 
         # Set the HOME variable for the sandboxed user
         env["HOME"] = self._SANDBOX_HOME
-
-        # Isolate steam instance data
-        steam_data_path = Config.get_steam_data_path(instance_num)
-        steam_data_path.mkdir(parents=True, exist_ok=True)
-        env["STEAM_COMPAT_DATA_PATH"] = str(steam_data_path)
 
         # Handle joystick assignment
         if device_info.get("joystick_path_str_for_instance"):
@@ -430,13 +426,14 @@ class InstanceService:
                 ])
                 self.logger.info(f"Instance {instance_num}: Will bind-mount {file_name} (ro)")
 
-        # Bind mount ALL steamapps subdirectories (read-write for game data)
+        # Bind mount steamapps subdirectories (read-write for game data)
         source_steamapps = source_steam_dir / "steamapps"
         if source_steamapps.is_dir():
             sandbox_steamapps = f"{sandbox_steam_dir}/steamapps"
 
+            excluded_dirs = {"compatdata"}
             for item in source_steamapps.iterdir():
-                if item.is_dir():
+                if item.is_dir() and item.name not in excluded_dirs:
                     bind_args.extend([
                         "--bind", str(item), f"{sandbox_steamapps}/{item.name}"
                     ])
