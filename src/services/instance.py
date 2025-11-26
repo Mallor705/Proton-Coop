@@ -5,7 +5,7 @@ import signal
 import subprocess
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import psutil
 
@@ -76,8 +76,8 @@ class InstanceService:
         home_path.mkdir(parents=True, exist_ok=True)
         self.logger.info(f"Instance {instance_num}: Using isolated home path '{home_path}'")
 
-        # Share data from the main Steam installation
-        self._share_steam_data(home_path)
+        # Prepare minimal home structure - Steam will auto-install on first run
+        self._prepare_steam_home(home_path)
 
         instance_idx = instance_num - 1
         device_info = self._validate_input_devices(profile, instance_idx, instance_num)
@@ -94,7 +94,7 @@ class InstanceService:
             # because it captures output from a pseudo-terminal.
             cmd_str = shlex.join(cmd)
             script_cmd = ["script", "-q", "-e", "-c", cmd_str, str(log_file)]
-            
+
             process = subprocess.Popen(
                 script_cmd,
                 stdout=subprocess.DEVNULL,
@@ -109,82 +109,19 @@ class InstanceService:
         except Exception as e:
             self.logger.error(f"Failed to launch instance {instance_num}: {e}")
 
-    def _share_steam_data(self, home_path: Path) -> None:
+    def _prepare_steam_home(self, home_path: Path) -> None:
         """
-        Prepares the Steam directory structure for the sandbox.
-        Creates writable directories and copies files that need to be instance-specific.
-        Shared directories (common) will be bind-mounted via bwrap.
+        Prepares a minimal home directory structure for the instance.
+        Steam will auto-install itself on first run - no need to copy anything.
         """
-        self.logger.info(f"Preparing Steam data structure for instance at {home_path}...")
+        self.logger.info(f"Preparing home directory for instance at {home_path}...")
 
-        real_user_home = Path.home()
-        source_steam_dir = real_user_home / ".local/share/Steam"
-        if not source_steam_dir.is_dir():
-            self.logger.warning(
-                f"Main Steam directory not found at '{source_steam_dir}'. Skipping data sharing."
-            )
-            return
+        # Create basic directory structure
+        (home_path / ".local/share").mkdir(parents=True, exist_ok=True)
+        (home_path / ".config").mkdir(parents=True, exist_ok=True)
+        (home_path / ".cache").mkdir(parents=True, exist_ok=True)
 
-        # Define destination paths within the sandboxed home
-        dest_steam_dir = home_path / ".local/share/Steam"
-        dest_steamapps_dir = dest_steam_dir / "steamapps"
-
-        # Ensure destination directories exist
-        try:
-            dest_steamapps_dir.mkdir(parents=True, exist_ok=True)
-            self.logger.info(f"Ensured destination directory exists: {dest_steamapps_dir}")
-        except OSError as e:
-            self.logger.error(f"Failed to create destination directories: {e}")
-            return
-
-        # Essential Steam directories that will be bind-mounted via bwrap
-        essential_dirs = [
-            "ubuntu12_32",
-            "ubuntu12_64",
-            "linux32",
-            "linux64",
-            "bin",
-            "package",
-            "public",
-            "resource",
-            "graphics",
-            "friends",
-            "controller_base",
-            "clientui",
-            "steam",
-            "legacycompat",
-            "compatibilitytools.d",
-        ]
-
-        # Create mount point directories for essential Steam directories
-        for dir_name in essential_dirs:
-            source_dir = source_steam_dir / dir_name
-            if source_dir.is_dir():
-                mount_point = dest_steam_dir / dir_name
-                mount_point.mkdir(exist_ok=True)
-                self.logger.info(f"Created mount point for essential dir: {mount_point}")
-
-        # Create mount points for steamapps subdirectories
-        source_steamapps_dir = source_steam_dir / "steamapps"
-        if source_steamapps_dir.is_dir():
-            excluded_dirs = {"compatdata"}
-            for item in source_steamapps_dir.iterdir():
-                if item.is_dir() and item.name not in excluded_dirs:
-                    mount_point = dest_steamapps_dir / item.name
-                    mount_point.mkdir(exist_ok=True)
-                    self.logger.info(f"Created mount point for: {mount_point}")
-
-        # Copy .acf manifest files - each instance needs its own copy
-        if source_steamapps_dir.is_dir():
-            for item in source_steamapps_dir.iterdir():
-                if item.is_file() and item.suffix == ".acf":
-                    dest_item_path = dest_steamapps_dir / item.name
-                    if not dest_item_path.exists():
-                        try:
-                            shutil.copy2(item, dest_item_path)
-                            self.logger.info(f"Copied manifest {item.name}")
-                        except OSError as e:
-                            self.logger.error(f"Failed to copy {item.name}: {e}")
+        self.logger.info("Home directory ready. Steam will auto-install on first launch.")
 
     def _prepare_environment(self, profile: Profile, device_info: dict, instance_num: int) -> dict:
         """Prepares a minimal environment for the Steam instance."""
@@ -319,7 +256,11 @@ class InstanceService:
             return ["steam"]
 
     def _build_bwrap_command(self, profile: Profile, instance_idx: int, device_info: dict, instance_num: int, home_path: Path) -> List[str]:
-        """Builds the bwrap command, including device bindings and Steam directory mounts."""
+        """
+        Builds the bwrap command for sandboxing.
+        Each instance has its own completely independent Steam installation.
+        Steam will auto-install on first run - no bind mounts needed.
+        """
         cmd = [
             "bwrap",
             "--die-with-parent",
@@ -332,9 +273,6 @@ class InstanceService:
             # Mount the isolated home directory to the fake user's home
             "--bind", str(home_path), self._SANDBOX_HOME,
         ]
-
-        # Add bind mounts for shared Steam directories
-        cmd.extend(self._get_steam_bind_mounts(home_path, instance_num))
 
         # Handle input device bindings
         device_paths_to_bind = [
@@ -365,81 +303,6 @@ class InstanceService:
         except Exception as e:
             self.logger.error(f"Instance {instance_num}: Failed to add --setenv entries: {e}")
         return cmd
-
-    def _get_steam_bind_mounts(self, home_path: Path, instance_num: int) -> List[str]:
-        """
-        Returns bwrap bind mount arguments for sharing Steam directories.
-        This replaces symlinks with proper bind mounts that work correctly in the sandbox.
-        """
-        bind_args = []
-        real_user_home = Path.home()
-        source_steam_dir = real_user_home / ".local/share/Steam"
-
-        if not source_steam_dir.is_dir():
-            return bind_args
-
-        # Sandbox destination base path
-        sandbox_steam_dir = f"{self._SANDBOX_HOME}/.local/share/Steam"
-
-        # Essential Steam directories that must be shared (read-only) for Steam to run
-        # These contain the Steam client binaries and runtime
-        essential_ro_dirs = [
-            "ubuntu12_32",
-            "ubuntu12_64",
-            "linux32",
-            "linux64",
-            "bin",
-            "package",
-            "public",
-            "resource",
-            "graphics",
-            "friends",
-            "controller_base",
-            "clientui",
-            "steam",
-            "legacycompat",
-            "compatibilitytools.d",
-        ]
-
-        # Essential files that need to be shared (read-only)
-        essential_ro_files = [
-            "steam.sh",
-            "bootstrap.tar.xz",
-            "fossilize_engine_filters.json",
-        ]
-
-        # Bind mount essential directories as read-only
-        for dir_name in essential_ro_dirs:
-            source_dir = source_steam_dir / dir_name
-            if source_dir.is_dir():
-                bind_args.extend([
-                    "--ro-bind", str(source_dir), f"{sandbox_steam_dir}/{dir_name}"
-                ])
-                self.logger.info(f"Instance {instance_num}: Will bind-mount {dir_name} (ro)")
-
-        # Bind mount essential files as read-only
-        for file_name in essential_ro_files:
-            source_file = source_steam_dir / file_name
-            if source_file.is_file():
-                bind_args.extend([
-                    "--ro-bind", str(source_file), f"{sandbox_steam_dir}/{file_name}"
-                ])
-                self.logger.info(f"Instance {instance_num}: Will bind-mount {file_name} (ro)")
-
-        # Bind mount steamapps subdirectories (read-write for game data)
-        source_steamapps = source_steam_dir / "steamapps"
-        if source_steamapps.is_dir():
-            sandbox_steamapps = f"{sandbox_steam_dir}/steamapps"
-
-            excluded_dirs = {"compatdata"}
-            for item in source_steamapps.iterdir():
-                if item.is_dir() and item.name not in excluded_dirs:
-                    bind_args.extend([
-                        "--bind", str(item), f"{sandbox_steamapps}/{item.name}"
-                    ])
-                    self.logger.info(f"Instance {instance_num}: Will bind-mount steamapps/{item.name}")
-
-        return bind_args
 
     def terminate_all(self) -> None:
         """Terminates all managed steam instances."""
