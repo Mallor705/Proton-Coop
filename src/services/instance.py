@@ -116,9 +116,9 @@ class InstanceService:
         """
         self.logger.info(f"Preparing home directory for instance at {home_path}...")
 
-        # Create basic directory structure
-        (home_path / ".local/share").mkdir(parents=True, exist_ok=True)
-        (home_path / ".config").mkdir(parents=True, exist_ok=True)
+        # Create basic directory structure for Steam and other tools (like fish shell)
+        (home_path / ".local/share/fish").mkdir(parents=True, exist_ok=True)
+        (home_path / ".config/fish").mkdir(parents=True, exist_ok=True)
         (home_path / ".cache").mkdir(parents=True, exist_ok=True)
 
         self.logger.info("Home directory ready. Steam will auto-install on first launch.")
@@ -132,8 +132,8 @@ class InstanceService:
         # This is critical for preventing system crashes and graphical glitches.
         env["ENABLE_GAMESCOPE_WSI"] = "1"
 
-        # Set the HOME variable for the sandboxed user
-        env["HOME"] = self._SANDBOX_HOME
+        # # Set the HOME variable for the sandboxed user
+        # env["HOME"] = self._SANDBOX_HOME
 
         # Handle joystick assignment
         if device_info.get("joystick_path_str_for_instance"):
@@ -263,9 +263,11 @@ class InstanceService:
         """
         cmd = [
             "bwrap",
+            "--ro-bind", "/", "/",
             "--die-with-parent",
             "--unshare-user",  # Isolate user namespace
-            "--dev-bind", "/", "/",
+            "--uid", "1001",
+            "--gid", "1001",
             "--proc", "/proc",
             "--tmpfs", "/tmp",
             "--tmpfs", "/home",  # Create a writable /home for the user mount
