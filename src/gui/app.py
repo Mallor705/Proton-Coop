@@ -48,14 +48,14 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         )
         self.toolbar_view.set_content(self.layout_settings_page)
 
-        # Footer Bar for Launch/Stop buttons
+        # Footer Bar for Play/Stop buttons
         self.footer_bar = Adw.HeaderBar()
         self.footer_bar.get_style_context().add_class("footer-bar")
         self.footer_bar.set_title_widget(Gtk.Label(label=""))
         self.footer_bar.set_show_end_title_buttons(False)
         self.toolbar_view.add_bottom_bar(self.footer_bar)
 
-        self.launch_button = Gtk.Button.new_with_mnemonic("Launch")
+        self.launch_button = Gtk.Button.new_with_mnemonic("Play")
         self.launch_button.get_style_context().add_class("suggested-action")
         self.launch_button.get_style_context().add_class("launch-button")
         self.launch_button.connect("clicked", self.on_launch_clicked)
