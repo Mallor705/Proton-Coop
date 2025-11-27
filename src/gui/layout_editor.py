@@ -403,7 +403,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
             audio_row.connect("notify::selected-item", self._on_setting_changed)
             expander.add_row(audio_row)
 
-            launch_button = Gtk.Button(label="Configure")
+            launch_button = Gtk.Button(label="Start")
             launch_button.get_style_context().add_class("configure-button")
             launch_button.set_valign(Gtk.Align.CENTER)
             launch_button.connect(
@@ -454,7 +454,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
 
         if row_data["is_running"]:
             self.instance_service.terminate_instance(instance_num)
-            button.set_label("Configure")
+            button.set_label("Install")
             button.get_style_context().remove_class("destructive-action")
             row_data["is_running"] = False
         else:
@@ -479,5 +479,5 @@ class LayoutSettingsPage(Adw.PreferencesPage):
                 button.set_label("Stop")
                 button.get_style_context().add_class("destructive-action")
             else:
-                button.set_label("Launch")
+                button.set_label("Start")
                 button.get_style_context().remove_class("destructive-action")
