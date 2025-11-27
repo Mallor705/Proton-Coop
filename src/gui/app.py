@@ -23,6 +23,7 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         self.profile = Profile.load()
 
         self._build_ui()
+        self._update_launch_button_state()
 
     def _show_error_dialog(self, message):
         dialog = Adw.MessageDialog(
@@ -40,6 +41,9 @@ class MultiScopeWindow(Adw.ApplicationWindow):
 
         self.layout_settings_page = LayoutSettingsPage(self.profile, self.logger)
         self.layout_settings_page.connect("settings-changed", self._trigger_auto_save)
+        self.layout_settings_page.connect(
+            "instance-state-changed", self._on_instance_state_changed
+        )
         self.toolbar_view.set_content(self.layout_settings_page)
 
         # Footer Bar for Launch/Stop buttons
@@ -50,6 +54,7 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         self.launch_button = Gtk.Button.new_with_mnemonic("_Launch Steam")
         self.launch_button.get_style_context().add_class("suggested-action")
         self.launch_button.connect("clicked", self.on_launch_clicked)
+        self.launch_button.set_sensitive(False)
         self.footer_bar.pack_end(self.launch_button)
 
         self.stop_button = Gtk.Button.new_with_mnemonic("_Stop All")
@@ -64,6 +69,29 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         self.profile.save()
         self.logger.info("Profile auto-saved.")
         self.layout_settings_page._run_verification()
+        self._update_launch_button_state()
+
+    def _update_launch_button_state(self, *args):
+        selected_players = self.layout_settings_page.get_selected_players()
+        if not selected_players:
+            self.launch_button.set_sensitive(False)
+            return
+
+        all_passed = True
+        for player_num in selected_players:
+            status = self.layout_settings_page.verification_service.get_instance_status(
+                player_num
+            )
+            if status != "Passed":
+                all_passed = False
+                break
+        self.launch_button.set_sensitive(all_passed)
+
+    def _on_instance_state_changed(self, *args):
+        if self.layout_settings_page.is_any_instance_running():
+            self.launch_button.set_sensitive(False)
+        else:
+            self._update_launch_button_state()
 
     def on_launch_clicked(self, button):
         self.layout_settings_page._run_verification()
@@ -78,14 +106,17 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         self.instance_service.launch_steam(self.profile)
         self.launch_button.set_visible(False)
         self.stop_button.set_visible(True)
-        self.layout_settings_page.set_sensitive(False) # Disable UI during session
+        self.layout_settings_page.set_sensitive(False)
+        self.layout_settings_page.set_running_state(True)
 
     def on_stop_clicked(self, button):
         self.instance_service.terminate_all()
         self.launch_button.set_visible(True)
         self.stop_button.set_visible(False)
-        self.layout_settings_page.set_sensitive(True) # Re-enable UI
+        self.layout_settings_page.set_sensitive(True)
+        self.layout_settings_page.set_running_state(False)
         self.layout_settings_page._run_verification()
+        self._update_launch_button_state()
 
 class MultiScopeApplication(Adw.Application):
     def __init__(self, **kwargs):

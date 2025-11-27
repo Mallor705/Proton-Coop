@@ -9,9 +9,13 @@ from ..services.device_manager import DeviceManager
 from ..services.verification_service import VerificationService
 from gi.repository import Adw, Gdk, GObject, Gtk
 
+from ..services.instance import InstanceService
+
+
 class LayoutSettingsPage(Adw.PreferencesPage):
     __gsignals__ = {
         "settings-changed": (GObject.SIGNAL_RUN_FIRST, None, ()),
+        "instance-state-changed": (GObject.SIGNAL_RUN_FIRST, None, ()),
     }
 
     def __init__(self, profile, logger, **kwargs):
@@ -20,7 +24,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         self.profile = profile
         self.player_rows = []
         self.logger = logger
-
+        self.instance_service = InstanceService(logger)
         self.verification_service = VerificationService(logger)
         self.device_manager = DeviceManager()
         self.input_devices = self.device_manager.get_input_devices()
@@ -366,6 +370,12 @@ class LayoutSettingsPage(Adw.PreferencesPage):
             audio_row.connect("notify::selected-item", self._on_setting_changed)
             expander.add_row(audio_row)
 
+            launch_button = Gtk.Button(label="Launch")
+            launch_button.connect(
+                "clicked", self._on_instance_launch_clicked, i
+            )
+            expander.add_suffix(launch_button)
+
             self.player_rows.append({
                 "checkbox": checkbox,
                 "expander": expander,
@@ -373,7 +383,9 @@ class LayoutSettingsPage(Adw.PreferencesPage):
                 "mouse": mouse_row,
                 "keyboard": keyboard_row,
                 "audio": audio_row,
-                "status_icon": None
+                "status_icon": None,
+                "launch_button": launch_button,
+                "is_running": False,
             })
 
     def _run_verification(self):
@@ -399,3 +411,37 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         if selected_idx > 0 and (selected_idx - 1) < len(device_list):
             return device_list[selected_idx - 1]["id"]
         return None
+
+    def _on_instance_launch_clicked(self, button, instance_idx):
+        row_data = self.player_rows[instance_idx]
+        instance_num = instance_idx + 1
+
+        if row_data["is_running"]:
+            self.instance_service.terminate_instance(instance_num)
+            button.set_label("Launch")
+            button.get_style_context().remove_class("destructive-action")
+            row_data["is_running"] = False
+        else:
+            self.instance_service.launch_instance(
+                self.profile, instance_num, use_gamescope_override=False
+            )
+            button.set_label("Stop")
+            button.get_style_context().add_class("destructive-action")
+            row_data["is_running"] = True
+
+        self._run_verification()
+        self.emit("instance-state-changed")
+
+    def is_any_instance_running(self):
+        return any(r["is_running"] for r in self.player_rows)
+
+    def set_running_state(self, is_running):
+        for row_data in self.player_rows:
+            row_data["is_running"] = is_running
+            button = row_data["launch_button"]
+            if is_running:
+                button.set_label("Stop")
+                button.get_style_context().add_class("destructive-action")
+            else:
+                button.set_label("Launch")
+                button.get_style_context().remove_class("destructive-action")

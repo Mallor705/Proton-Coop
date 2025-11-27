@@ -1,5 +1,8 @@
 import os
 import shlex
+import copy
+import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -27,8 +30,8 @@ class InstanceService:
     def __init__(self, logger: Logger):
         """Initializes the instance service."""
         self.logger = logger
-        self.pids: List[int] = []
-        self.processes: List[subprocess.Popen] = []
+        self.pids: dict[int, int] = {}
+        self.processes: dict[int, subprocess.Popen] = {}
         self.cpu_count = psutil.cpu_count(logical=True)
         self.termination_in_progress = False
 
@@ -62,7 +65,7 @@ class InstanceService:
 
         for i in range(num_instances):
             instance_num = (profile.selected_players[i] if profile.selected_players else i + 1)
-            self._launch_single_instance(profile, instance_num)
+            self.launch_instance(profile, instance_num)
             time.sleep(5) # Stagger launches
 
         self.logger.info(f"All {num_instances} instances launched")
@@ -103,11 +106,54 @@ class InstanceService:
                 cwd=home_path,  # Launch from the isolated home directory
                 preexec_fn=os.setpgrp,
             )
-            self.pids.append(process.pid)
-            self.processes.append(process)
+            self.pids[instance_num] = process.pid
+            self.processes[instance_num] = process
             self.logger.info(f"Instance {instance_num} started with PID: {process.pid}")
         except Exception as e:
             self.logger.error(f"Failed to launch instance {instance_num}: {e}")
+
+    def launch_instance(
+        self,
+        profile: Profile,
+        instance_num: int,
+        use_gamescope_override: Optional[bool] = None,
+    ) -> None:
+        """Launches a single Steam instance."""
+        active_profile = profile
+        if use_gamescope_override is not None:
+            active_profile = copy.deepcopy(profile)
+            active_profile.use_gamescope = use_gamescope_override
+
+        self.validate_dependencies(use_gamescope=active_profile.use_gamescope)
+        Config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        self._launch_single_instance(active_profile, instance_num)
+
+    def terminate_instance(self, instance_num: int) -> None:
+        """Terminates a single Steam instance."""
+        if instance_num not in self.processes:
+            self.logger.warning(
+                f"Attempted to terminate non-existent instance {instance_num}"
+            )
+            return
+
+        process = self.processes[instance_num]
+        if process.poll() is None:
+            try:
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                self.logger.info(
+                    f"Sent SIGKILL to process group of PID {process.pid} for instance {instance_num}"
+                )
+            except ProcessLookupError:
+                self.logger.info(
+                    f"Process group for PID {process.pid} not found for instance {instance_num}."
+                )
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to kill process group for PID {process.pid} for instance {instance_num}: {e}"
+                )
+        process.wait()
+        del self.processes[instance_num]
+        del self.pids[instance_num]
 
     def _prepare_steam_home(self, home_path: Path) -> None:
         """
@@ -342,22 +388,11 @@ class InstanceService:
             self.termination_in_progress = True
             self.logger.info("Starting termination of all instances...")
 
-            for process in self.processes:
-                if process.poll() is None: # if process is still running
-                    try:
-                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                        self.logger.info(f"Sent SIGKILL to process group of PID {process.pid}")
-                    except ProcessLookupError:
-                        self.logger.info(f"Process group for PID {process.pid} not found.")
-                    except Exception as e:
-                        self.logger.error(f"Failed to kill process group for PID {process.pid}: {e}")
-
-            # Wait for all processes to terminate
-            for process in self.processes:
-                process.wait()
+            for instance_num in list(self.processes.keys()):
+                self.terminate_instance(instance_num)
 
             self.logger.info("Instance termination complete.")
-            self.pids = []
-            self.processes = []
+            self.pids.clear()
+            self.processes.clear()
         finally:
             self.termination_in_progress = False
