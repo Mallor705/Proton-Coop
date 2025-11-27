@@ -65,7 +65,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         self.instance_height_row = Adw.EntryRow(title="Custom Height")
         self.instance_height_row.connect("changed", self._on_setting_changed)
         layout_group.add(self.instance_height_row)
-        
+
         self.screen_modes = ["Fullscreen", "Splitscreen"]
         self.screen_mode_row = Adw.ComboRow(
             title="Screen Mode", model=Gtk.StringList.new(self.screen_modes)
@@ -87,24 +87,24 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         )
         self.use_gamescope_row.connect("notify::active", self._on_setting_changed)
         layout_group.add(self.use_gamescope_row)
-        
+
         # Global environment variables
         self.env_group = Adw.PreferencesGroup(title="Environment Variables (Global)")
         self.add(self.env_group)
         self.global_env_rows = []
-        
+
         self.global_env_add_row = Adw.ActionRow(title="Add environment variable")
         global_add_btn = Gtk.Button.new_with_mnemonic("_Add")
         global_add_btn.connect("clicked", self._on_add_global_env_clicked)
         self.global_env_add_row.add_suffix(global_add_btn)
         self.env_group.add(self.global_env_add_row)
-        
+
         self.players_group = Adw.PreferencesGroup(title="Instance Configurations")
         self.add(self.players_group)
 
     def load_profile_data(self):
         self._is_loading = True
-        
+
         adj = self.num_players_row.get_adjustment()
         adj.set_value(self.profile.num_players)
 
@@ -113,10 +113,10 @@ class LayoutSettingsPage(Adw.PreferencesPage):
             self.resolution_row.set_selected(self.resolutions.index(res_str))
         else:
             self.resolution_row.set_selected(0) # Custom
-        
+
         self.instance_width_row.set_text(str(self.profile.instance_width or ""))
         self.instance_height_row.set_text(str(self.profile.instance_height or ""))
-        
+
         is_custom = self.resolution_row.get_selected() == 0
         self.instance_width_row.set_visible(is_custom)
         self.instance_height_row.set_visible(is_custom)
@@ -131,7 +131,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         if is_splitscreen and self.profile.splitscreen:
             orientation = self.profile.splitscreen.orientation.capitalize()
             self.orientation_row.set_selected(self.orientations.index(orientation))
-        
+
         self.rebuild_player_rows()
         # Populate per-player device selections
         for i, row_dict in enumerate(self.player_rows):
@@ -162,14 +162,14 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         if getattr(self.profile, "env", None):
             for k, v in (self.profile.env or {}).items():
                 self._add_global_env_row(k, v)
-        
+
         self._is_loading = False
 
     def _set_combo_row_selection(self, combo_row, device_list, device_id):
         if not device_id:
             combo_row.set_selected(0)
             return
-        
+
         try:
             canonical_id = os.path.realpath(device_id)
             for i, device in enumerate(device_list):
@@ -183,7 +183,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
 
     def get_updated_data(self) -> Profile:
         self.profile.num_players = int(self.num_players_row.get_value())
-        
+
         selected_res = self.resolution_row.get_selected_item().get_string()
         if selected_res == "Custom":
             self.profile.instance_width = int(self.instance_width_row.get_text() or 0)
@@ -192,7 +192,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
             width, height = map(int, selected_res.split("x"))
             self.profile.instance_width = width
             self.profile.instance_height = height
-            
+
         self.profile.mode = self.screen_mode_row.get_selected_item().get_string().lower()
         if self.profile.mode == "splitscreen":
             orientation = self.orientation_row.get_selected_item().get_string().lower()
@@ -221,7 +221,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
             else:
                 new_configs.append(PlayerInstanceConfig()) # Add empty config for new players
         self.profile.player_configs = new_configs
-        
+
         self.profile.selected_players = self.get_selected_players()
 
         return self.profile
@@ -370,7 +370,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
             audio_row.connect("notify::selected-item", self._on_setting_changed)
             expander.add_row(audio_row)
 
-            launch_button = Gtk.Button(label="Launch")
+            launch_button = Gtk.Button(label="Configure")
             launch_button.connect(
                 "clicked", self._on_instance_launch_clicked, i
             )
@@ -418,7 +418,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
 
         if row_data["is_running"]:
             self.instance_service.terminate_instance(instance_num)
-            button.set_label("Launch")
+            button.set_label("Configure")
             button.get_style_context().remove_class("destructive-action")
             row_data["is_running"] = False
         else:
