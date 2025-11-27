@@ -1,15 +1,147 @@
-.game-row:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
-.game-row:active {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.selected-game {
-    background-color: #3584e4;
-}
-
 .uniform-button {
     min-width: 100px;
+}
+
+.add-button {
+    min-height: 32px;
+    min-width: 32px;
+    padding: 0;
+}
+
+.configure-button {
+    background-color: #1A9FFF;
+    min-height: 24px;
+    padding: 0 10px;
+}
+
+AdwToolbarView > AdwHeaderBar:last-child {
+    min-height: 50px;
+}
+
+/* Change the background color of the main content area */
+/*
+.main-content {
+    background-color: #2c2c2c;
+}
+*/
+
+/* Change the background color of the top header bar */
+/*
+.header-bar {
+    background-color: #1a1a1a;
+}
+*/
+
+/* Change the background color and font size of the footer bar */
+/*
+.footer-bar {
+    background-color: #1a1a1a;
+    font-size: 1.1em;
+}
+*/
+
+/* Change the color of the Launch and Stop buttons */
+
+.launch-button {
+    background-color: #1A9FFF;
+    color: white;
+}
+
+.stop-button {
+    background-color: #e76f51;
+    color: white;
+}
+
+
+/* Change the background of the main setting groups */
+/*
+.general-layout-group,
+.global-env-group,
+.players-group {
+    background-color: #3d3d3d;
+}
+*/
+
+/* Change the font size and color of text entry fields */
+/*
+.instance-width-row,
+.instance-height-row {
+    font-size: 1.2em;
+    color: #aaffaa;
+}
+*/
+
+/* Change the style of dropdown menus */
+/*
+.resolution-row,
+.screen-mode-row,
+.orientation-row,
+.joystick-row,
+.mouse-row,
+.keyboard-row,
+.audio-row {
+    background-color: #4a4a4a;
+    border-radius: 5px;
+}
+*/
+
+/* Change the style of the player-specific expandable sections */
+/*
+.player-expander {
+    background-color: #333333;
+    border: 1px solid #555555;
+}
+*/
+
+/* Change the color of the "Remove" button icon */
+
+.remove-button {
+    color: #e76f51;
+}
+
+
+/* Change the background and text color of environment variable inputs */
+
+.env-var-row {
+    min-height: 40px;
+}
+
+.env-key-entry,
+.env-value-entry {
+    background-color: #222222;
+    color: #eeeeee;
+    min-width: 232px;
+    /*font-size: 1.2em;*/
+}
+
+
+/* Change the style of the "Use Gamescope" switch */
+
+/*.use-gamescope-row switch {
+    background-color: #5a5a5a;
+}*/
+
+.use-gamescope-row switch:checked {
+    background-color: #1A9FFF;
+}
+
+/*.use-gamescope-row switch slider {
+    background-color: #cccccc;
+}*/
+
+
+/* Change the style of the player checkboxes */
+
+/*.player-checkbox check {
+    background-color: #5a5a5a;
+}*/
+
+.player-checkbox check:checked {
+    background-color: #1A9FFF;
+    color: #ffffff;
+}
+
+
+.verification-passed-icon {
+    color: #51AE40;
 }

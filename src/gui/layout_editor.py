@@ -39,12 +39,14 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         self.set_title("Layout Settings")
 
         layout_group = Adw.PreferencesGroup(title="General Layout")
+        layout_group.get_style_context().add_class("general-layout-group")
         self.add(layout_group)
 
         self.num_players_row = Adw.SpinRow(
             title="Number of Instances",
             subtitle="How many Steam instances to launch",
         )
+        self.num_players_row.get_style_context().add_class("num-players-row")
         adjustment = Gtk.Adjustment(value=2, lower=1, upper=8, step_increment=1)
         self.num_players_row.set_adjustment(adjustment)
         adjustment.connect("value-changed", self._on_num_players_changed)
@@ -54,15 +56,18 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         self.resolution_row = Adw.ComboRow(
             title="Base Resolution", model=Gtk.StringList.new(self.resolutions)
         )
+        self.resolution_row.get_style_context().add_class("resolution-row")
         self.resolution_row.connect("notify::selected-item", self._on_resolution_changed)
         self.resolution_row.connect("notify::selected-item", self._on_setting_changed)
         layout_group.add(self.resolution_row)
 
         self.instance_width_row = Adw.EntryRow(title="Custom Width")
+        self.instance_width_row.get_style_context().add_class("instance-width-row")
         self.instance_width_row.connect("changed", self._on_setting_changed)
         layout_group.add(self.instance_width_row)
 
         self.instance_height_row = Adw.EntryRow(title="Custom Height")
+        self.instance_height_row.get_style_context().add_class("instance-height-row")
         self.instance_height_row.connect("changed", self._on_setting_changed)
         layout_group.add(self.instance_height_row)
 
@@ -70,6 +75,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         self.screen_mode_row = Adw.ComboRow(
             title="Screen Mode", model=Gtk.StringList.new(self.screen_modes)
         )
+        self.screen_mode_row.get_style_context().add_class("screen-mode-row")
         self.screen_mode_row.connect("notify::selected-item", self._on_screen_mode_changed)
         layout_group.add(self.screen_mode_row)
 
@@ -77,6 +83,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
         self.orientation_row = Adw.ComboRow(
             title="Splitscreen Orientation", model=Gtk.StringList.new(self.orientations)
         )
+        self.orientation_row.get_style_context().add_class("orientation-row")
         self.orientation_row.connect("notify::selected-item", self._on_setting_changed)
         layout_group.add(self.orientation_row)
 
@@ -85,21 +92,27 @@ class LayoutSettingsPage(Adw.PreferencesPage):
             title="Use Gamescope",
             subtitle="Disable to run Steam directly in bwrap without Gamescope"
         )
+        self.use_gamescope_row.get_style_context().add_class("use-gamescope-row")
         self.use_gamescope_row.connect("notify::active", self._on_setting_changed)
         layout_group.add(self.use_gamescope_row)
 
         # Global environment variables
         self.env_group = Adw.PreferencesGroup(title="Environment Variables (Global)")
+        self.env_group.get_style_context().add_class("global-env-group")
         self.add(self.env_group)
         self.global_env_rows = []
 
         self.global_env_add_row = Adw.ActionRow(title="Add environment variable")
-        global_add_btn = Gtk.Button.new_with_mnemonic("_Add")
+        self.global_env_add_row.get_style_context().add_class("global-env-add-row")
+        global_add_btn = Gtk.Button.new_from_icon_name("list-add-symbolic")
+        global_add_btn.get_style_context().add_class("add-button")
+        global_add_btn.set_valign(Gtk.Align.CENTER)
         global_add_btn.connect("clicked", self._on_add_global_env_clicked)
         self.global_env_add_row.add_suffix(global_add_btn)
         self.env_group.add(self.global_env_add_row)
 
         self.players_group = Adw.PreferencesGroup(title="Instance Configurations")
+        self.players_group.get_style_context().add_class("players-group")
         self.add(self.players_group)
 
     def load_profile_data(self):
@@ -144,7 +157,9 @@ class LayoutSettingsPage(Adw.PreferencesPage):
                 # Ensure env UI exists for this player
                 if not row_dict.get("env_initialized"):
                     env_title_row = Adw.ActionRow(title="Environment Variables")
-                    add_btn = Gtk.Button.new_with_mnemonic("_Add")
+                    add_btn = Gtk.Button.new_from_icon_name("list-add-symbolic")
+                    add_btn.get_style_context().add_class("add-button")
+                    add_btn.set_valign(Gtk.Align.CENTER)
                     add_btn.connect("clicked", lambda b, i=i: self._add_player_env_row_by_index(i))
                     env_title_row.add_suffix(add_btn)
                     row_dict["expander"].add_row(env_title_row)
@@ -239,7 +254,9 @@ class LayoutSettingsPage(Adw.PreferencesPage):
                     row_dict["env_rows"] = []
                 if not row_dict.get("env_initialized"):
                     env_title_row = Adw.ActionRow(title="Environment Variables")
-                    add_btn = Gtk.Button.new_with_mnemonic("_Add")
+                    add_btn = Gtk.Button.new_from_icon_name("list-add-symbolic")
+                    add_btn.get_style_context().add_class("add-button")
+                    add_btn.set_valign(Gtk.Align.CENTER)
                     add_btn.connect("clicked", lambda b, i=idx: self._add_player_env_row_by_index(i))
                     env_title_row.add_suffix(add_btn)
                     row_dict["expander"].add_row(env_title_row)
@@ -264,18 +281,29 @@ class LayoutSettingsPage(Adw.PreferencesPage):
             self.emit("settings-changed")
 
     def _create_env_kv_row(self, container):
-        row = Adw.ActionRow()
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        box.get_style_context().add_class("env-var-box")
+
         key_entry = Gtk.Entry(placeholder_text="KEY")
+        key_entry.get_style_context().add_class("env-key-entry")
         value_entry = Gtk.Entry(placeholder_text="VALUE")
-        remove_btn = Gtk.Button.new_with_mnemonic("_Remove")
-        key_entry.set_width_chars(18)
-        value_entry.set_width_chars(28)
+        value_entry.get_style_context().add_class("env-value-entry")
+        remove_btn = Gtk.Button.new_from_icon_name("user-trash-symbolic")
+        remove_btn.get_style_context().add_class("remove-button")
+        remove_btn.set_valign(Gtk.Align.CENTER)
+
         key_entry.connect("changed", self._on_setting_changed)
         value_entry.connect("changed", self._on_setting_changed)
-        row.add_suffix(key_entry)
-        row.add_suffix(Gtk.Label(label="="))
-        row.add_suffix(value_entry)
-        row.add_suffix(remove_btn)
+
+        box.append(key_entry)
+        box.append(Gtk.Label(label="="))
+        box.append(value_entry)
+        box.append(remove_btn)
+
+        row = Adw.ActionRow()
+        row.set_child(box)
+        row.get_style_context().add_class("env-var-row")
+
         # Add row to correct container type
         if isinstance(container, Adw.PreferencesGroup):
             container.add(row)
@@ -286,6 +314,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
                 container.add(row)
             except Exception:
                 container.add_row(row)
+
         return {"row": row, "key": key_entry, "value": value_entry, "remove": remove_btn}
 
     def _on_add_global_env_clicked(self, button):
@@ -346,10 +375,12 @@ class LayoutSettingsPage(Adw.PreferencesPage):
 
         for i in range(num_players):
             expander = Adw.ExpanderRow(title=f"Instance {i + 1}")
+            expander.get_style_context().add_class("player-expander")
             self.players_group.add(expander)
 
             checkbox = Gtk.CheckButton()
             checkbox.set_active(True)
+            checkbox.get_style_context().add_class("player-checkbox")
             checkbox.connect("toggled", self._on_player_selected_changed)
             expander.add_prefix(checkbox)
 
@@ -357,6 +388,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
                 devices = self.input_devices.get(device_type, [])
                 model = Gtk.StringList.new(["None"] + [d["name"] for d in devices])
                 row = Adw.ComboRow(title=title, model=model)
+                row.get_style_context().add_class(f"{device_type}-row")
                 row.connect("notify::selected-item", self._on_setting_changed)
                 expander.add_row(row)
                 return row
@@ -367,10 +399,13 @@ class LayoutSettingsPage(Adw.PreferencesPage):
 
             audio_model = Gtk.StringList.new(["None"] + [d["name"] for d in self.audio_devices])
             audio_row = Adw.ComboRow(title="Audio Device", model=audio_model)
+            audio_row.get_style_context().add_class("audio-row")
             audio_row.connect("notify::selected-item", self._on_setting_changed)
             expander.add_row(audio_row)
 
             launch_button = Gtk.Button(label="Configure")
+            launch_button.get_style_context().add_class("configure-button")
+            launch_button.set_valign(Gtk.Align.CENTER)
             launch_button.connect(
                 "clicked", self._on_instance_launch_clicked, i
             )
@@ -400,6 +435,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
 
             if status == "Passed":
                 icon = Gtk.Image.new_from_icon_name("check-outlined-symbolic")
+                icon.get_style_context().add_class("verification-passed-icon")
                 row_dict["expander"].add_suffix(icon)
                 row_dict["status_icon"] = icon
 

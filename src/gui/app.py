@@ -34,9 +34,11 @@ class MultiScopeWindow(Adw.ApplicationWindow):
 
     def _build_ui(self):
         self.toolbar_view = Adw.ToolbarView()
+        self.toolbar_view.get_style_context().add_class("main-content")
         self.set_content(self.toolbar_view)
 
         header_bar = Adw.HeaderBar()
+        header_bar.get_style_context().add_class("header-bar")
         self.toolbar_view.add_top_bar(header_bar)
 
         self.layout_settings_page = LayoutSettingsPage(self.profile, self.logger)
@@ -48,17 +50,21 @@ class MultiScopeWindow(Adw.ApplicationWindow):
 
         # Footer Bar for Launch/Stop buttons
         self.footer_bar = Adw.HeaderBar()
+        self.footer_bar.get_style_context().add_class("footer-bar")
+        self.footer_bar.set_title_widget(Gtk.Label(label=""))
         self.footer_bar.set_show_end_title_buttons(False)
         self.toolbar_view.add_bottom_bar(self.footer_bar)
 
         self.launch_button = Gtk.Button.new_with_mnemonic("Launch")
         self.launch_button.get_style_context().add_class("suggested-action")
+        self.launch_button.get_style_context().add_class("launch-button")
         self.launch_button.connect("clicked", self.on_launch_clicked)
         self.launch_button.set_sensitive(False)
         self.footer_bar.pack_end(self.launch_button)
 
         self.stop_button = Gtk.Button.new_with_mnemonic("Stop")
         self.stop_button.get_style_context().add_class("destructive-action")
+        self.stop_button.get_style_context().add_class("stop-button")
         self.stop_button.connect("clicked", self.on_stop_clicked)
         self.stop_button.set_visible(False)
         self.footer_bar.pack_end(self.stop_button)
