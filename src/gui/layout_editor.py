@@ -454,7 +454,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
 
         if row_data["is_running"]:
             self.instance_service.terminate_instance(instance_num)
-            button.set_label("Install")
+            button.set_label("Start")
             button.get_style_context().remove_class("destructive-action")
             row_data["is_running"] = False
         else:
