@@ -51,13 +51,13 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         self.footer_bar.set_show_end_title_buttons(False)
         self.toolbar_view.add_bottom_bar(self.footer_bar)
 
-        self.launch_button = Gtk.Button.new_with_mnemonic("_Launch Steam")
+        self.launch_button = Gtk.Button.new_with_mnemonic("Launch")
         self.launch_button.get_style_context().add_class("suggested-action")
         self.launch_button.connect("clicked", self.on_launch_clicked)
         self.launch_button.set_sensitive(False)
         self.footer_bar.pack_end(self.launch_button)
 
-        self.stop_button = Gtk.Button.new_with_mnemonic("_Stop All")
+        self.stop_button = Gtk.Button.new_with_mnemonic("Stop")
         self.stop_button.get_style_context().add_class("destructive-action")
         self.stop_button.connect("clicked", self.on_stop_clicked)
         self.stop_button.set_visible(False)
