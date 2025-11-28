@@ -336,6 +336,14 @@ class InstanceService:
             # "--mangoapp",
         ]
 
+        # Always set an unfocused FPS limit to a very high value
+        cmd.extend(["-o", "999"])
+        self.logger.info(f"Instance {instance_num}: Setting unfocused FPS limit to 999.")
+
+        # Always set a focused FPS limit to a very high value
+        cmd.extend(["-r", "999"])
+        self.logger.info(f"Instance {instance_num}: Setting focused FPS limit to 999.")
+
         if not profile.is_splitscreen_mode:
             cmd.extend(["-f", "--adaptive-sync"])
         else:
