@@ -33,6 +33,36 @@ class InstanceService:
         self.cpu_count = psutil.cpu_count(logical=True)
         self.termination_in_progress = False
 
+    def _get_cpu_affinity_for_instance(self, instance_num: int, total_instances: int) -> List[int]:
+        """
+        Calculates which CPU cores should be assigned to a specific instance.
+        Divides available cores evenly among instances.
+
+        Args:
+            instance_num: The instance number (1-based)
+            total_instances: Total number of instances being launched
+
+        Returns:
+            List of CPU core indices for this instance
+        """
+        if not self.cpu_count or total_instances == 0:
+            return []
+
+        cores_per_instance = self.cpu_count // total_instances
+        if cores_per_instance == 0:
+            cores_per_instance = 1
+
+        start_core = (instance_num - 1) * cores_per_instance
+        end_core = start_core + cores_per_instance
+
+        # Last instance gets any remaining cores
+        if instance_num == total_instances:
+            end_core = self.cpu_count
+
+        cpu_list = list(range(start_core, end_core))
+        self.logger.info(f"Instance {instance_num}: Assigned CPU cores {cpu_list}")
+        return cpu_list
+
     def launch_steam(self, profile: Profile) -> None:
         """A wrapper for launch_steam_instances that can be called from the GUI."""
         self.launch_steam_instances(profile)
@@ -84,7 +114,8 @@ class InstanceService:
         device_info = self._validate_input_devices(profile, instance_idx, instance_num)
 
         env = self._prepare_environment(profile, device_info, instance_num)
-        cmd = self._build_command(profile, device_info, instance_num, home_path)
+        total_instances = profile.effective_num_players()
+        cmd = self._build_command(profile, device_info, instance_num, home_path, total_instances)
 
         log_file = Config.LOG_DIR / f"steam_instance_{instance_num}.log"
         self.logger.info(f"Launching instance {instance_num} (Log: {log_file})")
@@ -212,11 +243,11 @@ class InstanceService:
         self.logger.info(f"Instance {instance_num}: Final environment prepared.")
         return env
 
-    def _build_command(self, profile: Profile, device_info: dict, instance_num: int, home_path: Path) -> List[str]:
+    def _build_command(self, profile: Profile, device_info: dict, instance_num: int, home_path: Path, total_instances: int = 2) -> List[str]:
         """
         Builds the final command array in the correct order:
-        [gamescope] -> [bwrap] -> [steam]  (when gamescope is enabled)
-        [bwrap] -> [steam]                  (when gamescope is disabled)
+        [taskset] -> [gamescope] -> [bwrap] -> [steam]  (when gamescope is enabled)
+        [taskset] -> [bwrap] -> [steam]                  (when gamescope is disabled)
         """
         instance_idx = instance_num - 1
 
@@ -239,6 +270,14 @@ class InstanceService:
             self.logger.info(f"Instance {instance_num}: Launching with Gamescope")
         else:
             self.logger.info(f"Instance {instance_num}: Launching without Gamescope (bwrap only)")
+
+        # 5. Build taskset command to limit CPU cores for this instance
+        cpu_list = self._get_cpu_affinity_for_instance(instance_num, total_instances)
+        if cpu_list:
+            cpu_mask = ",".join(str(c) for c in cpu_list)
+            taskset_cmd = ["taskset", "-c", cpu_mask]
+            final_cmd = taskset_cmd + final_cmd
+            self.logger.info(f"Instance {instance_num}: Using taskset with cores: {cpu_mask}")
 
         self.logger.info(f"Instance {instance_num}: Full command: {shlex.join(final_cmd)}")
         return final_cmd
@@ -312,7 +351,7 @@ class InstanceService:
         """Builds the base steam command."""
         if use_gamescope:
             self.logger.info(f"Instance {instance_num}: Using Steam command with Gamescope flags.")
-            return ["steam", "-gamepadui", "-steamos3", "-steamdeck", "-pipewire-dmabuf"]
+            return ["steam", "-gamepadui", "-pipewire-dmabuf"]
         else:
             self.logger.info(f"Instance {instance_num}: Using plain Steam command.")
             return ["steam"]
