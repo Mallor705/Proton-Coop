@@ -1,8 +1,6 @@
 import os
 import shlex
 import copy
-import os
-import shlex
 import shutil
 import signal
 import subprocess
@@ -166,6 +164,27 @@ class InstanceService:
         (home_path / ".local/share/fish").mkdir(parents=True, exist_ok=True)
         (home_path / ".config/fish").mkdir(parents=True, exist_ok=True)
         (home_path / ".cache").mkdir(parents=True, exist_ok=True)
+        (home_path / ".local/share/Steam/compatibilitytools.d").mkdir(parents=True, exist_ok=True)
+        (home_path / ".local/share/Steam/steamapps/common").mkdir(parents=True, exist_ok=True)
+
+        # Copy .acf files from host Steam to instance (if they don't exist)
+        host_steamapps = Path.home() / ".local/share/Steam/steamapps"
+        dest_steamapps = home_path / ".local/share/Steam/steamapps"
+        for acf_file in host_steamapps.glob("*.acf"):
+            dest_file = dest_steamapps / acf_file.name
+            if not dest_file.exists():
+                shutil.copy(acf_file, dest_file)
+
+        # Create compatibilitytools.d directory if it doesn't exist
+        host_compat = Path.home() / ".local/share/Steam/compatibilitytools.d"
+        dest_compat = home_path / ".local/share/Steam/compatibilitytools.d"
+        ignore = {"LegacyRuntime"}
+        for folder in host_compat.iterdir():
+            if folder.is_dir() and folder.name not in ignore:
+                dest_folder = dest_compat / folder.name
+                if not dest_folder.exists():
+                    dest_folder.mkdir(parents=True, exist_ok=True)
+
 
         self.logger.info("Home directory ready. Steam will auto-install on first launch.")
 
@@ -175,11 +194,8 @@ class InstanceService:
         env.pop("PYTHONHOME", None)
         env.pop("PYTHONPATH", None)
 
-        # This is critical for preventing system crashes and graphical glitches.
+        # Enable this if you experience system crashes and graphical glitches.
         # env["ENABLE_GAMESCOPE_WSI"] = "1"
-
-        # Set the HOME variable for the sandboxed user
-        # env["HOME"] = self._SANDBOX_HOME
 
         # Handle joystick assignment
         if device_info.get("joystick_path_str_for_instance"):
@@ -309,63 +325,53 @@ class InstanceService:
         """
         uid = str(os.getuid())
         gid = str(os.getgid())
-        runtime_dir = f"/run/user/{uid}"
 
         cmd = [
             "bwrap",
-            "--ro-bind", "/", "/",
+            "--dev-bind", "/", "/",
             "--die-with-parent",
-            "--unshare-user",  # Isolate user namespace
+            "--unshare-user",
             "--uid", uid,
             "--gid", gid,
-            "--proc", "/proc",
             "--tmpfs", "/tmp",
             "--tmpfs", "/home",  # Create a writable /home for the user mount
             "--share-net",
-            # Mount the isolated home directory to the fake user's home
-            "--bind", str(home_path), self._SANDBOX_HOME,
         ]
-
-        # Bind /dev to make /dev/null, /dev/zero, etc. available to Steam's runtime.
-        # This is safer than it looks, as bwrap filters sensitive device nodes.
-        cmd.extend(["--dev-bind", "/dev", "/dev"])
-
-        # [FIX] Provide passwd and group files for user resolution inside the sandbox.
-        cmd.extend(["--ro-bind", "/etc/passwd", "/etc/passwd"])
-        cmd.extend(["--ro-bind", "/etc/group", "/etc/group"])
-
-        # [FIX] Bind the host's D-Bus socket and runtime dir for essential services.
-        if os.path.exists(runtime_dir):
-            cmd.extend(["--bind", runtime_dir, runtime_dir])
-            cmd.extend(["--setenv", "XDG_RUNTIME_DIR", runtime_dir])
-        else:
-            self.logger.warning(
-                f"Instance {instance_idx + 1}: Host XDG_RUNTIME_DIR '{runtime_dir}' not found. "
-                "D-Bus and other services may not work correctly."
-            )
-
-        # Handle specific input device bindings, if any are configured
-        device_paths_to_bind = [
-            p for p in [
-                device_info.get("joystick_path_str_for_instance"),
-                device_info.get("mouse_path_str_for_instance"),
-                device_info.get("keyboard_path_str_for_instance")
-            ] if p
-        ]
-
-        for device_path in device_paths_to_bind:
-            # The individual --dev-bind calls are still needed even with the main /dev
-            # bind, especially on systems with more complex /dev layouts, to ensure
-            # the specific event nodes are present and correctly permissioned.
-            cmd.extend(["--dev-bind", device_path, device_path])
-            self.logger.info(f"Instance {instance_num}: bwrap will explicitly bind '{device_path}'.")
 
         # Ensure the sandboxed process knows where its home is
-        cmd.extend(["--setenv", "HOME", self._SANDBOX_HOME])
-        cmd.extend(["--setenv", "XDG_CONFIG_HOME", f"{self._SANDBOX_HOME}/.config"])
-        cmd.extend(["--setenv", "XDG_DATA_HOME", f"{self._SANDBOX_HOME}/.local/share"])
-        cmd.extend(["--setenv", "XDG_CACHE_HOME", f"{self._SANDBOX_HOME}/.cache"])
-        cmd.extend(["--setenv", "XDG_STATE_HOME", f"{self._SANDBOX_HOME}/.local/state"])
+        sandbox_home = self._SANDBOX_HOME
+        state_home = f"{sandbox_home}/.local/state"
+        cache_home = f"{sandbox_home}/.cache"
+        data_home = f"{sandbox_home}/.local/share"
+        config_home = f"{sandbox_home}/.config"
+        runtime_dir = f"/run/user/{uid}"
+        cmd.extend([
+            "--setenv", "HOME", sandbox_home,
+            "--setenv", "XDG_CONFIG_HOME", config_home,
+            "--setenv", "XDG_DATA_HOME", data_home,
+            "--setenv", "XDG_CACHE_HOME", cache_home,
+            "--setenv", "XDG_STATE_HOME", state_home,
+            "--setenv", "XDG_RUNTIME_DIR", runtime_dir,
+        ])
+
+        # Mount the isolated home directory to the fake user's home and
+        # Mount host Steam directories to share games and compatibility tools
+        host_steam = str(Path.home() / ".local/share/Steam")
+        sandbox_steam = f"{sandbox_home}/.local/share/Steam"
+        cmd.extend([
+            "--bind", str(home_path), sandbox_home,
+            "--bind", f"{host_steam}/steamapps/common", f"{sandbox_steam}/steamapps/common",
+        ])
+
+        # Mount host compatibility tools directory to share compatibility tools
+        host_compat = Path(f"{host_steam}/compatibilitytools.d")
+        sandbox_compat = f"{sandbox_steam}/compatibilitytools.d"
+        ignore = {"LegacyRuntime"}
+        for folder in host_compat.iterdir():
+            if folder.is_dir() and folder.name not in ignore:
+                cmd.extend(["--bind", str(folder), f"{sandbox_compat}/{folder.name}"])
+
+
 
         # Ensure custom ENV variables reach Steam inside the sandbox
         try:
