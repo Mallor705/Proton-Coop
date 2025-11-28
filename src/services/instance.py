@@ -333,6 +333,7 @@ class InstanceService:
             "-H", str(height),
             "-w", str(width),
             "-h", str(height),
+            "--xwayland-count", "1",
             # "--mangoapp",
         ]
 
