@@ -97,19 +97,26 @@ class InstanceService:
         """Launches a single steam instance."""
         self.logger.info(f"Preparing instance {instance_num}...")
 
-        home_path = Config.get_steam_home_path(instance_num)
-        home_path.mkdir(parents=True, exist_ok=True)
-        self.logger.info(f"Instance {instance_num}: Using isolated home path '{home_path}'")
+        # Get paths for isolated Steam directories
+        steam_data_path = Config.get_steam_home_path(instance_num)
+        steam_root_path = Config.get_steam_root_path(instance_num)
 
-        # Prepare minimal home structure - Steam will auto-install on first run
-        self._prepare_steam_home(home_path)
+        # Create the directories if they don't exist
+        steam_data_path.mkdir(parents=True, exist_ok=True)
+        steam_root_path.mkdir(parents=True, exist_ok=True)
+        self.logger.info(f"Instance {instance_num}: Using isolated Steam data path '{steam_data_path}'")
+        self.logger.info(f"Instance {instance_num}: Using isolated Steam root path '{steam_root_path}'")
+
+
+        # Prepare minimal data structure for the instance
+        self._prepare_steam_home(steam_data_path)
 
         instance_idx = instance_num - 1
         device_info = self._validate_input_devices(profile, instance_idx, instance_num)
 
         env = self._prepare_environment(profile, device_info, instance_num)
         total_instances = profile.effective_num_players()
-        cmd = self._build_command(profile, device_info, instance_num, home_path, total_instances)
+        cmd = self._build_command(profile, device_info, instance_num, steam_data_path, steam_root_path, total_instances)
 
         log_file = Config.LOG_DIR / f"steam_instance_{instance_num}.log"
         self.logger.info(f"Launching instance {instance_num} (Log: {log_file})")
@@ -224,7 +231,7 @@ class InstanceService:
         self.logger.info(f"Instance {instance_num}: Final environment prepared.")
         return env
 
-    def _build_command(self, profile: Profile, device_info: dict, instance_num: int, home_path: Path, total_instances: int = 2) -> List[str]:
+    def _build_command(self, profile: Profile, device_info: dict, instance_num: int, steam_data_path: Path, steam_root_path: Path, total_instances: int = 2) -> List[str]:
         """
         Builds the final command array in the correct order:
         [taskset] -> [gamescope] -> [bwrap] -> [steam]  (when gamescope is enabled)
@@ -236,7 +243,7 @@ class InstanceService:
         steam_cmd = self._build_base_steam_command(instance_num, profile.use_gamescope)
 
         # 2. Build the bwrap command, which will wrap the steam command
-        bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance_num, home_path)
+        bwrap_cmd = self._build_bwrap_command(profile, instance_idx, device_info, instance_num, steam_data_path, steam_root_path)
 
         # 3. Prepend bwrap to the steam command
         final_cmd = bwrap_cmd + steam_cmd
@@ -346,7 +353,7 @@ class InstanceService:
             self.logger.info(f"Instance {instance_num}: Using plain Steam command.")
             return ["steam"]
 
-    def _build_bwrap_command(self, profile: Profile, instance_idx: int, device_info: dict, instance_num: int, home_path: Path) -> List[str]:
+    def _build_bwrap_command(self, profile: Profile, instance_idx: int, device_info: dict, instance_num: int, steam_data_path: Path, steam_root_path: Path) -> List[str]:
         """
         Builds the bwrap command for sandboxing.
         The instance runs as the host user, but its Steam data directory
@@ -356,6 +363,7 @@ class InstanceService:
         """
         user_home = Path.home()
         steam_data_dir = user_home / ".local/share/Steam"
+        steam_root_dir = user_home / ".steam"
 
         cmd = [
             "bwrap",
@@ -367,9 +375,10 @@ class InstanceService:
             "--die-with-parent",
         ]
 
-        # 1. Mount the isolated instance data over the real Steam data directory.
+        # 1. Mount the isolated instance directories over the real Steam directories.
         #    This is the core of the isolation strategy.
-        cmd.extend(["--bind", str(home_path), str(steam_data_dir)])
+        cmd.extend(["--bind", str(steam_data_path), str(steam_data_dir)])
+        cmd.extend(["--bind", str(steam_root_path), str(steam_root_dir)])
 
         # 2. Mount the shared subdirectories from the real Steam installation
         #    into the now-redirected (sandboxed) Steam data directory.

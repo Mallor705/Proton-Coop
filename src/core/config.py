@@ -32,6 +32,11 @@ class Config:
         return Config.CONFIG_DIR / f"steam_home_{instance_num}"
 
     @staticmethod
+    def get_steam_root_path(instance_num: int) -> Path:
+        """Returns the isolated Steam root path (~/.steam) for a given instance."""
+        return Config.CONFIG_DIR / f"steam_root_{instance_num}"
+
+    @staticmethod
     def migrate_legacy_paths() -> None:
         """
         Migrates legacy 'multi-scope' configuration paths to the new
