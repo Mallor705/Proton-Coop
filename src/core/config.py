@@ -19,6 +19,7 @@ class Config:
     APP_DIR: Path = Path(__file__).parent.parent.parent
 
     CONFIG_DIR: Path = Path.home() / f".config/{APP_NAME}"
+    LOCAL_DIR: Path = Path.home() / f".local/share/{APP_NAME}"
     LOG_DIR: Path = Path.home() / f".cache/{APP_NAME}/logs"
 
     @staticmethod
@@ -29,12 +30,12 @@ class Config:
     @staticmethod
     def get_steam_home_path(instance_num: int) -> Path:
         """Returns the isolated Steam home path for a given instance."""
-        return Config.CONFIG_DIR / f"steam_home_{instance_num}"
+        return Config.LOCAL_DIR / f"steam_data_{instance_num}"
 
     @staticmethod
     def get_steam_root_path(instance_num: int) -> Path:
         """Returns the isolated Steam root path (~/.steam) for a given instance."""
-        return Config.CONFIG_DIR / f"steam_root_{instance_num}"
+        return Config.LOCAL_DIR / f"steam_root_{instance_num}"
 
     @staticmethod
     def migrate_legacy_paths() -> None:
