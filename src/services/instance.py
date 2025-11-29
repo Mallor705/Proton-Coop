@@ -189,17 +189,42 @@ class InstanceService:
         """
         Prepares the isolated Steam data directory for an instance.
         This directory will be mounted over the default ~/.local/share/Steam.
+        It creates symlinks to the host's 'common' and 'compatibilitytools.d'
+        directories to share game files and tools, resolving CWD issues for games.
         """
-        self.logger.info(f"Preparing instance data directory at {home_path}...")
+        self.logger.info(f"Preparing instance data directory with symlinks at {home_path}...")
 
-        # Create mount points for sharing host's game and tool files
-        (home_path / "steamapps" / "common").mkdir(parents=True, exist_ok=True)
-        (home_path / "compatibilitytools.d").mkdir(parents=True, exist_ok=True)
+        host_steam_dir = Path.home() / ".local/share/Steam"
+
+        # Define source and destination paths for symlinks
+        targets = {
+            "steamapps/common": host_steam_dir / "steamapps" / "common",
+            "compatibilitytools.d": host_steam_dir / "compatibilitytools.d"
+        }
+
+        for link_name, source_path in targets.items():
+            link_path = home_path / link_name
+            link_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Remove existing file/dir/symlink at the destination to avoid errors
+            if link_path.is_symlink():
+                link_path.unlink()
+            elif link_path.is_dir():
+                shutil.rmtree(link_path)
+            elif link_path.exists():
+                link_path.unlink()
+
+            # Create the symlink if the source exists, making sharing transparent
+            if source_path.exists():
+                link_path.symlink_to(source_path, target_is_directory=True)
+                self.logger.info(f"Symlinked {source_path} to {link_path}")
+            else:
+                self.logger.warning(f"Source path {source_path} for symlink not found, skipping.")
 
         # Copy .acf files from host Steam to instance to share game libraries.
-        # This makes Steam think the games are installed in this instance.
-        host_steamapps = Path.home() / ".local/share/Steam/steamapps"
         dest_steamapps = home_path / "steamapps"
+        dest_steamapps.mkdir(parents=True, exist_ok=True)
+        host_steamapps = host_steam_dir / "steamapps"
         for acf_file in host_steamapps.glob("*.acf"):
             dest_file = dest_steamapps / acf_file.name
             if not dest_file.exists():
@@ -365,12 +390,15 @@ class InstanceService:
         steam_data_dir = user_home / ".local/share/Steam"
         steam_root_dir = user_home / ".steam"
 
+        uid = str(os.getuid())
         cmd = [
             "bwrap",
             "--dev-bind", "/", "/",
             "--proc", "/proc",
             "--dev", "/dev",
+            "--tmpfs", "/dev/shm",
             "--bind", "/tmp", "/tmp",
+            "--bind", f"/run/user/{uid}", f"/run/user/{uid}",
             "--share-net",
             "--die-with-parent",
         ]
@@ -380,19 +408,8 @@ class InstanceService:
         cmd.extend(["--bind", str(steam_data_path), str(steam_data_dir)])
         cmd.extend(["--bind", str(steam_root_path), str(steam_root_dir)])
 
-        # 2. Mount the shared subdirectories from the real Steam installation
-        #    into the now-redirected (sandboxed) Steam data directory.
-        #    This allows all instances to share game files and tools.
-        cmd.extend(["--bind", str(steam_data_dir / "steamapps" / "common"), str(steam_data_dir / "steamapps" / "common")])
-
-        # Mount host compatibility tools directory to share compatibility tools
-        host_compat_dir = steam_data_dir / "compatibilitytools.d"
-        ignore = {"LegacyRuntime"}
-        if host_compat_dir.exists():
-            for folder in host_compat_dir.iterdir():
-                if folder.is_dir() and folder.name not in ignore:
-                    target_path = steam_data_dir / "compatibilitytools.d" / folder.name
-                    cmd.extend(["--bind", str(folder), str(target_path)])
+        # Symlinks created in _prepare_steam_home handle sharing of 'common'
+        # and 'compatibilitytools.d', so no additional bwrap mounts are needed.
 
         # Set environment variables required for Steam within the sandbox
         cmd.extend(["--setenv", "LD_PRELOAD", "", "--setenv", "ENABLE_GAMESCOPE_WSI", "1"])
