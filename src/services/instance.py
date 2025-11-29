@@ -109,7 +109,7 @@ class InstanceService:
 
 
         # Prepare minimal data structure for the instance
-        self._prepare_steam_home(steam_data_path)
+        self._prepare_steam_home(steam_data_path, steam_root_path)
 
         instance_idx = instance_num - 1
         device_info = self._validate_input_devices(profile, instance_idx, instance_num)
@@ -185,52 +185,24 @@ class InstanceService:
         del self.processes[instance_num]
         del self.pids[instance_num]
 
-    def _prepare_steam_home(self, home_path: Path) -> None:
+    def _prepare_steam_home(self, steam_data_path: Path, steam_root_path: Path) -> None:
         """
-        Prepares the isolated Steam data directory for an instance.
-        This directory will be mounted over the default ~/.local/share/Steam.
-        It creates symlinks to the host's 'common' and 'compatibilitytools.d'
-        directories to share game files and tools, resolving CWD issues for games.
+        Prepares the isolated Steam directories for an instance by creating
+        the necessary upper and work directories for the overlayfs mounts.
         """
-        self.logger.info(f"Preparing instance data directory with symlinks at {home_path}...")
+        self.logger.info(f"Preparing overlay directories for instance...")
 
-        host_steam_dir = Path.home() / ".local/share/Steam"
+        # Prepare for ~/.local/share/Steam overlay
+        (steam_data_path / "upper").mkdir(parents=True, exist_ok=True)
+        (steam_data_path / "work").mkdir(parents=True, exist_ok=True)
+        self.logger.info(f"Overlay directories for Steam data created at '{steam_data_path}'")
 
-        # Define source and destination paths for symlinks
-        targets = {
-            "steamapps/common": host_steam_dir / "steamapps" / "common",
-            "compatibilitytools.d": host_steam_dir / "compatibilitytools.d"
-        }
+        # Prepare for ~/.steam overlay
+        (steam_root_path / "upper").mkdir(parents=True, exist_ok=True)
+        (steam_root_path / "work").mkdir(parents=True, exist_ok=True)
+        self.logger.info(f"Overlay directories for Steam root created at '{steam_root_path}'")
 
-        for link_name, source_path in targets.items():
-            link_path = home_path / link_name
-            link_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Remove existing file/dir/symlink at the destination to avoid errors
-            if link_path.is_symlink():
-                link_path.unlink()
-            elif link_path.is_dir():
-                shutil.rmtree(link_path)
-            elif link_path.exists():
-                link_path.unlink()
-
-            # Create the symlink if the source exists, making sharing transparent
-            if source_path.exists():
-                link_path.symlink_to(source_path, target_is_directory=True)
-                self.logger.info(f"Symlinked {source_path} to {link_path}")
-            else:
-                self.logger.warning(f"Source path {source_path} for symlink not found, skipping.")
-
-        # Copy .acf files from host Steam to instance to share game libraries.
-        dest_steamapps = home_path / "steamapps"
-        dest_steamapps.mkdir(parents=True, exist_ok=True)
-        host_steamapps = host_steam_dir / "steamapps"
-        for acf_file in host_steamapps.glob("*.acf"):
-            dest_file = dest_steamapps / acf_file.name
-            if not dest_file.exists():
-                shutil.copy(acf_file, dest_file)
-
-        self.logger.info(f"Instance data directory {home_path} is ready.")
+        self.logger.info("Instance directories are ready for overlay mounts.")
 
     def _prepare_environment(self, profile: Profile, device_info: dict, instance_num: int) -> dict:
         """Prepares a minimal environment for the Steam instance."""
@@ -380,47 +352,49 @@ class InstanceService:
 
     def _build_bwrap_command(self, profile: Profile, instance_idx: int, device_info: dict, instance_num: int, steam_data_path: Path, steam_root_path: Path) -> List[str]:
         """
-        Builds the bwrap command for sandboxing.
-        The instance runs as the host user, but its Steam data directory
-        (typically ~/.local/share/Steam) is redirected to an isolated path.
-        This preserves user data isolation while allowing seamless integration
-        with the host user's desktop environment (D-Bus, etc.).
+        Builds the bwrap command for sandboxing using overlayfs for Steam data.
         """
         user_home = Path.home()
-        steam_data_dir = user_home / ".local/share/Steam"
-        steam_root_dir = user_home / ".steam"
+        host_steam_data_dir = user_home / ".local/share/Steam"
+        host_steam_root_dir = user_home / ".steam"
 
-        # uid = str(os.getuid())
+        # These paths are the mount points *inside* the sandbox.
+        sandboxed_steam_data_dir = host_steam_data_dir
+        sandboxed_steam_root_dir = host_steam_root_dir
+
         cmd = [
             "bwrap",
             "--dev-bind", "/", "/",
             "--proc", "/proc",
             "--dev-bind", "/dev", "/dev",
-            # "--tmpfs", "/dev/shm",
             "--bind", "/tmp", "/tmp",
-            # "--bind", f"/run/user/{uid}", f"/run/user/{uid}",
             "--share-net",
             "--die-with-parent",
         ]
 
-        # 1. Mount the isolated instance directories over the real Steam directories.
-        #    This is the core of the isolation strategy.
-        cmd.extend(["--bind", str(steam_data_path), str(steam_data_dir)])
-        cmd.extend(["--bind", str(steam_root_path), str(steam_root_dir)])
+        # Overlay for ~/.local/share/Steam
+        if host_steam_data_dir.is_dir():
+            upper_dir = steam_data_path / "upper"
+            work_dir = steam_data_path / "work"
+            cmd.extend([
+                "--overlay-src", str(host_steam_data_dir),
+                "--overlay", str(upper_dir), str(work_dir), str(sandboxed_steam_data_dir)
+            ])
+            self.logger.info(f"Instance {instance_num}: Setup overlay for Steam data at '{sandboxed_steam_data_dir}'")
+        else:
+            self.logger.warning(f"Host Steam data directory not found at '{host_steam_data_dir}', skipping overlay.")
 
-        # 2. Explicitly bind the real 'common' directory over itself. This acts as a
-        #    "permission punch-through", ensuring the location is writable inside
-        #    the sandbox, even though it's accessed via a symlink from a
-        #    different primary mount. This solves "disk write errors".
-        common_dir = user_home / ".local/share/Steam/steamapps/common"
-        if common_dir.exists():
-            cmd.extend(["--bind", str(common_dir), str(common_dir)])
-
-        # Symlinks created in _prepare_steam_home handle sharing of 'common'
-        # and 'compatibilitytools.d', so no additional bwrap mounts are needed.
-
-        # Set environment variables required for Steam within the sandbox
-        # cmd.extend(["--setenv", "LD_PRELOAD", "", "--setenv", "ENABLE_GAMESCOPE_WSI", "1"])
+        # Overlay for ~/.steam
+        if host_steam_root_dir.is_dir():
+            upper_dir = steam_root_path / "upper"
+            work_dir = steam_root_path / "work"
+            cmd.extend([
+                "--overlay-src", str(host_steam_root_dir),
+                "--overlay", str(upper_dir), str(work_dir), str(sandboxed_steam_root_dir)
+            ])
+            self.logger.info(f"Instance {instance_num}: Setup overlay for Steam root at '{sandboxed_steam_root_dir}'")
+        else:
+            self.logger.warning(f"Host Steam root directory not found at '{host_steam_root_dir}', skipping overlay.")
 
         # Ensure custom ENV variables from the profile reach Steam
         try:
