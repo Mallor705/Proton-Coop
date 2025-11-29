@@ -408,6 +408,14 @@ class InstanceService:
         cmd.extend(["--bind", str(steam_data_path), str(steam_data_dir)])
         cmd.extend(["--bind", str(steam_root_path), str(steam_root_dir)])
 
+        # 2. Explicitly bind the 'Steamworks Shared' directory to make it writable.
+        #    This is necessary to prevent "disk write error" in some games when
+        #    they try to write to this shared directory, which is outside the
+        #    primary sandbox mounts.
+        steamworks_shared_dir = user_home / ".local/share/Steam/steamapps/common/Steamworks Shared"
+        if steamworks_shared_dir.exists():
+            cmd.extend(["--bind", str(steamworks_shared_dir), str(steamworks_shared_dir)])
+
         # Symlinks created in _prepare_steam_home handle sharing of 'common'
         # and 'compatibilitytools.d', so no additional bwrap mounts are needed.
 
