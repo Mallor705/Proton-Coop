@@ -390,15 +390,15 @@ class InstanceService:
         steam_data_dir = user_home / ".local/share/Steam"
         steam_root_dir = user_home / ".steam"
 
-        uid = str(os.getuid())
+        # uid = str(os.getuid())
         cmd = [
             "bwrap",
             "--dev-bind", "/", "/",
             "--proc", "/proc",
-            "--dev", "/dev",
-            "--tmpfs", "/dev/shm",
+            "--dev-bind", "/dev", "/dev",
+            # "--tmpfs", "/dev/shm",
             "--bind", "/tmp", "/tmp",
-            "--bind", f"/run/user/{uid}", f"/run/user/{uid}",
+            # "--bind", f"/run/user/{uid}", f"/run/user/{uid}",
             "--share-net",
             "--die-with-parent",
         ]
@@ -420,7 +420,7 @@ class InstanceService:
         # and 'compatibilitytools.d', so no additional bwrap mounts are needed.
 
         # Set environment variables required for Steam within the sandbox
-        cmd.extend(["--setenv", "LD_PRELOAD", "", "--setenv", "ENABLE_GAMESCOPE_WSI", "1"])
+        # cmd.extend(["--setenv", "LD_PRELOAD", "", "--setenv", "ENABLE_GAMESCOPE_WSI", "1"])
 
         # Ensure custom ENV variables from the profile reach Steam
         try:
