@@ -62,13 +62,6 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         self.launch_button.set_sensitive(False)
         self.footer_bar.pack_end(self.launch_button)
 
-        self.stop_button = Gtk.Button.new_with_mnemonic("Stop")
-        self.stop_button.get_style_context().add_class("destructive-action")
-        self.stop_button.get_style_context().add_class("stop-button")
-        self.stop_button.connect("clicked", self.on_stop_clicked)
-        self.stop_button.set_visible(False)
-        self.footer_bar.pack_end(self.stop_button)
-
     def _trigger_auto_save(self, *args):
         updated_profile = self.layout_settings_page.get_updated_data()
         self.profile = updated_profile
@@ -110,19 +103,6 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         self.profile.save() # Save selection before launching
 
         self.instance_service.launch_steam(self.profile)
-        self.launch_button.set_visible(False)
-        self.stop_button.set_visible(True)
-        self.layout_settings_page.set_sensitive(False)
-        self.layout_settings_page.set_running_state(True)
-
-    def on_stop_clicked(self, button):
-        self.instance_service.terminate_all()
-        self.launch_button.set_visible(True)
-        self.stop_button.set_visible(False)
-        self.layout_settings_page.set_sensitive(True)
-        self.layout_settings_page.set_running_state(False)
-        self.layout_settings_page._run_verification()
-        self._update_launch_button_state()
 
 class MultiScopeApplication(Adw.Application):
     def __init__(self, **kwargs):

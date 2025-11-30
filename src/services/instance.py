@@ -2,7 +2,6 @@ import os
 import shlex
 import copy
 import shutil
-import signal
 import subprocess
 import time
 from pathlib import Path
@@ -28,10 +27,7 @@ class InstanceService:
     def __init__(self, logger: Logger):
         """Initializes the instance service."""
         self.logger = logger
-        self.pids: dict[int, int] = {}
-        self.processes: dict[int, subprocess.Popen] = {}
         self.cpu_count = psutil.cpu_count(logical=True)
-        self.termination_in_progress = False
 
     def _get_cpu_affinity_for_instance(self, instance_num: int, total_instances: int) -> List[int]:
         """
@@ -97,7 +93,6 @@ class InstanceService:
             time.sleep(5) # Stagger launches
 
         self.logger.info(f"All {num_instances} instances launched")
-        self.logger.info(f"PIDs: {self.pids}")
 
     def _launch_single_instance(self, profile: Profile, instance_num: int) -> None:
         """Launches a single steam instance."""
@@ -133,10 +128,7 @@ class InstanceService:
                 stderr=subprocess.DEVNULL,
                 env=env,
                 cwd=home_path,  # Launch from the isolated home directory
-                preexec_fn=os.setpgrp,
             )
-            self.pids[instance_num] = process.pid
-            self.processes[instance_num] = process
             self.logger.info(f"Instance {instance_num} started with PID: {process.pid}")
         except Exception as e:
             self.logger.error(f"Failed to launch instance {instance_num}: {e}")
@@ -156,33 +148,6 @@ class InstanceService:
         self.validate_dependencies(use_gamescope=active_profile.use_gamescope)
         Config.LOG_DIR.mkdir(parents=True, exist_ok=True)
         self._launch_single_instance(active_profile, instance_num)
-
-    def terminate_instance(self, instance_num: int) -> None:
-        """Terminates a single Steam instance."""
-        if instance_num not in self.processes:
-            self.logger.warning(
-                f"Attempted to terminate non-existent instance {instance_num}"
-            )
-            return
-
-        process = self.processes[instance_num]
-        if process.poll() is None:
-            try:
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                self.logger.info(
-                    f"Sent SIGKILL to process group of PID {process.pid} for instance {instance_num}"
-                )
-            except ProcessLookupError:
-                self.logger.info(
-                    f"Process group for PID {process.pid} not found for instance {instance_num}."
-                )
-            except Exception as e:
-                self.logger.error(
-                    f"Failed to kill process group for PID {process.pid} for instance {instance_num}: {e}"
-                )
-        process.wait()
-        del self.processes[instance_num]
-        del self.pids[instance_num]
 
     def _prepare_steam_home(self, home_path: Path) -> None:
         """
@@ -440,20 +405,3 @@ class InstanceService:
         except Exception as e:
             self.logger.error(f"Instance {instance_num}: Failed to add --setenv entries: {e}")
         return cmd
-
-    def terminate_all(self) -> None:
-        """Terminates all managed steam instances."""
-        if self.termination_in_progress:
-            return
-        try:
-            self.termination_in_progress = True
-            self.logger.info("Starting termination of all instances...")
-
-            for instance_num in list(self.processes.keys()):
-                self.terminate_instance(instance_num)
-
-            self.logger.info("Instance termination complete.")
-            self.pids.clear()
-            self.processes.clear()
-        finally:
-            self.termination_in_progress = False
