@@ -1,16 +1,21 @@
 import sys
+import threading
+import time
 from pathlib import Path
+
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gdk, Gio, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk
+
 from ..core.config import Config
 from ..core.logger import Logger
 from ..models.profile import Profile
 from ..services.instance import InstanceService
 from .layout_editor import LayoutSettingsPage
+
 
 class MultiScopeWindow(Adw.ApplicationWindow):
     def __init__(self, *args, **kwargs):
@@ -21,6 +26,9 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         self.logger = Logger("MultiScope-GUI", Config.LOG_DIR, reset=True)
         self.instance_service = InstanceService(logger=self.logger)
         self.profile = Profile.load()
+
+        self._launch_thread = None
+        self._cancel_launch_event = threading.Event()
 
         self._build_ui()
         self._update_launch_button_state()
@@ -99,6 +107,38 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         else:
             self._update_launch_button_state()
 
+    def _launch_worker(self):
+        """Worker function to launch instances in a separate thread."""
+        selected_players = self.profile.selected_players
+        self.logger.info(f"Launch worker started for players: {selected_players}")
+
+        for instance_num in selected_players:
+            if self._cancel_launch_event.is_set():
+                self.logger.info("Launch sequence cancelled by user.")
+                break
+
+            self.logger.info(f"Worker launching instance {instance_num}...")
+            # The profile already contains the global gamescope setting.
+            self.instance_service.launch_instance(self.profile, instance_num)
+            time.sleep(5)  # Stagger launches
+
+        # When the loop finishes (or is cancelled), clean up.
+        GLib.idle_add(self._on_launch_finished)
+
+    def _on_launch_finished(self):
+        """Callback executed in the main thread when the launch worker is done."""
+        self.logger.info("Launch worker finished.")
+        # If the process was cancelled, terminate_all has already been called.
+        # Otherwise, we just update the UI state.
+        if not self._cancel_launch_event.is_set():
+            self.launch_button.set_visible(False)
+            self.stop_button.set_visible(True)
+            self.layout_settings_page.set_sensitive(False)
+            self.layout_settings_page.set_running_state(True)
+        self._launch_thread = None
+        self._cancel_launch_event.clear()
+
+
     def on_launch_clicked(self, button):
         self.layout_settings_page._run_verification()
         selected_players = self.layout_settings_page.get_selected_players()
@@ -109,13 +149,23 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         self.profile.selected_players = selected_players
         self.profile.save() # Save selection before launching
 
-        self.instance_service.launch_steam(self.profile)
+        # Update UI immediately to give feedback
         self.launch_button.set_visible(False)
         self.stop_button.set_visible(True)
         self.layout_settings_page.set_sensitive(False)
-        self.layout_settings_page.set_running_state(True)
+
+        # Start the launch process in a background thread
+        self._cancel_launch_event.clear()
+        self._launch_thread = threading.Thread(target=self._launch_worker)
+        self._launch_thread.start()
+
 
     def on_stop_clicked(self, button):
+        if self._launch_thread and self._launch_thread.is_alive():
+            self.logger.info("Cancelling in-progress launch...")
+            self._cancel_launch_event.set()
+            # The worker will terminate running instances as it shuts down
+
         self.instance_service.terminate_all()
         self.launch_button.set_visible(True)
         self.stop_button.set_visible(False)

@@ -19,12 +19,6 @@ from ..models.profile import Profile, PlayerInstanceConfig
 class InstanceService:
     """Service responsible for managing Steam instances."""
 
-    # Constants for sandboxed user
-    _SANDBOX_USER = "steamuser"
-    _SANDBOX_UID = "1000"
-    _SANDBOX_GID = "1000"
-    _SANDBOX_HOME = f"/home/{_SANDBOX_USER}"
-
     def __init__(self, logger: Logger):
         """Initializes the instance service."""
         self.logger = logger
@@ -63,10 +57,6 @@ class InstanceService:
     #     self.logger.info(f"Instance {instance_num}: Assigned CPU cores {cpu_list}")
     #     return cpu_list
 
-    def launch_steam(self, profile: Profile) -> None:
-        """A wrapper for launch_steam_instances that can be called from the GUI."""
-        self.launch_steam_instances(profile)
-
     def validate_dependencies(self, use_gamescope: bool = True) -> None:
         """Validates if all necessary commands are available on the system."""
         self.logger.info("Validating dependencies...")
@@ -77,27 +67,6 @@ class InstanceService:
             if not shutil.which(cmd):
                 raise DependencyError(f"Required command '{cmd}' not found")
         self.logger.info("Dependencies validated successfully")
-
-    def launch_steam_instances(self, profile: Profile) -> None:
-        """Launches all Steam instances according to the provided profile."""
-        self.validate_dependencies(use_gamescope=profile.use_gamescope)
-
-        Config.LOG_DIR.mkdir(parents=True, exist_ok=True)
-
-        num_instances = profile.effective_num_players()
-        if num_instances == 0:
-            self.logger.info("No instances to launch.")
-            return
-
-        self.logger.info(f"Launching {num_instances} instance(s) of Steam...")
-
-        for i in range(num_instances):
-            instance_num = (profile.selected_players[i] if profile.selected_players else i + 1)
-            self.launch_instance(profile, instance_num)
-            time.sleep(5) # Stagger launches
-
-        self.logger.info(f"All {num_instances} instances launched")
-        self.logger.info(f"PIDs: {self.pids}")
 
     def _launch_single_instance(self, profile: Profile, instance_num: int) -> None:
         """Launches a single steam instance."""
@@ -226,13 +195,8 @@ class InstanceService:
         env.pop("PYTHONPATH", None)
 
         # Enable this if you experience system crashes and graphical glitches.
-        # env["ENABLE_GAMESCOPE_WSI"] = "1"
-        # env["LD_PRELOAD"] = ""
-        # Handle joystick assignment
-        if device_info.get("joystick_path_str_for_instance"):
-            env["SDL_JOYSTICK_DEVICE"] = device_info["joystick_path_str_for_instance"]
-            self.logger.info(f"Instance {instance_num}: Setting SDL_JOYSTICK_DEVICE to '{device_info['joystick_path_str_for_instance']}'.")
-
+        env["ENABLE_GAMESCOPE_WSI"] = "0"
+        env["LD_PRELOAD"] = ""
         # Handle audio device assignment
         if device_info.get("audio_device_id_for_instance"):
             env["PULSE_SINK"] = device_info["audio_device_id_for_instance"]
@@ -333,17 +297,11 @@ class InstanceService:
             "-H", str(height),
             "-w", str(width),
             "-h", str(height),
+            "-o", "999", # Always set an unfocused FPS limit to a very high value
+            "-r", "999", # Always set a focused FPS limit to a very high value
             # "--xwayland-count", "1",
             # "--mangoapp",
         ]
-
-        # Always set an unfocused FPS limit to a very high value
-        cmd.extend(["-o", "999"])
-        self.logger.info(f"Instance {instance_num}: Setting unfocused FPS limit to 999.")
-
-        # Always set a focused FPS limit to a very high value
-        cmd.extend(["-r", "999"])
-        self.logger.info(f"Instance {instance_num}: Setting focused FPS limit to 999.")
 
         if not profile.is_splitscreen_mode:
             cmd.extend(["-f", "--adaptive-sync"])
@@ -371,42 +329,71 @@ class InstanceService:
         Each instance has its own completely independent Steam installation.
         Steam will auto-install on first run - no bind mounts needed.
         """
-        uid = str(os.getuid())
-        gid = str(os.getgid())
+        # Dynamic user/group for the sandbox
+        sandbox_uid = str(1000 + instance_num)
+        sandbox_gid = str(1000 + instance_num)
+        sandbox_user = f"stuser{instance_num}"
+        sandbox_home = f"/home/{sandbox_user}"
 
         cmd = [
             "bwrap",
             "--dev-bind", "/", "/",
-            "--proc", "/proc" ,
-            "--dev-bind", "/dev", "/dev" ,
-            # "--tmpfs", "/dev/shm" ,
+            "--proc", "/proc",
             "--die-with-parent",
-            "--unshare-user",
+            "--unshare-all",
+            # "--unshare-user",
+            # "--unshare-ipc",
             # "--unshare-pid",
-            "--uid", uid,
-            "--gid", gid,
-            "--bind", "/tmp", "/tmp",
+            # "--unshare-uts",
+            # "--unshare-cgroup",
+            "--new-session",
+            "--uid", sandbox_uid,
+            "--gid", sandbox_gid,
+            # "--bind", "/tmp", "/tmp",
+            "--tmpfs", "/tmp",
             "--tmpfs", "/home",  # Create a writable /home for the user mount
-            # "--bind", f"/run/user/{uid}", f"/run/user/{uid}" ,
             "--share-net",
         ]
 
+        # --- Device Isolation ---
+        # 1. Hide all host input devices by mounting a new empty tmpfs over /dev/input
+        cmd.extend(["--tmpfs", "/dev/input"])
+
+        # 2. Selectively re-expose only the devices assigned to this instance.
+        #    The paths in device_info are resolved to their real paths (e.g., /dev/input/eventX).
+        device_paths_to_bind = [
+            device_info.get("mouse_path_str_for_instance"),
+            device_info.get("keyboard_path_str_for_instance"),
+            device_info.get("joystick_path_str_for_instance"),
+        ]
+
+        for device_path in device_paths_to_bind:
+            if device_path:
+                self.logger.info(f"Instance {instance_num}: Exposing device '{device_path}' to sandbox.")
+                cmd.extend(["--dev-bind", device_path, device_path])
+
+        # 3. Expose other necessary input-related devices for services like Steam Input.
+        if Path("/dev/uinput").exists():
+            cmd.extend(["--dev-bind", "/dev/uinput", "/dev/uinput"])
+        if Path("/dev/input/mice").exists():
+            cmd.extend(["--dev-bind", "/dev/input/mice", "/dev/input/mice"])
+        # --- End Device Isolation ---
+
         # Ensure the sandboxed process knows where its home is
-        sandbox_home = self._SANDBOX_HOME
         state_home = f"{sandbox_home}/.local/state"
         cache_home = f"{sandbox_home}/.cache"
         data_home = f"{sandbox_home}/.local/share"
         config_home = f"{sandbox_home}/.config"
-        runtime_dir = f"/run/user/{uid}"
+        runtime_dir = f"/run/user/{sandbox_uid}"
         cmd.extend([
             "--setenv", "HOME", sandbox_home,
+            "--setenv", "USER", sandbox_user,
+            "--setenv", "LOGNAME", sandbox_user,
             "--setenv", "XDG_CONFIG_HOME", config_home,
             "--setenv", "XDG_DATA_HOME", data_home,
             "--setenv", "XDG_CACHE_HOME", cache_home,
             "--setenv", "XDG_STATE_HOME", state_home,
             "--setenv", "XDG_RUNTIME_DIR", runtime_dir,
-            # "--setenv", "LD_PRELOAD", "",
-            # "--setenv", "ENABLE_GAMESCOPE_WSI", "1"
         ])
 
         # Mount the isolated home directory to the fake user's home and
