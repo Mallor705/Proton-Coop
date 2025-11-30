@@ -228,11 +228,6 @@ class InstanceService:
         # Enable this if you experience system crashes and graphical glitches.
         # env["ENABLE_GAMESCOPE_WSI"] = "1"
         # env["LD_PRELOAD"] = ""
-        # Handle joystick assignment
-        if device_info.get("joystick_path_str_for_instance"):
-            env["SDL_JOYSTICK_DEVICE"] = device_info["joystick_path_str_for_instance"]
-            self.logger.info(f"Instance {instance_num}: Setting SDL_JOYSTICK_DEVICE to '{device_info['joystick_path_str_for_instance']}'.")
-
         # Handle audio device assignment
         if device_info.get("audio_device_id_for_instance"):
             env["PULSE_SINK"] = device_info["audio_device_id_for_instance"]
@@ -377,8 +372,7 @@ class InstanceService:
         cmd = [
             "bwrap",
             "--dev-bind", "/", "/",
-            "--proc", "/proc" ,
-            "--dev-bind", "/dev", "/dev" ,
+            "--proc", "/proc",
             # "--tmpfs", "/dev/shm" ,
             "--die-with-parent",
             "--unshare-user",
@@ -390,6 +384,30 @@ class InstanceService:
             # "--bind", f"/run/user/{uid}", f"/run/user/{uid}" ,
             "--share-net",
         ]
+
+        # --- Device Isolation ---
+        # 1. Hide all host input devices by mounting a new empty tmpfs over /dev/input
+        cmd.extend(["--tmpfs", "/dev/input"])
+
+        # 2. Selectively re-expose only the devices assigned to this instance.
+        #    The paths in device_info are resolved to their real paths (e.g., /dev/input/eventX).
+        device_paths_to_bind = [
+            device_info.get("mouse_path_str_for_instance"),
+            device_info.get("keyboard_path_str_for_instance"),
+            device_info.get("joystick_path_str_for_instance"),
+        ]
+
+        for device_path in device_paths_to_bind:
+            if device_path:
+                self.logger.info(f"Instance {instance_num}: Exposing device '{device_path}' to sandbox.")
+                cmd.extend(["--dev-bind", device_path, device_path])
+
+        # 3. Expose other necessary input-related devices for services like Steam Input.
+        if Path("/dev/uinput").exists():
+            cmd.extend(["--dev-bind", "/dev/uinput", "/dev/uinput"])
+        if Path("/dev/input/mice").exists():
+            cmd.extend(["--dev-bind", "/dev/input/mice", "/dev/input/mice"])
+        # --- End Device Isolation ---
 
         # Ensure the sandboxed process knows where its home is
         sandbox_home = self._SANDBOX_HOME
