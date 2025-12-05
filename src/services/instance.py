@@ -11,9 +11,10 @@ from typing import List, Optional
 import psutil
 
 from ..core.config import Config
-from ..core.exceptions import DependencyError
+from ..core.exceptions import DependencyError, VirtualDeviceError
 from ..core.logger import Logger
 from ..models.profile import Profile, PlayerInstanceConfig
+from .virtual_device_service import VirtualDeviceService
 
 
 class InstanceService:
@@ -22,40 +23,13 @@ class InstanceService:
     def __init__(self, logger: Logger):
         """Initializes the instance service."""
         self.logger = logger
+        self.virtual_device_service = VirtualDeviceService(logger)
+        self._virtual_joystick_path: Optional[str] = None
+        self._virtual_joystick_checked: bool = False
         self.pids: dict[int, int] = {}
         self.processes: dict[int, subprocess.Popen] = {}
         # self.cpu_count = psutil.cpu_count(logical=True)
         self.termination_in_progress = False
-
-    # def _get_cpu_affinity_for_instance(self, instance_num: int, total_instances: int) -> List[int]:
-    #     """
-    #     Calculates which CPU cores should be assigned to a specific instance.
-    #     Divides available cores evenly among instances.
-
-    #     Args:
-    #         instance_num: The instance number (1-based)
-    #         total_instances: Total number of instances being launched
-
-    #     Returns:
-    #         List of CPU core indices for this instance
-    #     """
-    #     if not self.cpu_count or total_instances == 0:
-    #         return []
-
-    #     cores_per_instance = self.cpu_count // total_instances
-    #     if cores_per_instance == 0:
-    #         cores_per_instance = 1
-
-    #     start_core = (instance_num - 1) * cores_per_instance
-    #     end_core = start_core + cores_per_instance
-
-    #     # Last instance gets any remaining cores
-    #     if instance_num == total_instances:
-    #         end_core = self.cpu_count
-
-    #     cpu_list = list(range(start_core, end_core))
-    #     self.logger.info(f"Instance {instance_num}: Assigned CPU cores {cpu_list}")
-    #     return cpu_list
 
     def validate_dependencies(self, use_gamescope: bool = True) -> None:
         """Validates if all necessary commands are available on the system."""
@@ -117,6 +91,31 @@ class InstanceService:
         use_gamescope_override: Optional[bool] = None,
     ) -> None:
         """Launches a single Steam instance."""
+        if not self._virtual_joystick_checked:
+            self._virtual_joystick_checked = True
+            needs_virtual_joystick = False
+            num_players = profile.effective_num_players()
+            if num_players > 0:
+                # Check player configs up to the number of players
+                for i in range(num_players):
+                    player_config = (
+                        profile.player_configs[i]
+                        if profile.player_configs and i < len(profile.player_configs)
+                        else PlayerInstanceConfig()
+                    )
+                    if not player_config.PHYSICAL_DEVICE_ID:
+                        needs_virtual_joystick = True
+                        break
+
+            if needs_virtual_joystick:
+                self.logger.info("One or more instances lack a physical joystick. Creating a virtual one.")
+                try:
+                    self._virtual_joystick_path = self.virtual_device_service.create_virtual_joystick()
+                except VirtualDeviceError:
+                    self.logger.error("Halting launch due to virtual joystick creation failure.")
+                    # Re-raise the exception to be caught by the UI layer
+                    raise
+
         active_profile = profile
         if use_gamescope_override is not None:
             active_profile = copy.deepcopy(profile)
@@ -231,14 +230,6 @@ class InstanceService:
         else:
             self.logger.info(f"Instance {instance_num}: Launching without Gamescope (bwrap only)")
 
-        # # 5. Build taskset command to limit CPU cores for this instance
-        # cpu_list = self._get_cpu_affinity_for_instance(instance_num, total_instances)
-        # if cpu_list:
-        #     cpu_mask = ",".join(str(c) for c in cpu_list)
-        #     taskset_cmd = ["taskset", "-c", cpu_mask]
-        #     final_cmd = taskset_cmd + final_cmd
-        #     self.logger.info(f"Instance {instance_num}: Using taskset with cores: {cpu_mask}")
-
         self.logger.info(f"Instance {instance_num}: Full command: {shlex.join(final_cmd)}")
         return final_cmd
 
@@ -314,7 +305,7 @@ class InstanceService:
         """Builds the base steam command."""
         if use_gamescope:
             self.logger.info(f"Instance {instance_num}: Using Steam command with Gamescope flags.")
-            return ["steam", "-gamepadui", "-steamdeck"]
+            return ["steam", "-gamepadui", "-steamdeck", "-steamos3"]
         else:
             self.logger.info(f"Instance {instance_num}: Using plain Steam command.")
             return ["steam"]
@@ -335,28 +326,31 @@ class InstanceService:
             "bwrap",
             "--dev-bind", "/", "/",
             "--dev-bind", "/dev", "/dev",
-            # "--tmpfs", "/proc",
-            "--proc", "/proc",
             "--tmpfs", "/dev/shm",
+            "--proc", "/proc",
             "--die-with-parent",
             "--unshare-ipc",
             "--unshare-pid",
             "--unshare-uts",
-            # "--unshare-net",
             "--unshare-cgroup",
             "--new-session",
-            # "--bind", "/tmp", "/tmp",
             "--tmpfs", "/tmp",
             "--bind", "/tmp/.X11-unix", "/tmp/.X11-unix",
-            # "--share-net",
         ]
 
         # --- Device Isolation ---
         cmd.extend(["--tmpfs", "/dev/input"])
+
+        joystick_path = device_info.get("joystick_path_str_for_instance")
+        # If the instance has no physical joystick, assign the virtual one if it exists
+        if not joystick_path and self._virtual_joystick_path:
+            self.logger.info(f"Instance {instance_num}: Assigning virtual joystick '{self._virtual_joystick_path}'.")
+            joystick_path = self._virtual_joystick_path
+
         device_paths_to_bind = [
             device_info.get("mouse_path_str_for_instance"),
             device_info.get("keyboard_path_str_for_instance"),
-            device_info.get("joystick_path_str_for_instance"),
+            joystick_path,
         ]
         for device_path in device_paths_to_bind:
             if device_path:
@@ -422,5 +416,10 @@ class InstanceService:
             self.logger.info("Instance termination complete.")
             self.pids.clear()
             self.processes.clear()
+
+            if self._virtual_joystick_path:
+                self.virtual_device_service.destroy_virtual_joystick()
+                self._virtual_joystick_path = None
+            self._virtual_joystick_checked = False
         finally:
             self.termination_in_progress = False

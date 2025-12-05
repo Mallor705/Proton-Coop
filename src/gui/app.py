@@ -11,6 +11,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from ..core.config import Config
+from ..core.exceptions import VirtualDeviceError
 from ..core.logger import Logger
 from ..models.profile import Profile
 from ..services.instance import InstanceService
@@ -112,18 +113,36 @@ class MultiScopeWindow(Adw.ApplicationWindow):
         selected_players = self.profile.selected_players
         self.logger.info(f"Launch worker started for players: {selected_players}")
 
-        for instance_num in selected_players:
-            if self._cancel_launch_event.is_set():
-                self.logger.info("Launch sequence cancelled by user.")
-                break
+        try:
+            for instance_num in selected_players:
+                if self._cancel_launch_event.is_set():
+                    self.logger.info("Launch sequence cancelled by user.")
+                    break
 
-            self.logger.info(f"Worker launching instance {instance_num}...")
-            # The profile already contains the global gamescope setting.
-            self.instance_service.launch_instance(self.profile, instance_num)
-            time.sleep(5)  # Stagger launches
+                self.logger.info(f"Worker launching instance {instance_num}...")
+                self.instance_service.launch_instance(self.profile, instance_num)
+                time.sleep(5)  # Stagger launches
 
-        # When the loop finishes (or is cancelled), clean up.
-        GLib.idle_add(self._on_launch_finished)
+            # If the loop completes without errors, finalize the launch
+            GLib.idle_add(self._on_launch_finished)
+
+        except VirtualDeviceError as e:
+            self.logger.error(f"Caught virtual device error: {e}. Aborting launch.")
+            # Ensure any instances that *did* launch are stopped
+            self.instance_service.terminate_all()
+            # Safely update the UI from the main thread
+            GLib.idle_add(self._show_error_dialog, f"Could not launch: {e}")
+            GLib.idle_add(self._restore_ui_after_failed_launch)
+
+    def _restore_ui_after_failed_launch(self):
+        """Restores the UI to its pre-launch state after a failure."""
+        self.launch_button.set_visible(True)
+        self.stop_button.set_visible(False)
+        self.layout_settings_page.set_sensitive(True)
+        self.layout_settings_page.set_running_state(False)
+        self._launch_thread = None
+        self._cancel_launch_event.clear()
+        self._update_launch_button_state()
 
     def _on_launch_finished(self):
         """Callback executed in the main thread when the launch worker is done."""

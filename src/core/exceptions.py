@@ -39,3 +39,9 @@ class GameNotFoundError(LinuxCoopError):
     Raised when a specified game cannot be found in the library.
     """
     pass
+
+class VirtualDeviceError(LinuxCoopError):
+    """
+    Raised when there is an error creating or managing a virtual device.
+    """
+    pass
