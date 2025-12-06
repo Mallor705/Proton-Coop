@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-import shutil
+
 
 class Config:
     """
@@ -10,10 +10,13 @@ class Config:
 
     @staticmethod
     def _get_script_dir() -> Path:
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            return Path(sys._MEIPASS)
-        else:
-            return Path(__file__).parent.parent.parent
+        # Access attributes on `sys` using getattr to avoid direct attribute
+        # access that static checkers may flag.
+        frozen = getattr(sys, "frozen", False)
+        meipass = getattr(sys, "_MEIPASS", None)
+        if frozen and meipass:
+            return Path(meipass)
+        return Path(__file__).parent.parent.parent
 
     SCRIPT_DIR: Path = _get_script_dir()
     APP_DIR: Path = Path(__file__).parent.parent.parent
@@ -31,3 +34,5 @@ class Config:
     def get_steam_home_path(instance_num: int) -> Path:
         """Returns the isolated Steam home path for a given instance."""
         return Config.LOCAL_DIR / f"steam_home_{instance_num}"
+
+    # `migrate_legacy_paths` removed — legacy migration is no longer performed.

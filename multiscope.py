@@ -6,7 +6,6 @@ def main():
     """
     Main entry point for the MultiScope application.
     """
-    Config.migrate_legacy_paths()
     run_gui()
 
 if __name__ == "__main__":
