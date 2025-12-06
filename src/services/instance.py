@@ -315,15 +315,10 @@ class InstanceService:
     def _build_bwrap_command(self, profile: Profile, instance_idx: int, device_info: dict, instance_num: int, home_path: Path) -> List[str]:
         """
         Builds the bwrap command for sandboxing.
-        This strategy uses the real user's home directory but mounts instance-specific
-        Steam directories over the real ones to achieve isolation.
+        This strategy mounts an instance-specific home directory into the sandbox,
+        effectively isolating the entire user environment.
         """
         real_home = Path.home()
-        instance_steam_local = home_path / ".local/share/Steam"
-        instance_steam_dot_steam = home_path / ".steam"
-        target_steam_local = real_home / ".local/share/Steam"
-        target_steam_dot_steam = real_home / ".steam"
-
         cmd = [
             "bwrap",
             "--dev-bind", "/", "/",
@@ -338,6 +333,9 @@ class InstanceService:
             "--new-session",
             "--tmpfs", "/tmp",
             "--bind", "/tmp/.X11-unix", "/tmp/.X11-unix",
+            # --- Home Directory Isolation ---
+            # Mount the instance-specific home directory over the real one inside the sandbox
+            "--bind", str(home_path), str(real_home),
         ]
 
         # --- Device Isolation ---
@@ -365,31 +363,27 @@ class InstanceService:
             cmd.extend(["--dev-bind", "/dev/input/mice", "/dev/input/mice"])
         # --- End Device Isolation ---
 
-        # --- Steam Directory Isolation ---
-        # Mount the instance-specific directories over the real Steam locations
-        cmd.extend([
-            "--bind", str(instance_steam_local), str(target_steam_local),
-            "--bind", str(instance_steam_dot_steam), str(target_steam_dot_steam),
-        ])
-
-        # Mount host's common games and compatibility tools into the sandboxed Steam directory
-        host_steam_path = str(target_steam_local)
-        sandbox_steam_path = str(target_steam_local) # Same path, but it's now a mount point
+        # --- Data Sharing ---
+        # Mount host's common games and compatibility tools into the sandboxed home directory.
+        # This is necessary because the entire home is now isolated.
+        host_steam_path = real_home / ".local/share/Steam"
+        sandbox_steam_path = real_home / ".local/share/Steam" # This path is now inside the sandboxed home
 
         # Share games
-        common_path = Path(host_steam_path) / "steamapps/common"
-        if common_path.exists():
-            cmd.extend(["--bind", str(common_path), str(Path(sandbox_steam_path) / "steamapps/common")])
+        host_common_path = host_steam_path / "steamapps/common"
+        sandbox_common_path = sandbox_steam_path / "steamapps/common"
+        if host_common_path.exists():
+            cmd.extend(["--bind", str(host_common_path), str(sandbox_common_path)])
 
         # Share compatibility tools
-        host_compat = Path(host_steam_path) / "compatibilitytools.d"
-        sandbox_compat = Path(sandbox_steam_path) / "compatibilitytools.d"
-        if host_compat.exists():
+        host_compat_path = host_steam_path / "compatibilitytools.d"
+        sandbox_compat_path = sandbox_steam_path / "compatibilitytools.d"
+        if host_compat_path.exists():
             ignore = {"LegacyRuntime"}
-            for folder in host_compat.iterdir():
+            for folder in host_compat_path.iterdir():
                 if folder.is_dir() and folder.name not in ignore:
-                    cmd.extend(["--bind", str(folder), str(sandbox_compat / folder.name)])
-        # --- End Steam Directory Isolation ---
+                    cmd.extend(["--bind", str(folder), str(sandbox_compat_path / folder.name)])
+        # --- End Data Sharing ---
 
         # Ensure custom ENV variables reach Steam inside the sandbox
         try:
