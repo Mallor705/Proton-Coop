@@ -121,19 +121,12 @@ AdwToolbarView > AdwHeaderBar:last-child {
 }
 
 
-/* Change the style of the "Use Gamescope" switch */
+/* Change the style of the switch's */
 
-/*.use-gamescope-row switch {
-    background-color: #5a5a5a;
-}*/
-
-.use-gamescope-row switch:checked {
+.custom-switch switch:checked {
     background-color: #1A9FFF;
 }
 
-/*.use-gamescope-row switch slider {
-    background-color: #cccccc;
-}*/
 
 
 /* Change the style of the player checkboxes */

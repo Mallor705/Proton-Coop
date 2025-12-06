@@ -93,6 +93,7 @@ class LayoutSettingsPage(Adw.PreferencesPage):
             subtitle="Disable to run Steam directly in bwrap without Gamescope"
         )
         self.use_gamescope_row.get_style_context().add_class("use-gamescope-row")
+        self.use_gamescope_row.get_style_context().add_class("custom-switch")
         self.use_gamescope_row.connect("notify::active", self._on_setting_changed)
         layout_group.add(self.use_gamescope_row)
 
@@ -430,7 +431,8 @@ class LayoutSettingsPage(Adw.PreferencesPage):
             # mouse_row = create_device_row("Mouse", "mouse")
             # keyboard_row = create_device_row("Keyboard", "keyboard")
 
-            grab_input_switch = Adw.SwitchRow(title="Capturar Mouse e Teclado")
+            grab_input_switch = Adw.SwitchRow(title="Grab Mouse and Keyboard")
+            grab_input_switch.get_style_context().add_class("custom-switch")
             grab_input_switch.connect("notify::active", self._on_grab_input_toggled, i)
             expander.add_row(grab_input_switch)
 
